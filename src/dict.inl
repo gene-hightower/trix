@@ -180,7 +180,7 @@ public:
 
     [[nodiscard]] bool is_frame() const { return ((m_access & IsFrame) != 0); }
 
-    // Frame-slot positional accessors (Phase 3 slot-indexing).  A frame dict's
+    // Frame-slot positional accessors (slot-indexing).  A frame dict's
     // entry pool is filled in SLOT order by begin-locals (1st param -> entry[0],
     // 2nd -> entry[1], ... -- the pool free list is sequential on a fresh or
     // recycled dict), so slot i lives at entries()[i] at a fixed offset.  The

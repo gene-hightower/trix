@@ -341,7 +341,7 @@ public:
         UInt128,       // 11101 -- unsigned 128-bit integer [WideValue in VM]
         OpaqueHandle,  // 11110 -- sub-typed by HandleKind (Screen, future Tilemap/Sample/...).
                        //          attrib_index() expands the sm_object_attrib table so each kind has its own row.
-        SlotRef        // 11111 -- transient frame-slot reference (inline slot index; Phase 3 slot-indexing).
+        SlotRef        // 11111 -- transient frame-slot reference (inline slot index; slot-indexing).
                        //          Decoded from a PackedType::SlotRef body element and resolved against the
                        //          nearest frame dict by execute_proc; never stored/serialized.  This spends
                        //          the last 5-bit Type slot -- future types ride the OpaqueHandle escape hatch.
@@ -1626,7 +1626,7 @@ public:
         return m_integer;
     }
 
-    // Slot-ref (Phase 3 slot-indexing): a transient reference to a frame-local slot,
+    // Slot-ref (slot-indexing): a transient reference to a frame-local slot,
     // produced ONLY by decoding a PackedType::SlotRef element during packed traversal.
     // An inline Type::SlotRef carrying the slot index: GC never follows it (inline, no
     // heap offset) and it is never stored or serialized.  exec_attrib carries the
@@ -1650,7 +1650,7 @@ public:
         return static_cast<length_t>(m_offset);
     }
 
-    // Unset-declared-local marker (Phase 3 slot-indexing).  begin-locals reserves a
+    // Unset-declared-local marker (slot-indexing).  begin-locals reserves a
     // frame slot for each declared `/local` and stores this marker as its value, so
     // the slot is positionally addressable and reads `/undefined` until assigned.  A
     // SlotRef is NEVER a legitimate STORED value (slot-refs live only inline in packed
@@ -5020,7 +5020,7 @@ public:
                 break;
 
             case Type::SlotRef:
-                // Slot-ref (Phase 3 slot-indexing): the scanner rewrites a frame proc's
+                // Slot-ref (slot-indexing): the scanner rewrites a frame proc's
                 // own-frame body name-refs to SlotRef Objects before packing the body, so
                 // they DO reach make_packed_data.  Encode like any small inline value:
                 // header carries the X (literal/executable) bit, value bytes carry the
@@ -5410,7 +5410,7 @@ public:
         }
 
         case PackedType::SlotRef:
-            // Slot-ref (Phase 3 slot-indexing): a transient reference to a frame-local
+            // Slot-ref (slot-indexing): a transient reference to a frame-local
             // slot, emitted ONLY inside packed proc bodies.  sm_type already set
             // Type::SlotRef; the inline slot index is in the value slot (m_offset).  The
             // X bit carries the literal/executable context.  execute_proc resolves it
@@ -5982,7 +5982,7 @@ private:
         Simple,  // SS = 2-bit sub-type (00=Null,01=Mark,10=False,11=True)
         Curry,
         Operator,
-        SlotRef,  // frame-slot index (X=literal/exec, SS=value_size-1); Phase 3 slot-indexing
+        SlotRef,  // frame-slot index (X=literal/exec, SS=value_size-1); slot-indexing
         Record,
         Name,
         ShortLengthArray,

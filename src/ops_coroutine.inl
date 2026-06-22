@@ -2323,7 +2323,7 @@ void scan_range_lowest(Object *base, Object *top, vm_offset_t barrier, bool want
 // order (ascending so a relocation's freed slot can back the next alloc without
 // overwriting an un-relocated one).  Previously only the running coroutine's scalars
 // were relocated; a suspended coroutine's were neither relocated nor -- being scalars
-// -- rejected by check_stack, so they dangled on restore (the B7(b)-class hole).
+// -- rejected by check_stack, so they dangled on restore.
 // check_stack still rejects above-barrier COMPOSITES everywhere (those cannot be
 // relocated); this moves the scalars.  Saved m_*_ptr is one-past-top (coroutine_save),
 // so the suspended ranges end at ptr-1; the running m_op_ptr points at the live top

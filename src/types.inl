@@ -991,10 +991,8 @@ static constexpr std::string_view PRERELEASE{"-dev"};
 // lives in synthesized Trix procs; nothing ever pushed the op).  Every
 // operator index after it renumbers, so pre-v172 images would dispatch
 // wrong operators -- the version gate is what makes the removal safe.
-// v173: SystemName::GenState removed (won't-implement guidance stub;
-// state queries belong in a /query handle-call arm).  Same renumbering
-// rationale as v172 -- the 0.9 freeze sweep ships no operator that can
-// never succeed.
+// v173: SystemName::GenState removed (state queries belong in a /query
+// handle-call arm).  Same renumbering rationale as v172.
 // v174: two changes.  (1) SystemName::ExecutablePath added (the executable-
 // path operator); inserting an enum entry renumbers every operator after it,
 // so pre-v174 images would dispatch the wrong operator (same rationale as
@@ -1027,7 +1025,7 @@ static constexpr std::string_view PRERELEASE{"-dev"};
 // future slot-indexing -- declared, not bound, so an unassigned /local reads
 // /undefined).  Old v178 snapshots used a two-integer (K N) preamble and would
 // mis-decode.
-// v180 adds slot-indexing (Phase 3): a locals proc's own top-level body refs to
+// v180 adds slot-indexing: a locals proc's own top-level body refs to
 // its params are rewritten at scan time from executable Names to PackedType::SlotRef
 // elements (an inline frame-slot index), resolved by direct frame indexing at run
 // time.  A pre-v180 image never contains SlotRef body elements; a v180 build is

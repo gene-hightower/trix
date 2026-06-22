@@ -935,15 +935,15 @@ void walk_block_contents(vm_offset_t payload_offset) {
     // Object[m_obj_count] uniformly.
     //
     // Disambiguating instance vs schema (so we know whether to chase
-    // first_four as a schema offset) used to use a "first_four looks
-    // like a valid global offset" range test.  That fails when an
-    // instance is global but its schema is local (mini-scheme's env
-    // record-type defined at top level outside ${...}, instances
-    // created via env-extend inside ${...}): first_four is a small
-    // local offset, the test classifies the block as a schema, and
-    // the walker reads count from the low bits of the local offset
-    // -- corruption.  Fix: detect schemas by their distinctive
-    // 4-byte-header layout (low 16 = field_count, high 16 = 0 pad)
+    // first_four as a schema offset) detects schemas by their
+    // distinctive 4-byte-header layout (low 16 = field_count, high 16
+    // = 0 pad).  A "first_four looks like a valid global offset" range
+    // test would misfire when an instance is global but its schema is
+    // local (mini-scheme's env record-type defined at top level
+    // outside ${...}, instances created via env-extend inside ${...}):
+    // first_four is a small local offset, the range test classifies
+    // the block as a schema, and the walker reads count from the low
+    // bits of the local offset -- corruption.  The header-layout test
     // -- a valid global schema offset never has its high 16 bits
     // zero, because a global VM offset is greater than 65535 in
     // practice (the global region sits at the top of the heap).

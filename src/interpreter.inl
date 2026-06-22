@@ -950,7 +950,7 @@ void execute_proc(Object proc) {
         // so an intermediate clone here would leak an ExtValue/WideValue cell per literal.
         auto value = proc.is_array() ? proc.array_pop_head(trx) : proc.packed_pop_head(trx);
 
-        // Slot-ref (Phase 3 slot-indexing): a frame proc's own-frame body name-refs were
+        // Slot-ref (slot-indexing): a frame proc's own-frame body name-refs were
         // rewritten to slot-refs at scan time.  Resolve against the nearest frame dict and
         // execute with the SAME semantics (incl. TCO) as the executable name it replaced.
         // A slot-ref is inline (no ExtValue) and never lands on a stack -- resolve it here,

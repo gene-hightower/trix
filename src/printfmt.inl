@@ -736,7 +736,7 @@ private:
     }
 
     // Render a transient frame-slot reference for proc-disasm as "<slot N>".  Slot-refs
-    // exist only inside packed proc bodies (Phase 3 slot-indexing) and are resolved
+    // exist only inside packed proc bodies (slot-indexing) and are resolved
     // before execution, so this is reached only when disassembling such a body.
     void print_slot_ref(const Object *val_ptr) {
         assert(val_ptr->is_slot_ref());

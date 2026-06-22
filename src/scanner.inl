@@ -581,8 +581,8 @@ enum class BracketKind : uint8_t { String, Array, Dict, Set, Proc };
 
 // Returns a string_view (not const char *) so fmt's type-deduction
 // path matches the existing error() call sites that take string_view
-// arguments -- avoiding a consteval-vs-by-ref instantiation that
-// regressed when we tried bare const char *.
+// arguments -- a bare const char * return triggers a consteval-vs-by-ref
+// instantiation that regresses this path.
 [[nodiscard]] static std::string_view bracket_name(BracketKind kind) {
     using namespace std::literals::string_view_literals;
     switch (kind) {
@@ -1799,7 +1799,7 @@ template<typename CleanupFn>
         auto body_start = (base + preamble_count);
         auto body_length = static_cast<length_t>(length - preamble_count);
 
-        // Slot-indexing (Phase 3): rewrite this proc's OWN top-level body refs to its
+        // Slot-indexing: rewrite this proc's OWN top-level body refs to its
         // declared frame names (params AND /locals) into slot-refs, resolved by direct
         // frame indexing at run time instead of a dict-stack name lookup (the hot-loop
         // payoff; also subsumes the own-frame half of the #e operator-shadow hazard -- a
