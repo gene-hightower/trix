@@ -204,7 +204,7 @@ uint64_t m_frame_dict_pool_evictions{0};
 // (scan_procedure rejects deeper nesting), so a fixed array -- no heap.
 struct EnclosingFrame {
     const Object *names;  // -> preamble names base[0..count) on the scratch op stack
-    length_t count;       // number of frame-local names (params in Phase 1)
+    length_t count;       // number of frame-local names (P params + M declared locals)
 };
 EnclosingFrame m_enclosing_frames[MaxProcNesting]{};
 int m_enclosing_frame_count{0};

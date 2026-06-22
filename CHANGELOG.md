@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Named declared locals in the `|...|` preamble.** A `/`-prefixed name is a
+  declared frame local — `{ |a b /t /acc| ... }` takes `a`, `b` as parameters
+  (popped) and declares `t`, `acc` as locals. Declared locals are *not* bound at
+  entry: they read `/undefined` until assigned with `local-def` (or `store`),
+  exactly like a `local-def` working variable, but being named at scan time they
+  are visible to `#e` early binding and tooling. The named-scratch form
+  `{ | /t /acc| ... }` (zero params) is also allowed. Capacity (`#N` / `#+N`)
+  now counts against `P + M` (params + declared locals).
+
+### Changed
+- **`#e` early binding no longer freezes a frame-local name that shadows a
+  built-in operator.** A `|...|` parameter or declared local whose name collides
+  with an operator (e.g. `sum`, `count`, `max`) used to be frozen to the
+  *operator* under `#e` (the frame local does not exist at scan time), diverging
+  from the late-bound proc. The early binder now skips frame-local names — the
+  proc's own and every lexically enclosing locals proc's — at all nesting depths.
+  (A name installed only via `local-def` / `bind-locals`, not declared in the
+  preamble, remains invisible at scan time and is still frozen; declare it in the
+  preamble to make it `#e`-safe.)
+- **BREAKING (syntax):** a duplicate name in a `|...|` preamble is now a
+  `/syntax-error`. This includes `|a a|` (two same-named params), which was
+  previously accepted silently (last write won). Param/local and local/local
+  duplicates are likewise rejected, and all parameters must precede any `/local`.
+
 ## [0.10.1] - 2026-06-21
 
 ### Fixed

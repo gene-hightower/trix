@@ -5618,27 +5618,33 @@ public:
         return false;
     }
 
-    // Recognize the scanner's locals-frame transform -- [/n1../nK  K  N  {body} begin-locals]
-    // -- in array form and return K (the count of leading frame-local names), or 0 when the
-    // sequence is not a frame body.  The K names shadow same-named operators inside {body}.
+    // Recognize the scanner's locals-frame transform
+    // -- [/p1../pP /loc1../locM  P  M  N  {body} begin-locals] -- in array form and return
+    // P+M (the count of leading frame-local names: params followed by declared locals), or 0
+    // when the sequence is not a frame body.  Those names shadow same-named operators inside
+    // {body}, so the binder must skip them.  (P and M are tracked separately by begin-locals;
+    // here only their sum -- the full set of names to exclude -- matters.)
     static length_t frame_name_count_array(const Object *base, length_t count) {
         auto result = length_t{0};
-        if (count >= 4) {
+        if (count >= 5) {
+            constexpr auto max_count = static_cast<integer_t>(std::numeric_limits<length_t>::max());
             const auto &last = base[count - 1];
-            const auto &k_obj = base[count - 4];
-            auto candidate = k_obj.is_integer() ? k_obj.integer_value() : integer_t{-1};
-            auto structural = last.is_operator() && (last.m_operator == +SystemName::BeginLocals) && (candidate >= 0) &&
-                              (static_cast<length_t>(count - 4) == static_cast<length_t>(candidate)) &&
-                              base[count - 3].is_integer() && base[count - 2].is_packed();
+            auto p = base[count - 5].is_integer() ? base[count - 5].integer_value() : integer_t{-1};
+            auto m = base[count - 4].is_integer() ? base[count - 4].integer_value() : integer_t{-1};
+            // Bound P and M before summing so P+M cannot overflow integer_t.
+            auto names = ((p >= 0) && (m >= 0) && (p <= max_count) && (m <= max_count)) ? (p + m) : integer_t{-1};
+            auto structural = last.is_operator() && (last.m_operator == +SystemName::BeginLocals) && (names >= 0) &&
+                              (names == (static_cast<integer_t>(count) - 5)) && base[count - 3].is_integer() &&
+                              base[count - 2].is_packed();
             if (structural) {
-                // The leading K elements must all be literal names (else not a frame body).
+                // The leading P+M elements must all be literal names (else not a frame body).
                 // Fold the scan's early-out into the loop condition -- no guard return.
                 auto all_names = true;
-                for (length_t i = 0; all_names && (i < static_cast<length_t>(candidate)); ++i) {
+                for (length_t i = 0; all_names && (i < static_cast<length_t>(names)); ++i) {
                     all_names = base[i].is_name();
                 }
                 if (all_names) {
-                    result = static_cast<length_t>(candidate);
+                    result = static_cast<length_t>(names);
                 }
             }
         }
@@ -5649,26 +5655,29 @@ public:
     // via skip_packed (binding is a one-time scan-time cost; procs are small).
     static length_t frame_name_count_packed(Trix *trx, const packed_data_t *src, length_t count) {
         auto result = length_t{0};
-        if (count >= 4) {
+        if (count >= 5) {
+            constexpr auto max_count = static_cast<integer_t>(std::numeric_limits<length_t>::max());
             auto element_at = [&](length_t idx) { return extract_next_packed(trx, skip_packed(src, idx)).second; };
             auto last_obj = element_at(static_cast<length_t>(count - 1));
-            auto k_obj = element_at(static_cast<length_t>(count - 4));
+            auto p_obj = element_at(static_cast<length_t>(count - 5));
+            auto m_obj = element_at(static_cast<length_t>(count - 4));
             auto n_obj = element_at(static_cast<length_t>(count - 3));
             auto body_obj = element_at(static_cast<length_t>(count - 2));
-            auto candidate = k_obj.is_integer() ? k_obj.integer_value() : integer_t{-1};
-            auto structural = last_obj.is_operator() && (last_obj.m_operator == +SystemName::BeginLocals) && (candidate >= 0) &&
-                              (static_cast<length_t>(count - 4) == static_cast<length_t>(candidate)) && n_obj.is_integer() &&
-                              body_obj.is_packed();
+            auto p = p_obj.is_integer() ? p_obj.integer_value() : integer_t{-1};
+            auto m = m_obj.is_integer() ? m_obj.integer_value() : integer_t{-1};
+            auto names = ((p >= 0) && (m >= 0) && (p <= max_count) && (m <= max_count)) ? (p + m) : integer_t{-1};
+            auto structural = last_obj.is_operator() && (last_obj.m_operator == +SystemName::BeginLocals) && (names >= 0) &&
+                              (names == (static_cast<integer_t>(count) - 5)) && n_obj.is_integer() && body_obj.is_packed();
             if (structural) {
                 auto all_names = true;
                 auto entry = src;
-                for (length_t i = 0; all_names && (i < static_cast<length_t>(candidate)); ++i) {
+                for (length_t i = 0; all_names && (i < static_cast<length_t>(names)); ++i) {
                     auto [next, obj] = extract_next_packed(trx, entry);
                     all_names = obj.is_name();
                     entry = next;
                 }
                 if (all_names) {
-                    result = static_cast<length_t>(candidate);
+                    result = static_cast<length_t>(names);
                 }
             }
         }
@@ -5721,7 +5730,7 @@ public:
         // packed_data_ptr() would otherwise call offset_to_ptr(nulloffset) and
         // raise an internal error.  Reachable via #e/bind on a locals proc with
         // an empty body, whose transform nests an empty packed element
-        // ([/x K N {} begin-locals]).
+        // ([/x P M N {} begin-locals]).
         if (packed_obj.m_arrays_length != 0) {
             auto [src, count] = packed_obj.packed_value(trx);
             // If this packed proc is a transformed frame body, its K leading names are

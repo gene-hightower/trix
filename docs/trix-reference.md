@@ -325,11 +325,35 @@ operator (declare it as a preamble param instead, or do not early-bind).  The
 opt-in lint `tests/check_operator_shadows.py` flags the operator-named-local
 hazard.  See `interpreter.md` Section 8.2.
 
+#### Parameters vs declared locals (`/`-prefix)
+
+Inside the `|...|` preamble a **bare** name is a **parameter** — popped from the
+operand stack on proc entry — while a **`/`-prefixed** name is a **declared
+local**: it reserves a frame slot but is *not* popped and *not* bound, so it
+reads `/undefined` until the body assigns it with `local-def` (or `store`).
+Declaring locals in the preamble (rather than only via `local-def`) makes the
+whole frame namespace visible at scan time, which is what lets `#e` early binding
+leave an operator-named local alone (see the `#e` note above).
+
+| Form                | Meaning                                           |
+| ------------------- | ------------------------------------------------- |
+| `\| a b \|`         | 2 params (popped); capacity 2                     |
+| `\| a b /t /acc \|` | 2 params + 2 declared locals; capacity 4          |
+| `\| /t /acc \|`     | 0 params + 2 declared locals (named-scratch form) |
+
+Two rules (both raise `/syntax-error` at scan time): all parameters must precede
+any `/local` (a bare name after a `/local` is rejected), and no name may repeat —
+param/param, param/local, and local/local duplicates are all rejected. (The
+param/param case, e.g. `|a a|`, was silently accepted before v0.10.x; it is now
+an error.)
+
 #### Suffixes — Locals preamble capacity
+
+Below, `K` is the total declared-name count `P + M` (P params + M declared locals).
 
 | Suffix            | Meaning                                                          |
 | ----------------- | ---------------------------------------------------------------- |
-| `\| a b c \|`     | Bare preamble — frame dict capacity = number of names            |
+| `\| a b c \|`     | Bare preamble — frame dict capacity = number of names (K)        |
 | `\| a b c \| #N`  | Absolute capacity (N ≥ K)                                        |
 | `\| a b c \| #+N` | Relative capacity (total = K + N)                                |
 | `\| \| #N`        | Empty preamble + capacity N (empty frame dict for `def` scratch) |
@@ -622,10 +646,13 @@ ReadOnly without the user writing `#r`.
 
 **Local variable binding** (inside procs):
 ```
-{ |x| x 1 add }                          % single local
-{ |a b| a b add }                        % multiple locals
+{ |x| x 1 add }                          % single param
+{ |a b| a b add }                        % multiple params
 { |x y z| x y mul z add }                % complex body
-{ |a b|#8 /t a b mul local-def t t add } % absolute: 8 slots total
+{ |a b /t /acc| /t a b mul local-def     % 2 params + 2 declared locals;
+  /acc t t add local-def acc }                           %   t, acc read /undefined until assigned
+{ | /t /acc| /t 1 local-def /acc 2 local-def t acc add } % named-scratch (0 params)
+{ |a b|#8 /t a b mul local-def t t add }                 % absolute: 8 slots total
                                            % (2 params + up to 6 local-def'd working vars)
 { |a b|#+6 /t a b mul local-def t t add }        % relative: 2 params + 6 extras = 8 total
 { ||#4 /x 10 local-def /y 32 local-def x y add } % no-args scratch form: empty header,
@@ -634,10 +661,13 @@ ReadOnly without the user writing `#r`.
 ```
 Locals create a **frame dict** (see Glossary) pushed on the dict stack on
 proc entry and popped on proc exit.  The default capacity equals the
-declared name count K; append `#N` (no whitespace or comment between `|`
-and `#`; see "Lexical suffixes are contiguous" above) to request `N >= K`
-so the body can `local-def` up to `N - K` working variables into the same
-frame dict. `N` must be in `K..65535`.
+declared name count K (= P params + M declared locals); append `#N` (no
+whitespace or comment between `|` and `#`; see "Lexical suffixes are
+contiguous" above) to request `N >= K` so the body can `local-def` up to
+`N - K` additional working variables into the same frame dict. `N` must be
+in `K..65535`.  Declared locals (`/t`) and `local-def`'d working variables
+share the same frame dict and capacity; the difference is only that a
+declared local is named at scan time (so `#e` and tooling can see it).
 
 **`local-def` vs `def`.**  After Wart 02 (the def-skips-frame fix),
 `def` writes past `|...|` frame dicts and lands in the topmost
@@ -1617,7 +1647,7 @@ hand-rolled and always available.
 
 ```
 mark 16#CAFE#u 42 7 3.14d (>HIBd) pack % pack BE: uint16 + uint32 + uint8 + double
-dup (>HIBd) unpack                   % unpack: pushes 4 values + count
+dup (>HIBd) unpack                     % unpack: pushes 4 values + count
 ```
 
 **Compression notes.** `deflate` / `deflate-level` produce a *raw* RFC 1951
@@ -1868,9 +1898,11 @@ clear-dictstack     --
 
 **Locals (parameter binding):**
 ```
-begin-locals        val1 ... valK name1 ... nameK K N proc --
-                    % binds K values to K names in a frame dict of capacity N
-                    % (N >= K), then executes proc
+begin-locals        val1 ... valP p1 ... pP loc1 ... locM P M N proc --
+                    % binds the P param values to the P param names in a frame
+                    % dict of capacity N (N >= P+M); the M declared-local names
+                    % are discarded (declared, not bound -> /undefined until
+                    % assigned), then executes proc
 local-def           /name any --             % bind in the current frame (top of dict stack)
 bind-locals         v1 ... vN names-array -- % atomic batch bind into the current frame; strict-Name keys
 ```

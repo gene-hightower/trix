@@ -1009,7 +1009,16 @@ static constexpr uint8_t PATCH{1};
 // snapshot system-name indices of every later operator, so a pre-v178 image
 // would resolve those indices to the wrong operator -- the version gate rejects
 // pre-v178 images.
-static constexpr uint32_t SNAPSHOT_VERSION{178};
+// v179 changes the begin-locals preamble encoding for named-preamble locals
+// (the `/`-prefix |a b /t /acc| grammar).  The scanner now emits THREE integers
+// before the body (P = param count, M = declared-local count, N = dict capacity)
+// and the M declared-local names sit as leading literals after the P params, so
+// the layout is [/p1../pP /loc1../locM P M N {body} begin-locals].  begin-locals
+// binds the P params and discards the M loc names (they are metadata for #e and
+// future slot-indexing -- declared, not bound, so an unassigned /local reads
+// /undefined).  Old v178 snapshots used a two-integer (K N) preamble and would
+// mis-decode.
+static constexpr uint32_t SNAPSHOT_VERSION{179};
 public:
 using vm_offset_t = vm_size_t;
 static constexpr vm_offset_t nulloffset{0};

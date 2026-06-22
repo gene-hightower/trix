@@ -1,0 +1,103 @@
+% ====================================================================
+% test_named_locals.trx -- named-preamble locals (Phase 2 / A")
+% ====================================================================
+% Grammar: inside |...| a bare name is a PARAMETER (popped from the
+% operand stack); a /-prefixed name is a declared LOCAL (not popped).
+%   { |a b /t /acc| ... }   2 params + 2 declared locals
+%   { | /t /acc| ... }      0 params + 2 declared locals (named scratch)
+%   { ||#N ... }            0 params + 0 locals, capacity N (scratch)
+% A": declared locals are emitted in-stream but NOT bound at runtime, so
+% an unassigned /local reads /undefined until assigned (local-def/store).
+% They are excluded from #e operator-binding at every nesting depth.
+% Edge rules (LOCKED): params must precede all /locals; no duplicate name
+% (param/param, param/local, local/local all reject).
+%
+% rt-fails counts failures in a restore-immune string byte (the suite
+% wraps each test in save/restore).  The file THROWS at EOF on failure.
+
+/rt-fails 1 string def
+rt-fails 0 16#0#b put
+/rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
+
+% ====================================================================
+% SECTION 1: grammar happy path
+% ====================================================================
+
+% Params still work unchanged.
+/g1 { |a b| a b add } def
+3 4 g1 7 eq                                      (g1: params bind from stack)                  rt-ok
+
+% Params + declared locals; locals assigned via local-def.
+/g2 { |a b /t /acc| /t a b add local-def /acc t t mul local-def acc } def
+3 4 g2 49 eq                                     (g2: params + declared locals)                rt-ok
+
+% Named-scratch form: P=0, M=2.
+/g3 { | /t /acc| /t 10 local-def /acc 20 local-def t acc add } def
+g3 30 eq                                         (g3: P=0 named scratch | /t /acc|)            rt-ok
+
+% Empty scratch ||#N still works.
+/g4 { ||#3 /tmp 99 def tmp } def
+g4 99 eq                                         (g4: ||#N empty scratch)                      rt-ok
+
+% Capacity: #+N adds slots beyond P+M (here 1 param + 1 local + 2 extra).
+/g5 { |a /t|#+2 /t a 1 add local-def /scratch 5 def t scratch add } def
+41 g5 47 eq                                      (g5: #+N capacity beyond P+M)                 rt-ok
+
+% ====================================================================
+% SECTION 2: A" semantics -- declared, not bound
+% ====================================================================
+
+% An unassigned /local reads /undefined (it is declared, not bound).
+/a1 { |x /t| { t } try } def
+5 a1 /undefined eq                               (a1: unassigned /local -> /undefined)         rt-ok clear
+
+% After local-def the same name resolves to the value.
+/a2 { |x /t| /t x 100 add local-def t } def
+5 a2 105 eq                                      (a2: /local resolves after local-def)         rt-ok
+
+% ====================================================================
+% SECTION 3: #e excludes /locals (A" full-depth payoff)
+% ====================================================================
+
+% Single level: /local 'sum' shadows the sum operator under #e.
+/s1 { |x /sum| /sum x x add local-def sum }#e def
+21 s1 42 eq                                      (s1: #e /local shadows operator)              rt-ok
+
+% Nested: inner #e proc with a /local shadowing 'sub', reading an OUTER param.
+/s2 { |a| { | /sub| /sub a a mul local-def sub }#e exec }#e def
+5 s2 25 eq                                       (s2: nested #e spares inner /local + outer param) rt-ok
+
+% Outer #e descending into an inner (non-#e) proc whose /local shadows 'sub'.
+/s3 { { | /sub| /sub 7 local-def sub } exec }#e def
+s3 7 eq                                          (s3: outer #e spares inner /local on descent) rt-ok
+
+% ====================================================================
+% SECTION 4: edge rules rejected at scan time
+% ====================================================================
+% `token` scans one token from a string and pushes a validity bool on top
+% (true + the parsed proc on success; false alone on a scan/syntax error).
+% A rejected preamble => top is false, so `token not` is the assertion.
+% A valid preamble for contrast (must accept).
+( { |a b /t| a } ) token (e0: valid named-locals preamble accepts) rt-ok clear
+
+% Ordered rule: a bare param may not follow a declared local.
+( { |a /t b| a } ) token not (e1: bare param after /local rejected) rt-ok clear
+
+% Duplicate param/param (a deliberate tightening: |a a| used to be accepted).
+( { |a a| a } ) token not (e2: duplicate param/param rejected) rt-ok clear
+
+% Duplicate param/local.
+( { |a /a| a } ) token not (e3: duplicate param/local rejected) rt-ok clear
+
+% Duplicate local/local.
+( { | /t /t| t } ) token not (e4: duplicate local/local rejected) rt-ok clear
+
+% A '/' with no following name.
+( { |a /| a } ) token not (e5: empty /local name rejected) rt-ok clear
+
+% Bare || (no names, no suffix) is still an error.
+( { || 5 } ) token not (e6: bare || still rejected) rt-ok clear
+
+rt-fails 0 get /integer-type cast 0 gt { /rt-assertions-failed throw } if
+(test_named_locals: ALL TESTS PASSED) =
+(__test_ok__) =

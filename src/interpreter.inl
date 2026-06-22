@@ -603,8 +603,8 @@ void execute_name(Object name) {
                 auto callee_has_begin_locals_tail = [&] {
                     if (clone.is_packed()) {
                         auto length = clone.m_arrays_length;
-                        // Minimum locals-wrapped layout: [K N {body} begin-locals] = 4.
-                        if (length < 4) {
+                        // Minimum locals-wrapped layout: [P M N {body} begin-locals] = 5.
+                        if (length < 5) {
                             return false;
                         } else {
                             const packed_data_t *packed_data = clone.packed_data_ptr(trx);

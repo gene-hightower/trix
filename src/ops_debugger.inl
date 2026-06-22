@@ -997,7 +997,7 @@ Object debug_disasm_row(Object elem, int32_t line) {
 // a Packed proc (the inner user body) -- return that inner Packed.
 // Otherwise return the input unchanged.  proc-disasm uses this to
 // auto-unwrap so the user sees their actual ops instead of the
-// synthesized `[/name1 ... K N inner-packed begin-locals]` shape.
+// synthesized `[/p.. /loc.. P M N inner-packed begin-locals]` shape.
 // Single-level unwrap; nested |locals| procs would require the
 // caller to recurse manually on a nested Packed value.
 Object debug_unwrap_locals(Object proc) {
@@ -1042,7 +1042,7 @@ Object debug_unwrap_locals(Object proc) {
 // built in, the per-element line column is populated from the
 // matching entry in `m_debug_proc_lines`; otherwise it's 0.
 // |locals| procs auto-unwrap to their inner user body so users
-// don't see the synthesized `[/name K N inner-packed begin-locals]`
+// don't see the synthesized `[/p.. /loc.. P M N inner-packed begin-locals]`
 // outer shape.
 // throws: opstack-underflow, type-check, vm-full
 static void proc_disasm_op(Trix *trx) {

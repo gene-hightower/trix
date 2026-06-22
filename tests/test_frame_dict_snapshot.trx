@@ -78,6 +78,15 @@ rt-fails 0 16#0#b put
 % least one entry (every proc return recycles).
 //:status:locals-pool-count dup 1 ge (sf:post-pool>=1) rt-ok pop
 
+% Section 5c: named declared locals (/-prefix) round-trip through the
+% snapshot.  These procs are frozen into the image in the v179
+% begin-locals layout (P M N + leading /loc names); thaw must re-decode
+% them identically.  Params bind from the stack; declared locals read
+% /undefined until local-def assigns them.
+4 { |a /t /acc| /t a a add local-def /acc t t mul local-def acc } exec 64 eq (sf:declared-locals) rt-ok
+5 { |x /t| { t } try /undefined eq } exec (sf:declared-local-undef-until-assigned) rt-ok
+{ | /p /q| /p 10 local-def /q 20 local-def p q add } exec 30 eq (sf:named-scratch-zero-params) rt-ok
+
 % Section 6b: overflow chain post-thaw.  Thaw nulls m_frame_dict_overflow
 % (matches m_frame_dict_pool's reset), so phase 2 starts at 0; an
 % oversized recycle here pushes one entry, observable in both phases.

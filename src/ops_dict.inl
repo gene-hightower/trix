@@ -112,36 +112,47 @@ static void at_end_locals_op(Trix *trx) {
     }
 }
 
-// begin-locals: val1 ... valK name1 ... nameK K N proc :- --
-// Creates a frame dict with capacity N from K name/value pairs and executes proc.
-// K is the declared name count; N is the dict capacity (N >= K).  When emitted by the
-// scanner for plain |a b| with no #N suffix, N == K; the |a b|#N suffix allows N > K
-// so the body can /foo def working variables into the same dict.
+// begin-locals: val1 ... valP  p1 ... pP  loc1 ... locM  P M N proc :- --
+// Creates a frame dict with capacity N, binds the P param name/value pairs, and executes
+// proc.  P is the parameter count (popped from the stack); M is the declared-local count
+// (NAMES only -- declared, not bound, so they read /undefined until assigned via local-def
+// / store -- the A" design); N is the dict capacity (N >= P+M).  The M loc names sit as
+// leading literals after the P params and are discarded here.  When emitted by the scanner
+// for plain |a b| with no #N suffix, N == P+M; the #N suffix allows N > P+M so the body can
+// /foo def working variables into the same dict.
 // throws: vm-full, dict-full, dictstack-overflow, execstack-overflow, opstack-underflow, range-check
 static void begin_locals_op(Trix *trx) {
-    // pop the body proc, capacity N, and declared count K
-    trx->verify_operands(VerifyProc, VerifyInteger, VerifyInteger);
+    // pop the body proc, capacity N, declared-local count M, and param count P
+    trx->verify_operands(VerifyProc, VerifyInteger, VerifyInteger, VerifyInteger);
     auto proc_obj = *trx->m_op_ptr--;
 
     auto n = trx->m_op_ptr->integer_value();
     --trx->m_op_ptr;
 
-    auto k = trx->m_op_ptr->integer_value();
+    auto m = trx->m_op_ptr->integer_value();
     --trx->m_op_ptr;
 
-    // Upper bound keeps 2*k from overflowing signed integer_t arithmetic.  N is
-    // clamped to length_t (uint16_t) because that's the dict-capacity type.
-    // K=0 is valid: the ||#N form declares a scratch frame dict with N capacity
-    // and no stack-popped bindings (the body uses /foo def to populate).
-    constexpr auto max_k = std::numeric_limits<integer_t>::max() / 2;
-    constexpr auto max_n = static_cast<integer_t>(std::numeric_limits<length_t>::max());
-    if ((k < 0) || (k > max_k)) {
-        trx->error(Error::RangeCheck, "begin-locals: name count {} out of range", k);
-    } else if ((n < k) || (n > max_n) || ((k == 0) && (n == 0))) {
-        trx->error(Error::RangeCheck, "begin-locals: capacity {} out of range (must be {} <= N <= {}, and N >= 1)", n, k, max_n);
+    auto p = trx->m_op_ptr->integer_value();
+    --trx->m_op_ptr;
+
+    // length_t (uint16_t) is the dict-capacity type and the scanner's name-count type,
+    // so P and M each fit there; 2*P+M then cannot overflow signed integer_t.  P=0 and
+    // M=0 are valid: the ||#N form declares a scratch frame dict with N capacity and no
+    // stack-popped bindings (the body uses /foo def to populate).
+    constexpr auto max_count = static_cast<integer_t>(std::numeric_limits<length_t>::max());
+    if ((p < 0) || (p > max_count)) {
+        trx->error(Error::RangeCheck, "begin-locals: param count {} out of range", p);
+    } else if ((m < 0) || (m > max_count)) {
+        trx->error(Error::RangeCheck, "begin-locals: local count {} out of range", m);
+    } else if ((n < (p + m)) || (n > max_count) || (n == 0)) {
+        trx->error(Error::RangeCheck,
+                   "begin-locals: capacity {} out of range (must be {} <= N <= {}, and N >= 1)",
+                   n,
+                   p + m,
+                   max_count);
     } else {
-        // need K names + K values on the operand stack
-        trx->require_op_count(2 * k);
+        // need P values + P param names + M loc names on the operand stack
+        trx->require_op_count(2 * p + m);
         trx->require_dict_capacity(1);
         trx->require_exec_capacity(2);
 
@@ -151,16 +162,19 @@ static void begin_locals_op(Trix *trx) {
         // transparent.
         auto [dict, dict_offset] = Dict::create_or_recycle_frame_dict(trx, static_cast<length_t>(n));
 
-        // pop K names, then K values, and def each pair
-        // stack: val1 ... valK name1 ... nameK  (nameK on top)
-        auto names_base = trx->m_op_ptr - (k - 1);
-        auto values_base = names_base - k;
-        for (integer_t i = 0; i < k; ++i) {
+        // stack: val1 ... valP  p1 ... pP  loc1 ... locM   (locM on top)
+        // Bind the P param name/value pairs; the M loc names above are metadata --
+        // declared, not bound -- and are discarded.
+        auto loc_names_base = trx->m_op_ptr - (m - 1);  // M loc names on top (discarded)
+        auto names_base = loc_names_base - p;           // P param names below them
+        auto values_base = names_base - p;              // P values below the param names
+        for (integer_t i = 0; i < p; ++i) {
             auto name_obj = names_base[i];
             auto value_obj = values_base[i];
             dict->put(trx, name_obj, value_obj, Dict::BindingMode::Bind);
         }
-        // put() takes ownership of name/value ExtValues -- do not free stack slots
+        // put() takes ownership of param name/value ExtValues; the discarded loc names
+        // are inline (no ExtValue) -- do not free stack slots
         trx->m_op_ptr = values_base - 1;
 
         // push dict onto dict stack

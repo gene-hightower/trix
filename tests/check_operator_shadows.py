@@ -10,12 +10,13 @@
 # not exist yet), and a body scanned after a global redefinition diverges from
 # one scanned before -- a silent split.
 #
-# `|locals|` PREAMBLE PARAMS are NOT a hazard and are NOT flagged: the early
-# binder knows the preamble names (the proc's own at every nesting depth, plus
-# any enclosing locals proc's) and leaves those body references alone, so a
-# param wins over a same-named operator under `#e` exactly as under late
-# binding.  Only the `local-def` / `bind-locals` form -- invisible at scan time
-# -- remains a foot-gun.
+# `|locals|` PREAMBLE NAMES (both bare params and `/`-prefixed declared locals)
+# are NOT a hazard and are NOT flagged: the early binder knows the preamble names
+# (the proc's own at every nesting depth, plus any enclosing locals proc's) and
+# leaves those body references alone, so a preamble name wins over a same-named
+# operator under `#e` exactly as under late binding.  Only the `local-def` /
+# `bind-locals` form -- a frame local invisible at scan time -- remains a
+# foot-gun (declare it in the preamble to make it `#e`-safe).
 #
 # This is a LINT, not a hard language rule: redefinition is a deliberate Trix
 # feature and operator names overlap with common variable names, so it is run on

@@ -41,34 +41,43 @@ rt-fails 0 16#0#b put
 { 2147483647 packed } try /limit-check eq
 (packed: n=INT32_MAX rejected by integer_value bound) rt-ok clear
 
-% --- begin-locals: 2*K must not overflow --------------------------
-% Stack layout is now: val1..valK name1..nameK K N {body} begin-locals.
-% K is the declared name count, N is the dict capacity (N >= K).
-{ 32768 32768 { } begin-locals } try /opstack-underflow eq
-(begin-locals: K=32768 underflow, no 2*K truncation bypass) rt-ok clear
+% --- begin-locals: 2*P+M must not overflow ------------------------
+% Stack layout is now: val1..valP p1..pP loc1..locM P M N {body} begin-locals.
+% P is the param count (bound), M the declared-local count (discarded),
+% N the dict capacity (N >= P+M).
+{ 32768 0 32768 { } begin-locals } try /opstack-underflow eq
+(begin-locals: P=32768 underflow, no 2*P truncation bypass) rt-ok clear
 
-{ 2147483647 2147483647 { } begin-locals } try /range-check eq
-(begin-locals: K=INT32_MAX rejected before 2*K overflow) rt-ok clear
+{ 2147483647 0 0 { } begin-locals } try /range-check eq
+(begin-locals: P=INT32_MAX rejected before 2*P overflow) rt-ok clear
 
-% K=0 N>=1 is the ||#N form (valid); K=0 N=0 is still rejected as useless.
-{ 0 0 { } begin-locals } try /range-check eq
-(begin-locals: K=0 N=0 zero-capacity rejected) rt-ok clear
+% P=0 M=0 N>=1 is the ||#N form (valid); N=0 is still rejected as useless.
+{ 0 0 0 { } begin-locals } try /range-check eq
+(begin-locals: P=0 M=0 N=0 zero-capacity rejected) rt-ok clear
 
-{ 0 4 { } begin-locals count 0 eq } exec
-(begin-locals: K=0 N=4 accepted as ||#N scratch form) rt-ok clear
+{ 0 0 4 { } begin-locals count 0 eq } exec
+(begin-locals: P=0 M=0 N=4 accepted as ||#N scratch form) rt-ok clear
 
-{ -5 -5 { } begin-locals } try /range-check eq
-(begin-locals: K=-5 rejected) rt-ok clear
+{ -5 0 0 { } begin-locals } try /range-check eq
+(begin-locals: P=-5 rejected) rt-ok clear
+
+% M out of range (M>65535) rejected independently of P.
+{ 0 65536 65536 { } begin-locals } try /range-check eq
+(begin-locals: M>65535 rejected) rt-ok clear
 
 % --- begin-locals: N bounds -----------------------------------------
-{ 2 1 { } begin-locals } try /range-check eq
-(begin-locals: N<K rejected) rt-ok clear
+{ 2 0 1 { } begin-locals } try /range-check eq
+(begin-locals: N<P+M rejected) rt-ok clear
 
-{ 1 65536 { } begin-locals } try /range-check eq
+{ 1 0 65536 { } begin-locals } try /range-check eq
 (begin-locals: N>65535 rejected) rt-ok clear
 
-{ 1 -1 { } begin-locals } try /range-check eq
+{ 1 0 -1 { } begin-locals } try /range-check eq
 (begin-locals: N=-1 rejected) rt-ok clear
+
+% N must cover P+M, not just P: P=1 M=2 needs N>=3.
+{ 1 2 2 { } begin-locals } try /range-check eq
+(begin-locals: N<P+M with declared locals rejected) rt-ok clear
 
 (test_count_overflow: all tests passed) =
 rt-fails 0 get /integer-type cast 0 gt { /rt-assertions-failed throw } if

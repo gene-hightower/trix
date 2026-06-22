@@ -1563,23 +1563,30 @@ struct StringScanResult {
     return std::pair{ret_obj, suffix};
 }
 
-// Scans the optional local variable binding preamble { |a b c| ... } or
-// { |a b c|#N ... } where N is an optional capacity >= count-of-names (default: N==K).
-// The empty-header form { ||#N ... } (K=0, N>=1) declares a no-args frame dict of
-// capacity N for /foo def scratch use -- the caller pushes no stack values and binds
-// names inside the body.
-// On success returns an Integer Object carrying locals_count K when a preamble was
-// scanned (K>=0), or Integer(-1) when no preamble was present.
-// Scratch stack receives /n1 .../nK followed by TWO integers K and N (N on top) for the
-// begin-locals opcode to consume at runtime; when the #N suffix is absent, N is emitted
-// equal to K so the opcode layout is uniform.
+// Scans the optional local variable binding preamble { |a b /t /acc| ... } or
+// { |a b /t|#N ... } where N is an optional capacity >= count-of-names (default N == P+M).
+// A bare name is a PARAMETER (popped from the operand stack); a `/`-prefixed name is a
+// declared LOCAL (not popped -- A": declared, not bound, so it reads /undefined until
+// assigned via local-def/store).  Params must precede all declared locals (ordered rule),
+// and no name may repeat (param/param, param/local, local/local all reject).
+// The empty-header form { ||#N ... } (P=0, M=0, N>=1) declares a no-args frame dict of
+// capacity N for /foo def scratch use; { | /t /acc| ... } (P=0, M>0) is the named-scratch
+// form.
+// On success returns an Integer carrying P+M (the total declared name count) when a
+// preamble was scanned (>=0), or Integer(-1) when no preamble was present.
+// Scratch stack receives /p1../pP /loc1../locM followed by THREE integers P, M, N (N on
+// top) for the begin-locals opcode: it binds the P params to popped values and discards
+// the M loc names.  When the #N suffix is absent, N is emitted equal to P+M.
 // On error calls cleanup and returns an error-string Object (or throws via trx->error).
 template<typename CleanupFn>
 [[nodiscard]] Object scan_local_bindings(Trix *trx, ProcScanState *state, save_level_t curr_save_level, CleanupFn &&cleanup) {
     auto saved_rptr = m_rptr_offset;
     auto saved_line = m_line_number;
     auto saved_pos = m_line_pos;
-    auto locals_count = length_t{0};
+    auto locals_count = length_t{0};  // total declared frame names = param_count + loc_count
+    auto param_count = length_t{0};   // bare names: popped from the operand stack
+    auto loc_count = length_t{0};     // /-prefixed names: declared, not popped (A")
+    auto seen_loc = false;            // ordered rule: no bare param after a /local
     // Skip whitespace and line/block comments so a stack-effect comment
     // between `{` and `|locals|` doesn't hide the pipe-header, and so
     // similar comments between names inside `|...|` don't break the
@@ -1588,7 +1595,8 @@ template<typename CleanupFn>
     // a new comment form) touches one place.
     skip_ws_and_comments_keep_eof(trx);
     if (peekc(trx) == '|') {
-        consume(trx);  // consume opening '|'
+        consume(trx);                  // consume opening '|'
+        auto names_base = state->ptr;  // first preamble name lands here (for duplicate detection)
         while (true) {
             // skip whitespace and line/block comments between names
             skip_ws_and_comments_keep_eof(trx);
@@ -1600,6 +1608,13 @@ template<typename CleanupFn>
                 cleanup();
                 return Object::make_error_string(trx, "unterminated local variable binding (missing closing '|')");
             } else {
+                // A leading '/' marks a declared local (not popped); a bare name is a
+                // parameter.  '/' is a delimiter, so it never appears mid-name -- consuming
+                // it here repurposes the otherwise-empty-name error inside the preamble.
+                auto is_loc = (ch == '/');
+                if (is_loc) {
+                    consume(trx);  // consume the '/' declared-local marker
+                }
                 auto token_ptr = trx->m_token_base;
                 auto token_limit = trx->m_token_limit;
                 auto name_len = length_t{0};
@@ -1615,34 +1630,66 @@ template<typename CleanupFn>
                         break;
                     }
                 }
+                auto name_sv = std::string_view{reinterpret_cast<char *>(trx->m_token_base), name_len};
                 if (name_len == 0) {
                     cleanup();
-                    return Object::make_error_string(trx, "empty name in local variable binding");
+                    return Object::make_error_string(
+                            trx,
+                            is_loc ? "empty declared-local name: '/' must be followed by a name in the |locals| preamble"
+                                   : "empty name in local variable binding");
                 } else if (name_len > MaxNameLength) {
                     cleanup();
                     return Object::make_error_string(trx, "local variable name length exceeds maximum");
+                } else if (!is_loc && seen_loc) {
+                    // ordered rule: all params must precede any /local
+                    cleanup();
+                    char buffer[128];
+                    auto [out, _] =
+                            std::format_to_n(buffer,
+                                             sizeof(buffer),
+                                             "parameter '{}' cannot follow a declared local; list all params before any /local",
+                                             name_sv);
+                    return Object::make_error_string(trx, std::string_view{buffer, static_cast<size_t>(out - buffer)});
                 } else {
-                    auto name_sv = std::string_view{reinterpret_cast<char *>(trx->m_token_base), name_len};
                     auto name_offset = Name::add(trx, name_sv);
-                    auto name_obj = Object::make_name(name_offset, name_len, Object::LiteralAttrib);
-                    if (state->ptr < state->limit) {
+                    // duplicate-name check: reject any repeat (param/param, param/local,
+                    // local/local) -- a cheap linear scan over the names already pushed.
+                    auto duplicate = false;
+                    for (auto seen = names_base; !duplicate && (seen < state->ptr); ++seen) {
+                        duplicate = (seen->is_name() && (seen->name_offset() == name_offset));
+                    }
+                    if (duplicate) {
+                        cleanup();
+                        char buffer[96];
+                        auto [out, _] =
+                                std::format_to_n(buffer, sizeof(buffer), "duplicate name '{}' in local variable binding", name_sv);
+                        return Object::make_error_string(trx, std::string_view{buffer, static_cast<size_t>(out - buffer)});
+                    } else if (state->ptr >= state->limit) {
+                        cleanup();
+                        trx->error(Error::LimitCheck, "local variable binding: temporary storage exhausted");
+                    } else {
+                        auto name_obj = Object::make_name(name_offset, name_len, Object::LiteralAttrib);
                         name_obj.set_save_level(curr_save_level);
                         *state->ptr++ = name_obj;
                         trx->m_op_ptr = (state->ptr - 1);
-                    } else {
-                        cleanup();
-                        trx->error(Error::LimitCheck, "local variable binding: temporary storage exhausted");
+                        if (is_loc) {
+                            seen_loc = true;
+                            ++loc_count;
+                        } else {
+                            ++param_count;
+                        }
                     }
-                    ++locals_count;
                 }
             }
         }
+        // Total declared frame names (params first, then declared locals).
+        locals_count = static_cast<length_t>(param_count + loc_count);
         // Optional capacity suffix: |a b|#N (absolute) or |a b|#+N (relative).  Parse
         // immediately after the closing '|' with no whitespace allowed between them
         // (matches #= / #r / #w suffix convention elsewhere in the scanner).
-        //   #N   absolute total capacity; must satisfy N >= K (named-arg count).
-        //   #+N  N additional slots beyond named args; total capacity = K + N.
-        // The ||#N / ||#+N form (K=0) still REQUIRES the suffix -- a bare || is a
+        //   #N   absolute total capacity; must satisfy N >= P+M (declared name count).
+        //   #+N  N additional slots beyond declared names; total capacity = P+M + N.
+        // The ||#N / ||#+N form (P=0, M=0) still REQUIRES the suffix -- a bare || is a
         // syntax error -- and the resulting capacity must be >= 1.
         auto capacity = locals_count;
         auto saw_capacity_suffix = false;
@@ -1702,14 +1749,20 @@ template<typename CleanupFn>
                 return Object::make_error_string(trx, "zero-capacity locals frame: use '||#N' or '||#+N' with N >= 1");
             }
         }
-        // push K then N onto scratch stack (begin-locals pops N first, then K)
-        if ((state->ptr + 2) > state->limit) {
+        // push P, M, N onto scratch stack: param count, declared-local count, capacity
+        // (begin-locals pops N, then M, then P).  The M declared-local names sit as
+        // leading literals after the P params; begin-locals binds the P params and
+        // discards the M loc names (declared, not bound -- A").
+        if ((state->ptr + 3) > state->limit) {
             cleanup();
             trx->error(Error::LimitCheck, "local variable binding: temporary storage exhausted");
         } else {
-            auto k_obj = Object::make_integer(static_cast<integer_t>(locals_count));
-            k_obj.set_save_level(curr_save_level);
-            *state->ptr++ = k_obj;
+            auto p_obj = Object::make_integer(static_cast<integer_t>(param_count));
+            p_obj.set_save_level(curr_save_level);
+            *state->ptr++ = p_obj;
+            auto m_obj = Object::make_integer(static_cast<integer_t>(loc_count));
+            m_obj.set_save_level(curr_save_level);
+            *state->ptr++ = m_obj;
             auto n_obj = Object::make_integer(static_cast<integer_t>(capacity));
             n_obj.set_save_level(curr_save_level);
             *state->ptr++ = n_obj;
@@ -1729,17 +1782,18 @@ template<typename CleanupFn>
 }
 
 // Local variable binding post-processing for scan_procedure.
-// Transforms [/n1 /n2 ... /nK  K  N  body...] into [/n1 /n2 ... /nK  K  N  {body}  begin-locals].
-// Called when a |...|#N or ||#N preamble was scanned; K may be 0 for the ||#N form
-// (the begin-locals opcode handles K=0 by skipping the name/value pair loop).
+// Transforms [/p.. /loc.. P M N body...] into [/p.. /loc.. P M N {body} begin-locals],
+// where locals_count == P+M is the total declared frame-name count (params + declared
+// locals).  Called when a |...|#N or ||#N preamble was scanned; locals_count may be 0
+// for the ||#N form (begin-locals handles P=0/M=0 by binding/discarding nothing).
 // Modifies state->ptr and trx->m_op_ptr; returns the new body length.
 // Raises VMFull or LimitCheck on failure (after calling cleanup).
 template<typename CleanupFn>
 [[nodiscard]] length_t finalize_local_bindings(
         Trix *trx, Object *base, ProcScanState *state, length_t locals_count, length_t length, CleanupFn &&cleanup) {
     auto curr_save_level = trx->m_curr_save_level;
-    // Preamble = K names + K-integer + N-integer.
-    auto preamble_count = static_cast<length_t>(locals_count + 2);
+    // Preamble = (P+M) names + P-integer + M-integer + N-integer.
+    auto preamble_count = static_cast<length_t>(locals_count + 3);
     if (length > preamble_count) {
         // non-empty body: wrap body elements into a nested executable packed proc
         auto body_start = (base + preamble_count);
@@ -1782,7 +1836,7 @@ template<typename CleanupFn>
         }
     } else {
         // edge case: locals with empty body -- just emit the setup/teardown
-        // [/n1 ... /nK  K  N] -> append empty body proc + begin-locals
+        // [/p.. /loc.. P M N] -> append empty body proc + begin-locals
         if ((state->ptr + 2) <= state->limit) {
             auto empty_body = Object::make_packed(nulloffset, 0, Object::ExecutableAttrib);
             empty_body.set_save_level(curr_save_level);
@@ -2047,16 +2101,17 @@ template<typename CleanupFn>
 // Inner-body annotation.  finalize_local_bindings places the
 // inner packed-body Object at base[preamble_count] (with
 // begin-locals immediately after), where preamble_count =
-// locals_count + 2.  Its m_packed is the inner body's
-// storage offset.  body_lines tracks ONLY the user-body
-// tokens (scan_local_bindings emits the preamble via direct
-// *state->ptr++ writes, not through append_or_overflow), so
-// body_lines.size() equals the inner body's length and we
-// can stash it directly.  Must happen BEFORE the state reset
-// below -- subsequent allocations could overwrite base slots.
+// locals_count + 3 (the (P+M) names plus the P, M, N integers).
+// Its m_packed is the inner body's storage offset.  body_lines
+// tracks ONLY the user-body tokens (scan_local_bindings emits the
+// preamble via direct *state->ptr++ writes, not through
+// append_or_overflow), so body_lines.size() equals the inner
+// body's length and we can stash it directly.  Must happen BEFORE
+// the state reset below -- subsequent allocations could overwrite
+// base slots.
 #ifdef TRIX_DEBUGGER
             if ((body_lines_ptr != nullptr) && !body_lines_ptr->empty()) {
-                auto preamble_count = static_cast<length_t>(locals_count + 2);
+                auto preamble_count = static_cast<length_t>(locals_count + 3);
                 auto inner = base[preamble_count];
                 if (inner.is_packed() && !inner.is_eqproc_ref()) {
                     auto inner_offset = inner.m_packed;
