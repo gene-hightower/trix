@@ -16,18 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are visible to `#e` early binding and tooling. The named-scratch form
   `{ | /t /acc| ... }` (zero params) is also allowed. Capacity (`#N` / `#+N`)
   now counts against `P + M` (params + declared locals).
-- **Parameter slot-indexing.** A locals proc's references to its own parameters,
-  where they appear directly in the proc's top-level body, are compiled at scan
-  time into direct frame-slot references — resolved by positional frame indexing
-  (`O(1)`, no hash, no dictionary-stack walk) at run time. Always on (no suffix).
-  This is the same hot-loop speedup as `#e` for reading a parameter, without
-  `#e`'s binding-cache sensitivity to recursion / `save`, and makes an own-frame
-  parameter reference inherently immune to the `#e` operator-shadow hazard (the
-  parameter always wins). Depth-0 only: a parameter referenced inside a nested
-  proc keeps a dynamic name (Trix frame scoping is dynamic). Parameters remain
-  reachable by name (`/p load`, reflection). Tail Call Optimization is preserved
-  for a parameter-bound proc invoked in tail position. (Declared `/locals` are
-  not yet slot-indexed.)
+- **Frame-local slot-indexing.** A locals proc's references to its own frame
+  locals — parameters *and* declared `/locals` — where they appear directly in the
+  proc's top-level body, are compiled at scan time into direct frame-slot
+  references, resolved by positional frame indexing (`O(1)`, no hash, no
+  dictionary-stack walk) at run time. Always on (no suffix). This is the same
+  hot-loop speedup as `#e` for reading a frame local, without `#e`'s binding-cache
+  sensitivity to recursion / `save`, and makes an own-frame local reference
+  inherently immune to the `#e` operator-shadow hazard (the frame local always
+  wins). A slot-ref read of a declared-but-unassigned `/local` raises `/undefined`
+  (it is pinned to the slot, not falling through to an enclosing binding; a dynamic
+  name lookup of it still falls through). Depth-0 only: a frame local referenced
+  inside a nested proc keeps a dynamic name (Trix frame scoping is dynamic). Frame
+  locals remain reachable by name (`/p load`, reflection). Tail Call Optimization
+  is preserved for a frame-local-bound proc invoked in tail position.
 
 ### Changed
 - **`#e` early binding no longer freezes a frame-local name that shadows a

@@ -163,9 +163,8 @@ static void begin_locals_op(Trix *trx) {
         auto [dict, dict_offset] = Dict::create_or_recycle_frame_dict(trx, static_cast<length_t>(n));
 
         // stack: val1 ... valP  p1 ... pP  loc1 ... locM   (locM on top)
-        // Bind the P param name/value pairs; the M loc names above are metadata --
-        // declared, not bound -- and are discarded.
-        auto loc_names_base = trx->m_op_ptr - (m - 1);  // M loc names on top (discarded)
+        // Bind the P param name/value pairs into slots 0..P-1.
+        auto loc_names_base = trx->m_op_ptr - (m - 1);  // M loc names on top
         auto names_base = loc_names_base - p;           // P param names below them
         auto values_base = names_base - p;              // P values below the param names
         for (integer_t i = 0; i < p; ++i) {
@@ -173,8 +172,20 @@ static void begin_locals_op(Trix *trx) {
             auto value_obj = values_base[i];
             dict->put(trx, name_obj, value_obj, Dict::BindingMode::Bind);
         }
-        // put() takes ownership of param name/value ExtValues; the discarded loc names
-        // are inline (no ExtValue) -- do not free stack slots
+        // Reserve a frame slot for each declared /local into slots P..P+M-1, holding the
+        // unset-local marker (a SlotRef value).  The entries are chained (so local-def /
+        // store / dynamic name access find and overwrite them by name) but NOT bound
+        // (NoBinding clears the cache; the marker is skipped by every value reader, so a
+        // declared-but-unassigned local reads /undefined exactly like before).  The pool
+        // is sequential, so these land at slots P..P+M-1 -- the positional invariant the
+        // scanner's slot-refs (slot P+j) rely on.  Slot-indexing a /local read is what
+        // makes the marker observable: an own-frame /local ref is a slot-ref, and a
+        // slot-ref read of the marker raises /undefined (the "declared, pinned" semantics).
+        for (integer_t i = 0; i < m; ++i) {
+            dict->put(trx, loc_names_base[i], Object::make_unset_local(), Dict::BindingMode::NoBinding);
+        }
+        // put() takes ownership of param name/value ExtValues; the loc names are inline
+        // (no ExtValue) -- do not free stack slots
         trx->m_op_ptr = values_base - 1;
 
         // push dict onto dict stack
@@ -437,10 +448,14 @@ static void bind_locals_op(Trix *trx) {
 
             // Frame dicts are fixed-capacity; count net-new keys (those not
             // already in the frame) so re-binding existing names in a loop body
-            // does not falsely overflow.
+            // does not falsely overflow.  Use find_dict_entry, not get: a reserved
+            // declared-local slot (unset-local marker) already occupies a slot and
+            // counts toward length, so it must NOT be counted net-new (get would skip
+            // the marker and wrongly report it absent).  put() below overwrites the
+            // reserved marker entry in place.
             auto net_new = length_t{0};
             for (length_t i = 0; i < names_length; ++i) {
-                if (dict->get(trx, names_base[i]) == nullptr) {
+                if (dict->find_dict_entry(trx, names_base[i], names_base[i].hash(trx)) == nullptr) {
                     ++net_new;
                 }
             }

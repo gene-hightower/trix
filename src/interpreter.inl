@@ -958,6 +958,17 @@ void execute_proc(Object proc) {
         if (value.is_slot_ref()) [[unlikely]] {
             auto *frame_dict = resolve_slot_ref_dict();
             auto slot = value.slot_ref_index();
+            auto *slot_value = frame_dict->frame_slot_value(slot);
+            // A declared /local that has not been assigned yet still holds the unset-local
+            // marker: a slot-ref read pins to the slot and raises /undefined (the declared-
+            // for-the-whole-frame semantics), rather than falling through to an enclosing
+            // binding.  (Params are always bound by begin-locals, so this only fires for an
+            // unassigned declared local.)
+            if (slot_value->is_unset_local()) [[unlikely]] {
+                error(Error::Undefined,
+                      "frame local {} is declared but not yet assigned",
+                      frame_dict->frame_slot_key(slot).name_sv(trx));
+            }
             // Re-push the remaining body BEFORE executing the resolved value so the head
             // runs first and the tail after.  A re-pushed tail also naturally blocks TCO
             // for this (non-tail) ref.  When the slot-ref IS the last body element
@@ -967,7 +978,7 @@ void execute_proc(Object proc) {
                 require_exec_capacity(1);
                 *++m_exec_ptr = proc;
             }
-            execute_resolved_value(frame_dict->frame_slot_value(slot), frame_dict->frame_slot_key(slot));
+            execute_resolved_value(slot_value, frame_dict->frame_slot_key(slot));
             return;
         }
 

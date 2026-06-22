@@ -325,25 +325,33 @@ operator (declare it as a preamble param instead, or do not early-bind).  The
 opt-in lint `tests/check_operator_shadows.py` flags the operator-named-local
 hazard.  See `interpreter.md` Section 8.2.
 
-#### Slot-indexing of parameters
+#### Slot-indexing of frame locals
 
-A locals proc's references to its **own parameters**, where they appear directly
-in the proc's top-level body, are compiled at scan time into direct frame-slot
-references: the run-time resolver indexes the proc's frame dict by position
-(`O(1)`, no hash, no dictionary-stack walk) instead of looking the name up.  This
-is always on — no suffix — and gives the same hot-loop speedup as `#e` for the
-common case of reading a parameter, but without `#e`'s sensitivity to binding
-cache invalidation under recursion or `save`.  A consequence is that an own-frame
-parameter reference is no longer a name at all, so it is inherently immune to the
-`#e` operator-shadow hazard above (the parameter always wins).
+A locals proc's references to its **own frame locals** — both parameters and
+declared `/locals` — where they appear directly in the proc's top-level body, are
+compiled at scan time into direct frame-slot references: the run-time resolver
+indexes the proc's frame dict by position (`O(1)`, no hash, no dictionary-stack
+walk) instead of looking the name up.  This is always on — no suffix — and gives
+the same hot-loop speedup as `#e` for the common case of reading a frame local,
+but without `#e`'s sensitivity to binding cache invalidation under recursion or
+`save`.  A consequence is that an own-frame local reference is no longer a name at
+all, so it is inherently immune to the `#e` operator-shadow hazard above (the
+frame local always wins).
 
-Scope is **depth-0 only**: a parameter referenced inside a *nested* proc keeps a
+A declared `/local` is reserved a frame slot on entry but is not assigned until
+`local-def` (or `store`) runs, so a slot-ref read of a still-unassigned `/local`
+raises `/undefined` — it is *pinned* to the slot rather than falling through to an
+enclosing binding (the local is declared for the whole frame).  Once assigned it
+reads its value.  (A *dynamic* name lookup of an unassigned `/local` — e.g. a
+computed name, or a reference from a nested proc — still falls through, since only
+direct slot-ref reads pin.)
+
+Scope is **depth-0 only**: a frame local referenced inside a *nested* proc keeps a
 dynamic name, because Trix frame scoping is dynamic — a nested proc may be stored
 and run after its enclosing frame has returned, so its outer-frame references can
-only be resolved at call time.  Parameters stay reachable by name as well
-(`/p load`, reflection, and dynamic lookup all still see them), so slot-indexing
-is transparent except for the speedup.  (Declared `/locals` are not yet
-slot-indexed; only parameters are today.)
+only be resolved at call time.  Frame locals stay reachable by name as well
+(`/p load`, reflection, and dynamic lookup all still see an assigned local), so
+slot-indexing is transparent except for the speedup.
 
 #### Parameters vs declared locals (`/`-prefix)
 

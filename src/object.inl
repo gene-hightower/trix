@@ -1650,6 +1650,18 @@ public:
         return static_cast<length_t>(m_offset);
     }
 
+    // Unset-declared-local marker (Phase 3 slot-indexing).  begin-locals reserves a
+    // frame slot for each declared `/local` and stores this marker as its value, so
+    // the slot is positionally addressable and reads `/undefined` until assigned.  A
+    // SlotRef is NEVER a legitimate STORED value (slot-refs live only inline in packed
+    // proc bodies), so a SlotRef-typed Object appearing as a dict entry value is
+    // unambiguously this marker -- readers treat it as "not present" and a slot-ref
+    // read of it raises `/undefined`.  The sentinel index renders as `<slot 65535>`
+    // in a frame disasm.
+    static constexpr length_t UnsetLocalSentinel{std::numeric_limits<length_t>::max()};
+    [[nodiscard]] static constexpr Object make_unset_local() { return make_slot_ref(UnsetLocalSentinel, LiteralAttrib); }
+    [[nodiscard]] bool is_unset_local() const { return is_slot_ref(); }
+
     [[nodiscard]] std::pair<bool, integer_t> integer_value(Trix *trx,
                                                            integer_t lower = std::numeric_limits<integer_t>::min(),
                                                            integer_t upper = std::numeric_limits<integer_t>::max()) const {

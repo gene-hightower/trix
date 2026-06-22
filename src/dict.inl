@@ -1577,10 +1577,13 @@ public:
                     } else if (entry->m_key.is_string()) {
                         matched = key_ptr->name_value(trx)->equal(entry->m_key.sv_value(trx));
                     }
-                    if (matched) {
+                    if (matched && !entry->m_value.is_unset_local()) {
                         key_ptr->set_name_binding(trx, &entry->m_value);
                         return std::pair{dict_obj_ptr, &entry->m_value};
                     } else {
+                        // No match, or an unset-local marker (a reserved declared-local
+                        // slot) -- skip it: a name read of a declared-but-unassigned local
+                        // falls through to an enclosing binding (or /undefined).
                         offset = entry->m_next;
                     }
                 }
@@ -1621,11 +1624,14 @@ public:
                 } else if (entry->m_key.is_string()) {
                     matched = name->equal(entry->m_key.sv_value(trx));
                 }
-                if (matched) {
+                if (matched && !entry->m_value.is_unset_local()) {
                     auto value_ptr = &entry->m_value;
                     key_ptr->set_name_binding(trx, value_ptr);
                     return value_ptr;
                 } else {
+                    // No match, or an unset-local marker (a reserved declared-local slot):
+                    // skip it so a name read of a declared-but-unassigned local falls
+                    // through to an enclosing binding (or /undefined).
                     offset = entry->m_next;
                 }
             }
@@ -1697,7 +1703,10 @@ public:
         auto hash = key_ptr->hash(trx);
         auto entry = find_in_chain<DictEntry>(
                 trx, *key_ptr, m_buckets[fastmod_u32(hash, bucket_magic_for(m_bucket_count), m_bucket_count)]);
-        return (entry ? &entry->m_value : nullptr);
+        // A reserved-but-unassigned declared frame local holds the unset-local marker;
+        // treat it as not-present for value reads (so a read sees /undefined or falls
+        // through, never the marker).  Non-frame dicts never hold a marker value.
+        return ((entry != nullptr) && !entry->m_value.is_unset_local()) ? &entry->m_value : nullptr;
     }
 
     [[nodiscard]] Object *get(Trix *trx, Object key_obj) const { return get(trx, &key_obj); }
@@ -2245,7 +2254,11 @@ public:
             auto offset = m_buckets[i];
             while (offset != nulloffset) {
                 auto entry = trx->offset_to_ptr<DictEntry>(offset);
-                fn(entry->m_key, entry->m_value);
+                // Skip unset-local markers (reserved declared-local slots) -- they are
+                // internal and must not surface to a forall body / dict reflection.
+                if (!entry->m_value.is_unset_local()) {
+                    fn(entry->m_key, entry->m_value);
+                }
                 offset = entry->m_next;
             }
         }
@@ -2284,12 +2297,16 @@ public:
             while (offset != nulloffset) {
                 auto entry = trx->offset_to_ptr<DictEntry>(offset);
 
-                auto key_obj = entry->m_key.make_clone(trx);
-                *++trx->m_gc_roots_ptr = key_obj;
-                auto val_obj = entry->m_value.make_clone(trx);
-                *++trx->m_gc_roots_ptr = val_obj;
-                put(trx, key_obj, val_obj);
-                trx->gc_root_pop_n(2);
+                // Do not copy an unset-local marker (a reserved declared-local slot from a
+                // frame dict): it is internal and the destination is an ordinary dict.
+                if (!entry->m_value.is_unset_local()) {
+                    auto key_obj = entry->m_key.make_clone(trx);
+                    *++trx->m_gc_roots_ptr = key_obj;
+                    auto val_obj = entry->m_value.make_clone(trx);
+                    *++trx->m_gc_roots_ptr = val_obj;
+                    put(trx, key_obj, val_obj);
+                    trx->gc_root_pop_n(2);
+                }
 
                 offset = entry->m_next;
             }
@@ -2342,12 +2359,18 @@ public:
 
     [[nodiscard]] DictIterEntry next(Trix *trx, vm_offset_t entry_offset, integer_t bucket_idx) {
         auto [offset, idx] = next_impl<DictEntry>(trx, entry_offset, bucket_idx);
-        if (offset != nulloffset) {
+        // Skip unset-local markers (reserved declared-local slots): they are internal and
+        // must never surface to a forall body.
+        while (offset != nulloffset) {
             auto entry = trx->offset_to_ptr<DictEntry>(offset);
-            return DictIterEntry{offset, idx, entry->m_key, entry->m_value};
-        } else {
-            return DictIterEntry{nulloffset, 0, Object::make_null(), Object::make_null()};
+            if (!entry->m_value.is_unset_local()) {
+                return DictIterEntry{offset, idx, entry->m_key, entry->m_value};
+            }
+            auto [next_offset, next_idx] = next_impl<DictEntry>(trx, offset, idx);
+            offset = next_offset;
+            idx = next_idx;
         }
+        return DictIterEntry{nulloffset, 0, Object::make_null(), Object::make_null()};
     }
 
     // Dict-stack push hook (called by `begin`, closure entry, etc.).
@@ -2369,7 +2392,11 @@ public:
                 auto offset = m_buckets[i];
                 while (offset != nulloffset) {
                     auto entry = trx->offset_to_ptr<DictEntry>(offset);
-                    if (entry->m_key.is_name()) {
+                    // Do not cache a binding to an unset-local marker (a reserved
+                    // declared-local slot): a name lookup of an unassigned local must
+                    // miss the cache and fall through.  local-def overwrites the marker
+                    // and sets the binding then.
+                    if (entry->m_key.is_name() && !entry->m_value.is_unset_local()) {
                         auto name = entry->m_key.name_value(trx);
                         name->set_binding(trx->ptr_to_offset(&entry->m_value));
                     }

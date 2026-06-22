@@ -107,6 +107,35 @@ null c5 null eq                      (c5: param bound to null reads null)       
 /m1 { |x /acc| /acc x 1 add local-def acc } def
 7 m1 8 eq                            (m1: slot-ref param + local-def /local)       rt-ok
 
+% ====================================================================
+% SECTION 7: declared /locals are slot-indexed too (read after assign,
+% unset -> /undefined, dynamic access, operator-shadow, no marker leak)
+% ====================================================================
+
+% declared local read via slot-ref after local-def
+/d1 { |x /t| /t x 1 add local-def t } def
+5 d1 6 eq                            (d1: /local read via slot-ref after assign)   rt-ok
+
+% named-scratch: both declared locals assigned then read at top level
+/d2 { | /t /acc| /t 10 local-def /acc 20 local-def t acc add } def
+d2 30 eq                             (d2: two /locals via slot-ref)                rt-ok
+
+% unassigned declared local read at TOP level (slot-ref) -> /undefined (pinned)
+/d3 { |/t| t } def
+{ d3 } try /undefined eq             (d3: unset /local slot-ref -> /undefined)     rt-ok clear
+
+% unassigned declared local read in a NESTED proc (dynamic name) -> /undefined
+/d4 { |/t| { t } try } def
+d4 /undefined eq                     (d4: unset /local via nested name -> undef)   rt-ok clear
+
+% dynamic (computed-name) access to a declared local AFTER assignment finds it
+/d5 { |/t| /t 42 local-def (t) to-name load } def
+d5 42 eq                             (d5: /local reachable by dynamic name)        rt-ok
+
+% a declared local shadowing an operator resolves to the LOCAL (slot-ref)
+/d6 { | /add| /add 7 local-def add } def
+d6 7 eq                              (d6: /local 'add' -> the local, not the op)   rt-ok
+
 rt-fails 0 get /integer-type cast 0 gt { /rt-assertions-failed throw } if
 (test_slot_indexing: ALL TESTS PASSED) =
 (__test_ok__) =
