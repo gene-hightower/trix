@@ -71,3 +71,36 @@ save+put+restore), bench_journal_write2 842 ms (4M journal writes).
 
 x86_64 hardware has not been measured; native Apple Silicon (no VM)
 should be somewhat faster due to Parallels' ~5-10% overhead.
+
+## Frame-local access -- slot-indexing (2026-06-22)
+
+Isolates the slot-indexing read win: a frame proc reading its own params
+by direct frame-slot index instead of a dict-stack name lookup.  Only a
+frame proc's depth-0 top-level executable name-refs are rewritten to
+slot-refs (nested procs stay dynamic name lookups), so the benchmark
+unrolls the reads at the proc's top level and drives them with an outer
+`repeat` (no recursion, no TCO-depth dependency).
+
+```bash
+python3 benchmark/gen_frame_locals.py                                # K=200 N=125000 -> 50M param reads
+python3 benchmark/timer.py 10 <binary> benchmark/bench_frame_locals.trx
+```
+
+A/B on the same hardware (aarch64 Parallels VM, gcc-15 `-O2 -DNDEBUG`),
+isolated release binaries built at each commit, identical flags:
+
+| build                                | commit     | min of 10 | frame-local reads/sec |
+| ------------------------------------ | ---------- | --------- | --------------------- |
+| baseline (SlotRef type, no emission) | `1b41bf0f` | 2590 ms   | 19.3M reads/sec       |
+| slot-indexing (params + /locals)     | `47344697` | 2145 ms   | 23.3M reads/sec       |
+
+**Result: 17.2% faster (1.21x) on the 50M-read workload.**  The workload
+is `a b add pop` x200 inside a `|a b|` frame proc, repeated 125000 times
+(~100M dispatched ops total); slot-indexing lifts a param-read-heavy
+frame loop from ~39M to ~47M ops/sec, i.e. up to frameless dispatch speed.
+
+Mechanism confirmed via `proc-disasm` on a `TRIX_DEBUGGER` build: HEAD
+emits `<slot 0>` / `<slot 1>` for the `a` / `b` reads; the same source on
+`1b41bf0f` leaves them as executable names resolved by `name_lookup_in_stack`.
+
+x86_64 hardware has not been measured.

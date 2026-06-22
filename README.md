@@ -451,6 +451,7 @@ user-operator and interrupt APIs, and the complete Config table.
 | Test assertions      | 20,200+ across 270 test files                                   |
 | Fuzz testing         | libFuzzer harness (full interpreter)                            |
 | Interpreter dispatch | ~47M ops/sec (representative mix; see [benchmark/](benchmark/)) |
+| Frame-local read     | ~23M reads/sec, 1.21x vs name lookup (slot-indexing)            |
 | Default VM size      | 1 MB (configurable, minimum 256KB)                              |
 | Sanitizers           | ASan + UBSan clean (zero undefined behavior)                    |
 | Dependencies         | readline, zlib (optional; `--no-readline` / `--no-zlib`)        |
