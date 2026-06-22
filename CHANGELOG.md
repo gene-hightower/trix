@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Build portability: include `<limits.h>` for `PATH_MAX` so the header compiles
+  on toolchains that no longer pull it in transitively (e.g. Fedora 44 /
+  GCC 16.1). Thanks to Gene Hightower ([#11](https://github.com/mcguidarelli/trix/pull/11)).
+
 ## [0.10.0] - 2026-06-21
 
 ### Added
