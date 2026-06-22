@@ -279,7 +279,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
     auto print_version = [&]() {
         // The tagline is the name's origin story: Trixie is the cat in
         // concatenative (see README "Why Trix?").
-        std::println("trix {}.{}.{} — the cat in concatenative", MAJOR, MINOR, PATCH);
+        std::println("trix {}.{}.{}{} — the cat in concatenative", MAJOR, MINOR, PATCH, PRERELEASE);
         print_build_info();
     };
 
@@ -290,11 +290,12 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      " / / / / / /  > \u00b7 <      C++23 \u00b7 Single-Header Library\n"
                      "/_/ /_/ /_/  /_/\\_\\     Copyright 2026 Mark Guidarelli\n"
                      "\n"
-                     "Version {}.{}.{}  (snapshot format {})\n"
+                     "Version {}.{}.{}{}  (snapshot format {})\n"
                      "Licensed under the Apache License, Version 2.0\n",
                      MAJOR,
                      MINOR,
                      PATCH,
+                     PRERELEASE,
                      SNAPSHOT_VERSION);
 #if defined(__GNUC__) && !defined(__clang__)
         std::println("Compiler: GCC {}.{}.{}", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);

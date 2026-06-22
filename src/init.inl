@@ -769,10 +769,11 @@ void init_and_interpret(Config config) {
                     // format version -- so a cross-build thaw mismatch is visible at
                     // a glance (the "total" is what the image's signature pins).
                     if (user_op_count > 0) {
-                        std::println("Trix {}.{}.{} -- {}{} VM -- {} ops ({} total) +{} user, image v{}",
+                        std::println("Trix {}.{}.{}{} -- {}{} VM -- {} ops ({} total) +{} user, image v{}",
                                      MAJOR,
                                      MINOR,
                                      PATCH,
+                                     PRERELEASE,
                                      vm_val,
                                      vm_unit,
                                      user_facing_operator_count(),
@@ -780,10 +781,11 @@ void init_and_interpret(Config config) {
                                      user_op_count,
                                      SNAPSHOT_VERSION);
                     } else {
-                        std::println("Trix {}.{}.{} -- {}{} VM -- {} ops ({} total), image v{}",
+                        std::println("Trix {}.{}.{}{} -- {}{} VM -- {} ops ({} total), image v{}",
                                      MAJOR,
                                      MINOR,
                                      PATCH,
+                                     PRERELEASE,
                                      vm_val,
                                      vm_unit,
                                      user_facing_operator_count(),

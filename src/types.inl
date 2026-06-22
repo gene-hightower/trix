@@ -672,9 +672,18 @@ private:
 //===--- Private Types and Constants ---===//
 // Public SemVer: printed by --version, --about, and the REPL banner.  Bump
 // MINOR for new features, PATCH for bug fixes, MAJOR for breaking changes.
+//
+// PRERELEASE is the pre-release identifier appended to the version string (e.g.
+// "0.11.0-dev").  master carries "-dev" so a build off an untagged commit is
+// honestly distinguishable from the corresponding tagged release: a release is
+// cut by setting PRERELEASE to "" in the `release: vX.Y.Z` commit (alongside the
+// CHANGELOG [Unreleased] promotion + README/docs version refresh) and tagging it;
+// the next commit re-sets PRERELEASE to "-dev" (and bumps MINOR/PATCH as needed)
+// to re-open the dev cycle.  Empty PRERELEASE formats to nothing.
 static constexpr uint8_t MAJOR{0};
-static constexpr uint8_t MINOR{10};
-static constexpr uint8_t PATCH{1};
+static constexpr uint8_t MINOR{11};
+static constexpr uint8_t PATCH{0};
+static constexpr std::string_view PRERELEASE{"-dev"};
 
 // Snapshot-image format revision: stored in the snapshot header and
 // strict-compared on thaw.  Increment any time the on-disk layout,
