@@ -61,9 +61,9 @@ which exercises integer push, the arithmetic shim, and a stack pop
 Process-startup overhead measured separately at ~1 ms and is
 negligible at this scale.
 
-History: ~45M ops/sec (2026-04-22); a P3-era regression to ~39M was
-diagnosed and reversed in the Phase-5 performance pass (consteval
-dispatch tables + object hot-path fast paths).
+History: ~45M ops/sec (2026-04-22); an earlier regression to ~39M was
+diagnosed and reversed (consteval dispatch tables + object hot-path
+fast paths).
 
 Companion numbers on the same hardware/date (min of 10):
 bench_scan 139 ms (1M tokens), bench_journal_write 4528 ms (1M
