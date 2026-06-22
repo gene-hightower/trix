@@ -12,7 +12,7 @@
 
 [![CI](https://github.com/mcguidarelli/trix/actions/workflows/ci.yml/badge.svg)](https://github.com/mcguidarelli/trix/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-0.10.0-green.svg)](https://github.com/mcguidarelli/trix/releases)
+[![Version](https://img.shields.io/badge/version-0.10.1-green.svg)](https://github.com/mcguidarelli/trix/releases)
 
 C++23 | Single-Header | ASan/UBSan clean | Apache 2.0
 
@@ -589,11 +589,12 @@ The language and runtime are feature-complete.  All concurrency layers
 (coroutines, pipelines, actors, supervision) and computation features
 (logic, reactive cells) are implemented and tested.
 
-Current release: 0.10.0 -- adds the `override` operator (with a breaking
-guard against accidental operator shadowing) and DWARF host introspection,
-on top of v0.9.0's release-readiness pass (documentation audit, sad-path
-test expansion, fuzzing campaigns, example showcase hardening, and a
-performance pass).  Remaining before 1.0: an API-stability soak.
+Current release: 0.10.1 -- a build-portability fix (`limits.h` for `PATH_MAX`)
+over 0.10.0, which added the `override` operator (with a breaking guard against
+accidental operator shadowing) and DWARF host introspection, on top of v0.9.0's
+release-readiness pass (documentation audit, sad-path test expansion, fuzzing
+campaigns, example showcase hardening, and a performance pass).  Remaining
+before 1.0: an API-stability soak.
 
 60 reference documents cover all subsystems, indexed at
 [docs/index.md](docs/index.md).  See

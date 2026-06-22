@@ -674,7 +674,7 @@ private:
 // MINOR for new features, PATCH for bug fixes, MAJOR for breaking changes.
 static constexpr uint8_t MAJOR{0};
 static constexpr uint8_t MINOR{10};
-static constexpr uint8_t PATCH{0};
+static constexpr uint8_t PATCH{1};
 
 // Snapshot-image format revision: stored in the snapshot header and
 // strict-compared on thaw.  Increment any time the on-disk layout,
