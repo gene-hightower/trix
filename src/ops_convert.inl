@@ -416,70 +416,51 @@ static void deepne_op(Trix *trx) {
     }
 }
 
-// Convert a numeric Object to the target type, freeing any ExtValue.
-static void promote_convert(Trix *trx, Object *val_ptr, Object::Type target) {
+// True when `target` is one of the ten scalar types cast_object can produce
+// (the nine numerics plus Boolean).  cast_op / coerce_op gate user-named
+// targets on this before calling cast_object.
+[[nodiscard]] static constexpr bool is_numeric_or_boolean_type(Object::Type target) {
     using T = Object::Type;
+    return ((target == T::Byte) || (target == T::Integer) || (target == T::UInteger) || (target == T::Long) ||
+            (target == T::ULong) || (target == T::Int128) || (target == T::UInt128) || (target == T::Real) ||
+            (target == T::Double) || (target == T::Boolean));
+}
 
-    Object result_obj;
+// Convert a numeric/boolean Object to `target`, returning the new Object (the
+// caller frees the source's ExtValue and stores the result).  `target` MUST
+// satisfy is_numeric_or_boolean_type(); any other type trips the assert.
+[[nodiscard]] static Object cast_object(Trix *trx, Object src, Object::Type target) {
+    using T = Object::Type;
     switch (+target) {
-    case +T::Byte: {
-        auto v = cast_to_type<vm_t>(trx, *val_ptr);
-        result_obj = Object::make_byte(v);
-        break;
-    }
-
-    case +T::Integer: {
-        auto v = cast_to_type<integer_t>(trx, *val_ptr);
-        result_obj = Object::make_integer(v);
-        break;
-    }
-
-    case +T::UInteger: {
-        auto v = cast_to_type<uinteger_t>(trx, *val_ptr);
-        result_obj = Object::make_uinteger(v);
-        break;
-    }
-
-    case +T::Long: {
-        auto v = cast_to_type<long_t>(trx, *val_ptr);
-        result_obj = Object::make_long(trx, v);
-        break;
-    }
-
-    case +T::ULong: {
-        auto v = cast_to_type<ulong_t>(trx, *val_ptr);
-        result_obj = Object::make_ulong(trx, v);
-        break;
-    }
-
-    case +T::Int128: {
-        auto v = cast_to_type<int128_t>(trx, *val_ptr);
-        result_obj = Object::make_int128(trx, v);
-        break;
-    }
-
-    case +T::UInt128: {
-        auto v = cast_to_type<uint128_t>(trx, *val_ptr);
-        result_obj = Object::make_uint128(trx, v);
-        break;
-    }
-
-    case +T::Real: {
-        auto v = cast_to_type<real_t>(trx, *val_ptr);
-        result_obj = Object::make_real(v);
-        break;
-    }
-
-    case +T::Double: {
-        auto v = cast_to_type<double_t>(trx, *val_ptr);
-        result_obj = Object::make_double(trx, v);
-        break;
-    }
-
+    case +T::Byte:
+        return Object::make_byte(cast_to_type<vm_t>(trx, src));
+    case +T::Integer:
+        return Object::make_integer(cast_to_type<integer_t>(trx, src));
+    case +T::UInteger:
+        return Object::make_uinteger(cast_to_type<uinteger_t>(trx, src));
+    case +T::Long:
+        return Object::make_long(trx, cast_to_type<long_t>(trx, src));
+    case +T::ULong:
+        return Object::make_ulong(trx, cast_to_type<ulong_t>(trx, src));
+    case +T::Int128:
+        return Object::make_int128(trx, cast_to_type<int128_t>(trx, src));
+    case +T::UInt128:
+        return Object::make_uint128(trx, cast_to_type<uint128_t>(trx, src));
+    case +T::Real:
+        return Object::make_real(cast_to_type<real_t>(trx, src));
+    case +T::Double:
+        return Object::make_double(trx, cast_to_type<double_t>(trx, src));
+    case +T::Boolean:
+        return Object::make_boolean(cast_to_type<boolean_t>(trx, src));
     default:
-        assert(false && "promote_convert: logic error");
+        assert(false && "cast_object: unsupported target type");
         std::unreachable();
     }
+}
+
+// Convert a numeric Object to the target type, freeing any ExtValue.
+static void promote_convert(Trix *trx, Object *val_ptr, Object::Type target) {
+    auto result_obj = cast_object(trx, *val_ptr, target);
     val_ptr->maybe_free_extvalue(trx);
     *val_ptr = result_obj;
 }
@@ -704,75 +685,13 @@ static void cast_op(Trix *trx) {
     auto [is_name, type] = trx->is_type_name(*name_ptr);
     if (is_name) {
         if (type != val_ptr->type()) {
-            Object result_obj;
-
-            switch (+type) {
-            case +Object::Type::Byte: {
-                auto b = cast_to_type<vm_t>(trx, *val_ptr);
-                result_obj = Object::make_byte(b);
-                break;
-            }
-
-            case +Object::Type::Integer: {
-                auto i = cast_to_type<integer_t>(trx, *val_ptr);
-                result_obj = Object::make_integer(i);
-                break;
-            }
-
-            case +Object::Type::UInteger: {
-                auto ui = cast_to_type<uinteger_t>(trx, *val_ptr);
-                result_obj = Object::make_uinteger(ui);
-                break;
-            }
-
-            case +Object::Type::Long: {
-                auto l = cast_to_type<long_t>(trx, *val_ptr);
-                result_obj = Object::make_long(trx, l);
-                break;
-            }
-
-            case +Object::Type::ULong: {
-                auto ul = cast_to_type<ulong_t>(trx, *val_ptr);
-                result_obj = Object::make_ulong(trx, ul);
-                break;
-            }
-
-            case +Object::Type::Int128: {
-                auto h = cast_to_type<int128_t>(trx, *val_ptr);
-                result_obj = Object::make_int128(trx, h);
-                break;
-            }
-
-            case +Object::Type::UInt128: {
-                auto uh = cast_to_type<uint128_t>(trx, *val_ptr);
-                result_obj = Object::make_uint128(trx, uh);
-                break;
-            }
-
-            case +Object::Type::Real: {
-                auto r = cast_to_type<real_t>(trx, *val_ptr);
-                result_obj = Object::make_real(r);
-                break;
-            }
-
-            case +Object::Type::Double: {
-                auto d = cast_to_type<double_t>(trx, *val_ptr);
-                result_obj = Object::make_double(trx, d);
-                break;
-            }
-
-            case +Object::Type::Boolean: {
-                auto b = cast_to_type<boolean_t>(trx, *val_ptr);
-                result_obj = Object::make_boolean(b);
-                break;
-            }
-
-            default:
+            if (!is_numeric_or_boolean_type(type)) {
                 trx->error(Error::TypeCheck, "cast: cannot cast to non-numeric type");
+            } else {
+                auto result_obj = cast_object(trx, *val_ptr, type);
+                val_ptr->maybe_free_extvalue(trx);
+                *val_ptr = result_obj;
             }
-
-            val_ptr->maybe_free_extvalue(trx);
-            *val_ptr = result_obj;
         }
         trx->m_op_ptr = val_ptr;
     } else {
@@ -825,53 +744,7 @@ static void cast_op(Trix *trx) {
 // Helper: convert a single Object in-place to the target type using cast_to_type<T>.
 // Caller has already validated is_valid_coercion().
 static void coerce_element(Trix *trx, Object *val_ptr, Object::Type target) {
-    using T = Object::Type;
-    Object result_obj;
-    switch (+target) {
-    case +T::Byte:
-        result_obj = Object::make_byte(cast_to_type<vm_t>(trx, *val_ptr));
-        break;
-
-    case +T::Integer:
-        result_obj = Object::make_integer(cast_to_type<integer_t>(trx, *val_ptr));
-        break;
-
-    case +T::UInteger:
-        result_obj = Object::make_uinteger(cast_to_type<uinteger_t>(trx, *val_ptr));
-        break;
-
-    case +T::Long:
-        result_obj = Object::make_long(trx, cast_to_type<long_t>(trx, *val_ptr));
-        break;
-
-    case +T::ULong:
-        result_obj = Object::make_ulong(trx, cast_to_type<ulong_t>(trx, *val_ptr));
-        break;
-
-    case +T::Int128:
-        result_obj = Object::make_int128(trx, cast_to_type<int128_t>(trx, *val_ptr));
-        break;
-
-    case +T::UInt128:
-        result_obj = Object::make_uint128(trx, cast_to_type<uint128_t>(trx, *val_ptr));
-        break;
-
-    case +T::Real:
-        result_obj = Object::make_real(cast_to_type<real_t>(trx, *val_ptr));
-        break;
-
-    case +T::Double:
-        result_obj = Object::make_double(trx, cast_to_type<double_t>(trx, *val_ptr));
-        break;
-
-    case +T::Boolean:
-        result_obj = Object::make_boolean(cast_to_type<boolean_t>(trx, *val_ptr));
-        break;
-
-    default:
-        assert(false && "coerce_element: unsupported target type");
-        std::unreachable();
-    }
+    auto result_obj = cast_object(trx, *val_ptr, target);
     val_ptr->maybe_free_extvalue(trx);
     *val_ptr = result_obj;
 }
@@ -891,11 +764,7 @@ static void coerce_op(Trix *trx) {
         trx->error(Error::TypeCheck, "coerce: not a type name");
     } else {
         // Validate target is numeric or boolean
-        auto target_ok = (target == Object::Type::Byte) || (target == Object::Type::Integer) ||
-                         (target == Object::Type::UInteger) || (target == Object::Type::Long) || (target == Object::Type::ULong) ||
-                         (target == Object::Type::Int128) || (target == Object::Type::UInt128) || (target == Object::Type::Real) ||
-                         (target == Object::Type::Double) || (target == Object::Type::Boolean);
-        if (!target_ok) {
+        if (!is_numeric_or_boolean_type(target)) {
             trx->error(Error::TypeCheck, "coerce: target must be a numeric or boolean type");
         } else if (container_ptr->is_sequence()) {
             // Array/packed path
