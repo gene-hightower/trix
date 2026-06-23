@@ -662,8 +662,8 @@ struct SupervisorState {
         uint32_t monitor_ref;  // monitor ref_id for current actor
         length_t capacity;     // mailbox capacity (0 = use default)
         RestartPolicy policy;
-        uint8_t active;  // 1 = running, 0 = stopped
-        uint32_t padding;
+        uint8_t active;           // 1 = running, 0 = stopped
+        uint32_t restart_marked;  // transient OneForAll/RestForOne wave marker; also pads to 32 bytes
     };
     static_assert(sizeof(ChildEntry) == 32, "SupervisorState::ChildEntry size");
 
@@ -892,7 +892,7 @@ static bool supervisor_handle_down(Trix *trx, vm_offset_t state_offset, Object p
 
                         case SupervisorState::OneForAll: {
                             // Kill all other active children (reverse order); mark the children this
-                            // wave actually terminates (transient padding marker) so only they --
+                            // wave actually terminates (transient restart marker) so only they --
                             // plus the failed child -- are restarted.  An already-stopped /temporary
                             // child must not be resurrected by a sibling failure.
                             state = trx->offset_to_ptr<SupervisorState>(state_offset);
@@ -900,7 +900,7 @@ static bool supervisor_handle_down(Trix *trx, vm_offset_t state_offset, Object p
                                 auto idx = static_cast<length_t>(i - 1);
                                 children = supervisor_children(trx, state_offset);
                                 if ((idx != child_idx) && children[idx].active) {
-                                    children[idx].padding = 1;
+                                    children[idx].restart_marked = 1;
                                     supervisor_kill_child(trx, state_offset, idx);
                                 }
                             }
@@ -908,8 +908,8 @@ static bool supervisor_handle_down(Trix *trx, vm_offset_t state_offset, Object p
                             state = trx->offset_to_ptr<SupervisorState>(state_offset);
                             for (length_t i = 0; i < state->child_count; ++i) {
                                 children = supervisor_children(trx, state_offset);
-                                if ((i == child_idx) || (children[i].padding == 1)) {
-                                    children[i].padding = 0;
+                                if ((i == child_idx) || (children[i].restart_marked == 1)) {
+                                    children[i].restart_marked = 0;
                                     supervisor_spawn_child(trx, trx->m_running_coroutine, state_offset, i);
                                 }
                             }
@@ -925,7 +925,7 @@ static bool supervisor_handle_down(Trix *trx, vm_offset_t state_offset, Object p
                                 auto idx = static_cast<length_t>(i - 1);
                                 children = supervisor_children(trx, state_offset);
                                 if (children[idx].active) {
-                                    children[idx].padding = 1;
+                                    children[idx].restart_marked = 1;
                                     supervisor_kill_child(trx, state_offset, idx);
                                 }
                             }
@@ -933,8 +933,8 @@ static bool supervisor_handle_down(Trix *trx, vm_offset_t state_offset, Object p
                             state = trx->offset_to_ptr<SupervisorState>(state_offset);
                             for (length_t i = child_idx; i < state->child_count; ++i) {
                                 children = supervisor_children(trx, state_offset);
-                                if ((i == child_idx) || (children[i].padding == 1)) {
-                                    children[i].padding = 0;
+                                if ((i == child_idx) || (children[i].restart_marked == 1)) {
+                                    children[i].restart_marked = 0;
                                     supervisor_spawn_child(trx, trx->m_running_coroutine, state_offset, i);
                                 }
                             }
@@ -1257,7 +1257,7 @@ static void supervisor_op(Trix *trx) {
                                     entries[i].capacity = capacity;
                                     entries[i].policy = policy;
                                     entries[i].active = 0;
-                                    entries[i].padding = 0;
+                                    entries[i].restart_marked = 0;
                                 }
 
                                 // Root the state on the context (gc_walk_coroutine_context marks it via the
@@ -1712,7 +1712,7 @@ static void supervisor_handle_start_child(Trix *trx, vm_offset_t state_offset, O
             children[idx].capacity = capacity;
             children[idx].policy = policy;
             children[idx].active = 0;
-            children[idx].padding = 0;
+            children[idx].restart_marked = 0;
             state->child_count = static_cast<length_t>(idx + 1);
 
             // Spawn the child
@@ -1796,9 +1796,9 @@ static void at_supervisor_check_op(Trix *trx) {
 // allocator slack with stale bytes; gc_mark_object's defensive checks
 // would skip them but explicit bounding is cheaper.
 //
-// monitor_ref / capacity / policy / active are metadata; padding
-// is unused.  The timestamps array trailing the ChildEntry array
-// holds uint32_t milliseconds, no Object cells.
+// monitor_ref / capacity / policy / active / restart_marked are
+// scalar metadata, not Object cells.  The timestamps array trailing
+// the ChildEntry array holds uint32_t milliseconds, no Object cells.
 //
 void gc_walk_supervisor(vm_offset_t payload_offset) {
     auto *state = offset_to_ptr<SupervisorState>(payload_offset);
