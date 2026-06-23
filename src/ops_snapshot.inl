@@ -706,48 +706,61 @@ static void snapshot_op(Trix *trx) {
                 h.useroperator_count = userop_count;
                 h.useroperator_names_crc = names_crc;
 
-                // Collect IsMemory ext buffers and the startup file tail; compute their section CRC.
-                // File layout: [header] [memory stream blocks] [user file stream blocks] [VM blob]
-                {
-                    uint32_t mem_count = 0;
-                    crc32_t mem_crc = 0;
+                // Walk the serialized stream blocks emitting each block's fields in one
+                // canonical order.  File layout: [header] [memory stream blocks]
+                // [user file stream blocks] [VM blob].  The three passes below -- section
+                // CRCs, overall CRC, and the write -- drive these same walkers with
+                // different callbacks, so the on-disk field order lives in exactly one
+                // place and cannot drift between passes.  The startup file tail is emitted
+                // as a trailing memory stream block (streamed straight from the startup fd
+                // via on_fd_range rather than buffered).
+                auto walk_memory_blocks = [&](auto on_bytes, auto on_fd_range) -> uint32_t {
+                    uint32_t count = 0;
                     for (auto s = trx->m_stream_inuse_list; s != nullptr; s = s->next_stream(trx)) {
                         if (s->is_memory() && (s->m_ext_remaining > 0)) {
-                            ++mem_count;
+                            ++count;
                             auto off = trx->ptr_to_offset(s);
-                            mem_crc = crc32_update(mem_crc, &off, sizeof(off));
-                            mem_crc = crc32_update(mem_crc, &s->m_ext_remaining, sizeof(s->m_ext_remaining));
-                            mem_crc = crc32_update(mem_crc, s->m_ext_ptr, s->m_ext_remaining);
+                            on_bytes(&off, sizeof(off));
+                            on_bytes(&s->m_ext_remaining, sizeof(s->m_ext_remaining));
+                            on_bytes(s->m_ext_ptr, s->m_ext_remaining);
                         }
                     }
-                    // Include the startup file tail as an additional memory stream block.  Its
-                    // bytes are streamed straight from the startup fd rather than buffered.
                     if ((startup_stream != nullptr) && (startup_tail_size > 0)) {
-                        ++mem_count;
+                        ++count;
                         auto off = trx->ptr_to_offset(startup_stream);
                         size_t rem = startup_tail_size;
-                        mem_crc = crc32_update(mem_crc, &off, sizeof(off));
-                        mem_crc = crc32_update(mem_crc, &rem, sizeof(rem));
-                        mem_crc = crc_fd_range(trx, startup_stream->m_fd, startup_tail_off, rem, mem_crc);
+                        on_bytes(&off, sizeof(off));
+                        on_bytes(&rem, sizeof(rem));
+                        on_fd_range(startup_stream->m_fd, startup_tail_off, rem);
                     }
-                    h.memory_stream_count = mem_count;
-                    h.memory_stream_crc = (mem_count > 0) ? mem_crc : 0;
-                }
-
-                // Compute user file stream section CRC.  Each (absolute) filename is re-derived
-                // from its still-open stream via with_resolved_stream_path() -- it is not stored
-                // in the record array.
-                {
-                    crc32_t ufs_crc = 0;
+                    return count;
+                };
+                // Each (absolute) filename is re-derived from its still-open stream via
+                // on_path (resolve_stream_path) -- it is not stored in the record array.
+                auto walk_user_file_blocks = [&](auto on_bytes, auto on_path) {
                     for (uint16_t i = 0; i < user_file_count; ++i) {
                         auto *info = &user_file_infos[i];
-                        auto *s = trx->offset_to_ptr<Stream>(info->stream_offset);
-                        ufs_crc = crc32_update(ufs_crc, &info->stream_offset, sizeof(info->stream_offset));
-                        ufs_crc = crc32_update(ufs_crc, &info->file_offset, sizeof(info->file_offset));
-                        ufs_crc = crc32_update(ufs_crc, &info->open_mode, sizeof(info->open_mode));
-                        ufs_crc = crc32_update(ufs_crc, &info->flags, sizeof(info->flags));
-                        ufs_crc = crc_stream_path(trx, s, ufs_crc);
+                        auto *path_stream = trx->offset_to_ptr<Stream>(info->stream_offset);
+                        on_bytes(&info->stream_offset, sizeof(info->stream_offset));
+                        on_bytes(&info->file_offset, sizeof(info->file_offset));
+                        on_bytes(&info->open_mode, sizeof(info->open_mode));
+                        on_bytes(&info->flags, sizeof(info->flags));
+                        on_path(path_stream);
                     }
+                };
+
+                // Section CRC pass: memory-stream section, then user-file section.
+                {
+                    crc32_t mem_crc = 0;
+                    auto mem_count = walk_memory_blocks(
+                            [&](const void *p, size_t n) { mem_crc = crc32_update(mem_crc, p, n); },
+                            [&](int range_fd, off64_t off, size_t n) { mem_crc = crc_fd_range(trx, range_fd, off, n, mem_crc); });
+                    h.memory_stream_count = mem_count;
+                    h.memory_stream_crc = (mem_count > 0) ? mem_crc : 0;
+
+                    crc32_t ufs_crc = 0;
+                    walk_user_file_blocks([&](const void *p, size_t n) { ufs_crc = crc32_update(ufs_crc, p, n); },
+                                          [&](Stream *s) { ufs_crc = crc_stream_path(trx, s, ufs_crc); });
                     h.user_file_stream_count = user_file_count;
                     h.user_file_stream_crc = (user_file_count > 0) ? ufs_crc : 0;
                 }
@@ -757,30 +770,11 @@ static void snapshot_op(Trix *trx) {
                 h.checksum = 0;
                 {
                     auto crc = crc32_update(0, &h, sizeof(h));
-                    for (auto s = trx->m_stream_inuse_list; s != nullptr; s = s->next_stream(trx)) {
-                        if (s->is_memory() && (s->m_ext_remaining > 0)) {
-                            auto off = trx->ptr_to_offset(s);
-                            crc = crc32_update(crc, &off, sizeof(off));
-                            crc = crc32_update(crc, &s->m_ext_remaining, sizeof(s->m_ext_remaining));
-                            crc = crc32_update(crc, s->m_ext_ptr, s->m_ext_remaining);
-                        }
-                    }
-                    if ((startup_stream != nullptr) && (startup_tail_size > 0)) {
-                        auto off = trx->ptr_to_offset(startup_stream);
-                        size_t rem = startup_tail_size;
-                        crc = crc32_update(crc, &off, sizeof(off));
-                        crc = crc32_update(crc, &rem, sizeof(rem));
-                        crc = crc_fd_range(trx, startup_stream->m_fd, startup_tail_off, rem, crc);
-                    }
-                    for (uint16_t i = 0; i < user_file_count; ++i) {
-                        auto *info = &user_file_infos[i];
-                        auto *s = trx->offset_to_ptr<Stream>(info->stream_offset);
-                        crc = crc32_update(crc, &info->stream_offset, sizeof(info->stream_offset));
-                        crc = crc32_update(crc, &info->file_offset, sizeof(info->file_offset));
-                        crc = crc32_update(crc, &info->open_mode, sizeof(info->open_mode));
-                        crc = crc32_update(crc, &info->flags, sizeof(info->flags));
-                        crc = crc_stream_path(trx, s, crc);
-                    }
+                    walk_memory_blocks(
+                            [&](const void *p, size_t n) { crc = crc32_update(crc, p, n); },
+                            [&](int range_fd, off64_t off, size_t n) { crc = crc_fd_range(trx, range_fd, off, n, crc); });
+                    walk_user_file_blocks([&](const void *p, size_t n) { crc = crc32_update(crc, p, n); },
+                                          [&](Stream *s) { crc = crc_stream_path(trx, s, crc); });
                     crc = crc32_update(crc, trx->m_vm_base, h.vm_used);
                     // Global region (if any): bytes from m_vm_global to m_vm_limit.
                     if (h.vm_global_used > 0) {
@@ -794,47 +788,30 @@ static void snapshot_op(Trix *trx) {
                     auto errno_str = errno_string();
                     trx->error(Error::IOWriteError, "snap-shot: header write failed: {}/{}", errno, errno_str);
                 } else {
-                    // Write: 2. Memory stream blocks (IsMemory ext buffers + startup file tail)
-                    for (auto s = trx->m_stream_inuse_list; s != nullptr; s = s->next_stream(trx)) {
-                        if (s->is_memory() && (s->m_ext_remaining > 0)) {
-                            auto off = trx->ptr_to_offset(s);
-                            if (!write_all(fd, &off, sizeof(off)) ||
-                                !write_all(fd, &s->m_ext_remaining, sizeof(s->m_ext_remaining)) ||
-                                !write_all(fd, s->m_ext_ptr, s->m_ext_remaining)) {
-                                auto errno_str = errno_string();
-                                trx->error(Error::IOWriteError,
-                                           "snap-shot: memory stream block write failed: {}/{}",
-                                           errno,
-                                           errno_str);
-                            }
-                        }
-                    }
-                    if ((startup_stream != nullptr) && (startup_tail_size > 0)) {
-                        auto off = trx->ptr_to_offset(startup_stream);
-                        size_t rem = startup_tail_size;
-                        if (!write_all(fd, &off, sizeof(off)) || !write_all(fd, &rem, sizeof(rem))) {
-                            auto errno_str = errno_string();
-                            trx->error(Error::IOWriteError, "snap-shot: startup tail block write failed: {}/{}", errno, errno_str);
-                        } else {
+                    // Write: 2. Stream blocks -- memory streams + startup tail, then user files.
+                    walk_memory_blocks(
+                            [&](const void *p, size_t n) {
+                                if (!write_all(fd, p, n)) {
+                                    auto errno_str = errno_string();
+                                    trx->error(Error::IOWriteError,
+                                               "snap-shot: memory stream block write failed: {}/{}",
+                                               errno,
+                                               errno_str);
+                                }
+                            },
                             // Stream the tail bytes straight from the startup fd (never buffered).
-                            write_fd_range(trx, startup_stream->m_fd, startup_tail_off, rem, fd);
-                        }
-                    }
-
-                    // Write: 3. User file stream blocks (re-derive each filename from its stream)
-                    for (uint16_t i = 0; i < user_file_count; ++i) {
-                        auto *info = &user_file_infos[i];
-                        auto *s = trx->offset_to_ptr<Stream>(info->stream_offset);
-                        if (!write_all(fd, &info->stream_offset, sizeof(info->stream_offset)) ||
-                            !write_all(fd, &info->file_offset, sizeof(info->file_offset)) ||
-                            !write_all(fd, &info->open_mode, sizeof(info->open_mode)) ||
-                            !write_all(fd, &info->flags, sizeof(info->flags))) {
-                            auto errno_str = errno_string();
-                            trx->error(
-                                    Error::IOWriteError, "snap-shot: user file stream block write failed: {}/{}", errno, errno_str);
-                        }
-                        write_stream_path(trx, s, fd);
-                    }
+                            [&](int range_fd, off64_t off, size_t n) { write_fd_range(trx, range_fd, off, n, fd); });
+                    walk_user_file_blocks(
+                            [&](const void *p, size_t n) {
+                                if (!write_all(fd, p, n)) {
+                                    auto errno_str = errno_string();
+                                    trx->error(Error::IOWriteError,
+                                               "snap-shot: user file stream block write failed: {}/{}",
+                                               errno,
+                                               errno_str);
+                                }
+                            },
+                            [&](Stream *s) { write_stream_path(trx, s, fd); });
 
                     // Write: 4. Local VM blob
                     if (!write_all(fd, trx->m_vm_base, h.vm_used)) {
