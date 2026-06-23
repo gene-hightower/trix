@@ -131,6 +131,9 @@ static constexpr verify_t VerifyFloatConstraints{VerifyNotInf | VerifyNotNan | V
                                                  VerifyIsAbsLessOne | VerifyGreaterThanNegOne | VerifyNotNonPositiveInteger |
                                                  VerifyIsNormal | VerifyIsFinite};
 
+// These class-scope constexpr initializers use the raw shift rather than the
+// TypeToVerify() helper: a constexpr member function cannot be called in a
+// constant expression while class Trix is still incomplete.
 static constexpr verify_t VerifyNull{1ull << +Object::Type::Null};
 static constexpr verify_t VerifyByte{1ull << +Object::Type::Byte};
 static constexpr verify_t VerifyInteger{1ull << +Object::Type::Integer};
@@ -238,35 +241,33 @@ static constexpr size_t VERIFY_TYPE_BUFFER_SIZE{32};
 enum class MatchPolicy { AnyType, AllMustMatch };
 
 [[nodiscard]] const char *verify_description(char *buffer, size_t size, verify_t x) {
-    if (x == VerifyAny) {
-        return "Any";
-    } else if (x == VerifyKey) {
-        return "Key";
-    } else if (x == VerifyProc) {
-        return "Proc";
-    } else if (x == VerifyArrays) {
-        return "Arrays";
-    } else if (x == VerifyIndexable) {
-        return "Indexable";
-    } else if (x == VerifyNumbers) {
-        return "Numbers";
-    } else if (x == VerifyFloats) {
-        return "Floats";
-    } else if (x == VerifyIntegers) {
-        return "Integers";
-    } else if (x == VerifyIntegers64) {
-        return "Integers64";
-    } else if (x == VerifyUnsignedIntegers) {
-        return "UnsignedIntegers";
-    } else if (x == VerifySignedIntegers) {
-        return "SignedIntegers";
-    } else if (x == VerifyLazySeq) {
-        return "LazySeq";
-    } else if (x == VerifyLazySeqNonempty) {
-        return "LazySeqNonempty";
-    } else if (x == VerifyTransducer) {
-        return "Transducer";
-    } else if ((buffer != nullptr) && (size > 0)) {
+    // Named composite masks, matched exactly before bit-decomposition below.
+    static constexpr struct {
+        verify_t m_mask;
+        const char *m_name;
+    } verify_composites[] = {
+            {             VerifyAny,              "Any"},
+            {             VerifyKey,              "Key"},
+            {            VerifyProc,             "Proc"},
+            {          VerifyArrays,           "Arrays"},
+            {       VerifyIndexable,        "Indexable"},
+            {         VerifyNumbers,          "Numbers"},
+            {          VerifyFloats,           "Floats"},
+            {        VerifyIntegers,         "Integers"},
+            {      VerifyIntegers64,       "Integers64"},
+            {VerifyUnsignedIntegers, "UnsignedIntegers"},
+            {  VerifySignedIntegers,   "SignedIntegers"},
+            {         VerifyLazySeq,          "LazySeq"},
+            { VerifyLazySeqNonempty,  "LazySeqNonempty"},
+            {      VerifyTransducer,       "Transducer"}
+    };
+    for (const auto &composite : verify_composites) {
+        if (x == composite.m_mask) {
+            return composite.m_name;
+        }
+    }
+
+    if ((buffer != nullptr) && (size > 0)) {
         using namespace std::literals::string_view_literals;
 
         // "RW|X|Null|Byte|Integer|UInteger|Long|ULong|Address|Real|Double|" 62 chars
@@ -311,12 +312,11 @@ enum class MatchPolicy { AnyType, AllMustMatch };
         };
 
         auto ptr = buffer;
-        for (size_t i = 0; i < std::size(verify_sv); ++i) {
-            auto v = &verify_sv[i];
-            if ((x & v->m_bit) != 0) {
-                auto length = v->m_sv.length();
+        for (const auto &entry : verify_sv) {
+            if ((x & entry.m_bit) != 0) {
+                auto length = entry.m_sv.length();
                 if (size > length) {
-                    std::copy_n(v->m_sv.data(), length, ptr);
+                    std::copy_n(entry.m_sv.data(), length, ptr);
                     ptr += length;
                     size -= length;
                 } else {
