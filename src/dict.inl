@@ -1706,7 +1706,7 @@ public:
         // A reserved-but-unassigned declared frame local holds the unset-local marker;
         // treat it as not-present for value reads (so a read sees /undefined or falls
         // through, never the marker).  Non-frame dicts never hold a marker value.
-        return ((entry != nullptr) && !entry->m_value.is_unset_local()) ? &entry->m_value : nullptr;
+        return (((entry != nullptr) && !entry->m_value.is_unset_local()) ? &entry->m_value : nullptr);
     }
 
     [[nodiscard]] Object *get(Trix *trx, Object key_obj) const { return get(trx, &key_obj); }
