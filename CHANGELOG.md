@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the existing by-value `get(Object)`. Parameters whose address is taken
   (save/restore journaling), or that are walked as an array or a range, keep
   their pointer by design. Behavior-preserving -- no snapshot-format change.
+- Return named POD structs instead of `std::pair` from 11 functions whose pair
+  elements are same-typed (a silent field-order footgun) or carry a non-obvious
+  (flag, payload) meaning -- e.g. the scanner's `ScanToken`, `is_type_name` /
+  `is_error_name`, `Name::find`, and `Object`'s `(valid, value)` integer
+  accessors. The structs follow the existing `PackedEncoding` aggregate idiom
+  (returned positionally as `TypeName{...}`); distinct-typed, locally-
+  destructured pairs (allocator ptr+offset, `scan_proc_suffix`, etc.) keep
+  `std::pair`. Behavior-preserving.
 
 ## [0.10.1] - 2026-06-21
 
