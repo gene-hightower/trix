@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   thaw CRC-checks them and then re-derives them -- so the on-disk layout is
   unchanged: no `SNAPSHOT_VERSION` bump, and the adversarial exact-offset
   calibration suite still passes.
+- Route the four pipe-put / pipe-get block-and-reschedule paths
+  (`ops_pipeline.inl`) through the existing `coroutine_sleep_and_schedule`
+  helper instead of hand-rolling the flush -> `Sleeping` + `FlagBlocked` +
+  wake=never -> schedule dance at each site -- the same helper already used by
+  coroutine join / await / wait-all. Behavior-preserving (-27 lines).
 
 ## [0.10.1] - 2026-06-21
 
