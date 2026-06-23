@@ -164,7 +164,10 @@
 // A scanner emits a (Lexeme classification, Object payload) token: the Lexeme
 // distinguishes LiteralValue / ExecutableValue / SyntaxError / EndOfStream /
 // EndOfProcedure; the Object carries the scanned value or an error string.
-using ScanToken = std::pair<Lexeme, Object>;
+struct ScanToken {
+    Lexeme lexeme;
+    Object value;
+};
 
 // Wrap an Object in the LiteralValue ScanToken returned throughout the scanner.
 [[nodiscard]] static ScanToken literal_pair(Object val_obj) {
@@ -556,7 +559,7 @@ struct ProcScanState;  // forward decl
             if (value_ptr != nullptr) {
                 auto lexeme = (is_literal || value_ptr->is_literal() || value_ptr->ignores_execute()) ? Lexeme::LiteralValue
                                                                                                       : Lexeme::ExecutableValue;
-                return std::pair{lexeme, value_ptr->make_clone(trx)};
+                return ScanToken{lexeme, value_ptr->make_clone(trx)};
             } else {
                 auto prefix = is_literal ? "//" : "\\\\";
                 trx->error(Error::Undefined, "name {}{} is not associated with any Object", prefix, token_sv);
@@ -1135,7 +1138,7 @@ template<typename ScanFn>
         } else {
             // } end of procedure
             if (proc_nesting > 0) {
-                return std::pair{Lexeme::EndOfProcedure, Object::make_null()};
+                return ScanToken{Lexeme::EndOfProcedure, Object::make_null()};
             } else {
                 return syntaxerror_pair(Object::make_error_string(trx, "unbalanced }"));
             }
@@ -1387,14 +1390,14 @@ void skip_ws_and_comments_keep_eof(Trix *trx) {
         // types so the operand stack owns a real ExtValue allocation
         auto value_obj = extracted.make_clone(trx);
         auto lexeme = value_obj.is_literal() ? Lexeme::LiteralValue : Lexeme::ExecutableValue;
-        return std::pair{lexeme, value_obj};
+        return ScanToken{lexeme, value_obj};
     } else {
         skip_shebang(trx);
 
         auto ch = skip_ws_and_comments(trx);
         if (ch == EOFc) {
             auto errstr = Object::make_error_string(trx, "EndOfStream encountered while skipping whitespace/comments");
-            return std::pair{Lexeme::EndOfStream, errstr};
+            return ScanToken{Lexeme::EndOfStream, errstr};
         } else {
             auto last_operator = *trx->m_last_operator_ptr;
             *trx->m_last_operator_ptr = Object::make_operator(SystemName::Scanner);
@@ -1421,7 +1424,7 @@ void skip_ws_and_comments_keep_eof(Trix *trx) {
             trx->m_scanner_stream = nullptr;
             *trx->m_last_operator_ptr = last_operator;
 
-            return std::pair{lexeme, value_obj};
+            return ScanToken{lexeme, value_obj};
         }
     }
 }
@@ -2455,7 +2458,7 @@ scan_scope_block(Trix *trx, int proc_nesting, ProcScanState *state, SystemName o
             if (token == Lexeme::EndOfStream) {
                 return syntaxerror_pair(value_obj);
             } else {
-                return std::pair{token, value_obj};
+                return ScanToken{token, value_obj};
             }
         } else if (token == Lexeme::EndOfProcedure) {
             Object err_obj;
@@ -2504,7 +2507,7 @@ scan_scope_block(Trix *trx, int proc_nesting, ProcScanState *state, SystemName o
 // anyway).
 #ifdef TRIX_DEBUGGER
         if (!has_locals_preamble && !body_lines.empty()) {
-            auto result_obj = result.second;
+            auto result_obj = result.value;
             vm_offset_t body_offset = nulloffset;
             if (result_obj.is_packed() && !result_obj.is_eqproc_ref()) {
                 body_offset = result_obj.m_packed;

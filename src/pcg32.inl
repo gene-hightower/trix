@@ -154,7 +154,12 @@ public:
         return (std::bit_cast<double>((next_uint64() >> 12) | DOUBLE_ONE_BITS) - 1.0);
     }
 
-    [[nodiscard]] std::pair<uint64_t, uint64_t> snapshot_state() const { return std::pair{m_state, m_inc}; }
+    struct Snapshot {
+        uint64_t state;
+        uint64_t inc;
+    };
+
+    [[nodiscard]] Snapshot snapshot_state() const { return Snapshot{m_state, m_inc}; }
 
     void thaw_state(uint64_t state, uint64_t inc) {
         m_state = state;

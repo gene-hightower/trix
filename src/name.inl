@@ -364,18 +364,23 @@ private:
 
     [[nodiscard]] static vm_size_t alloc_size(length_t length) { return static_cast<vm_size_t>(offsetof(Name, m_data) + length); }
 
-    [[nodiscard]] static std::pair<bool, Object> find(Trix *trx, std::string_view sv) {
+    struct NameLookup {
+        bool found;
+        Object value;
+    };
+
+    [[nodiscard]] static NameLookup find(Trix *trx, std::string_view sv) {
         const hash_t hash = wyhash32_sv(sv);
         vm_offset_t offset = trx->m_name_buckets[fastmod_u32(hash, trx->m_name_bucket_magic, trx->m_name_bucket_count)];
         while (offset != nulloffset) {
             auto name = trx->offset_to_ptr<Name>(offset);
             if ((hash == name->m_hash) && name->equal(sv)) {
-                return std::pair{true, Object::make_name(offset, name->m_length)};
+                return NameLookup{true, Object::make_name(offset, name->m_length)};
             } else {
                 offset = name->m_next;
             }
         }
-        return std::pair{false, Object::make_null()};
+        return NameLookup{false, Object::make_null()};
     }
 
     [[nodiscard]] static std::pair<Dict *, const char *> check_systemdicts(Trix *trx, std::string_view sv) {

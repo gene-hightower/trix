@@ -322,7 +322,12 @@ public:
         return m_uint128;
     }
 
-    [[nodiscard]] std::pair<Error, integer_t> integer_value(integer_t lower, integer_t upper) {
+    struct ParsedInt {
+        Error err;
+        integer_t value;
+    };
+
+    [[nodiscard]] ParsedInt integer_value(integer_t lower, integer_t upper) {
         auto integer_min = std::numeric_limits<integer_t>::min();
         auto integer_max = std::numeric_limits<integer_t>::max();
         auto value = integer_t{0};
@@ -397,7 +402,7 @@ public:
             err = Error::RangeCheck;
         }
 
-        return std::pair{err, value};
+        return ParsedInt{err, value};
     }
 
     [[nodiscard]] Object make_object() const {

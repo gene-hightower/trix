@@ -3205,7 +3205,13 @@ static void execute_lazy_proc(Trix *trx, Object proc) {
 
 // Decompose a non-empty lazy-seq into (head, tail) with cloning.
 // Caller must verify seq is non-null and valid before calling.
-[[nodiscard]] static std::pair<Object, Object> lazy_uncons(Trix *trx, Object seq) {
+// (head, tail) split of a lazy-seq cons cell, returned by lazy_uncons.
+struct Uncons {
+    Object head;
+    Object tail;
+};
+
+[[nodiscard]] static Uncons lazy_uncons(Trix *trx, Object seq) {
     auto elem_data = seq.array_objects(trx);
-    return std::pair{elem_data[Object::LazyHeadIndex].make_clone(trx), elem_data[Object::LazyTailThunkIndex].make_clone(trx)};
+    return Uncons{elem_data[Object::LazyHeadIndex].make_clone(trx), elem_data[Object::LazyTailThunkIndex].make_clone(trx)};
 }

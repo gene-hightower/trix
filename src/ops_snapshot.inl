@@ -585,7 +585,9 @@ static void snapshot_op(Trix *trx) {
 
                 h.root_objects_offset = trx->nullptr_to_offset(trx->m_root_objects_ptr);
 
-                std::tie(h.pcg32_state, h.pcg32_inc) = trx->m_pcg32.snapshot_state();
+                auto snap = trx->m_pcg32.snapshot_state();
+                h.pcg32_state = snap.state;
+                h.pcg32_inc = snap.inc;
 
                 h.vm_ptr_offset = trx->nullptr_to_offset(trx->m_vm_ptr);
                 h.vm_alloc_active_offset = trx->nullptr_to_offset(trx->m_vm_alloc_active);

@@ -1141,18 +1141,28 @@ static constexpr int ObjectNameBufferSize = 24;
     return length;
 }
 
-[[nodiscard]] std::pair<bool, Object::Type> is_type_name(Object val_ptr) {
+struct TypeNameMatch {
+    bool matched;
+    Object::Type type;
+};
+
+[[nodiscard]] TypeNameMatch is_type_name(Object val_ptr) {
     if (val_ptr.is_name()) {
         for (int i = 0; i < Object::TypeCount; ++i) {
             if (m_typename_offsets[i] == val_ptr.m_name) {
-                return std::pair{true, static_cast<Object::Type>(i)};
+                return TypeNameMatch{true, static_cast<Object::Type>(i)};
             }
         }
     }
-    return std::pair{false, Object::Type::Null};
+    return TypeNameMatch{false, Object::Type::Null};
 }
 
-[[nodiscard]] std::pair<bool, Error> is_error_name(Object val_ptr) {
+struct ErrorNameMatch {
+    bool matched;
+    Error err;
+};
+
+[[nodiscard]] ErrorNameMatch is_error_name(Object val_ptr) {
     if (val_ptr.is_name()) {
         for (int i = 0; i < ErrorCount; ++i) {
             // UserError is the internal slot for user-thrown Names, not a
@@ -1163,11 +1173,11 @@ static constexpr int ObjectNameBufferSize = 24;
             // name (error() leaves it intact for UserError), so last-error would
             // report a stale name instead of /user-error.
             if ((m_errorname_offsets[i] == val_ptr.m_name) && (static_cast<Error>(i) != Error::UserError)) {
-                return std::pair{true, static_cast<Error>(i)};
+                return ErrorNameMatch{true, static_cast<Error>(i)};
             }
         }
     }
-    return std::pair{false, Error::NoError};
+    return ErrorNameMatch{false, Error::NoError};
 }
 
 // to-string: any rwstr :- str

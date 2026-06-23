@@ -169,7 +169,9 @@ static std::pair<int, Object> scan_interpolation_escape_impl(Stream *self, Trix 
             // 3. Format value into the string build buffer via PrintFmt
             auto capacity = static_cast<length_t>(string_limit - string_ptr);
             int dropped_count = 0;
-            std::tie(output_count, dropped_count) = PrintFmt::process_object(trx, *value_ptr, string_ptr, capacity);
+            auto counts = PrintFmt::process_object(trx, *value_ptr, string_ptr, capacity);
+            output_count = counts.output;
+            dropped_count = counts.dropped;
             if (dropped_count != 0) {
                 output_count = Stream::InterpOverflow;
             }

@@ -314,7 +314,7 @@
 [[nodiscard]] ScanToken bt_literal_systemname(Trix *trx, uint16_t index) {
     if (index < SYSTEMNAME_COUNT) {
         auto name_obj = Name::make_system(trx, static_cast<SystemName>(index), Object::LiteralAttrib);
-        return std::pair{Lexeme::LiteralValue, name_obj};
+        return ScanToken{Lexeme::LiteralValue, name_obj};
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::SystemName invalid index {}", index);
     }
@@ -326,7 +326,7 @@
 [[nodiscard]] ScanToken bt_executable_systemname(Trix *trx, uint16_t index) {
     if (index < SYSTEMNAME_COUNT) {
         auto name_obj = Name::make_system(trx, static_cast<SystemName>(index), Object::ExecutableAttrib);
-        return std::pair{Lexeme::ExecutableValue, name_obj};
+        return ScanToken{Lexeme::ExecutableValue, name_obj};
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::SystemName invalid index {}", index);
     }
@@ -338,7 +338,7 @@
 [[nodiscard]] ScanToken bt_literal_wellknown(Trix *trx, uint8_t index) {
     if (index < WELLKNOWN_COUNT) {
         auto name_obj = trx->wellknown_name(static_cast<WellKnownName>(index));
-        return std::pair{Lexeme::LiteralValue, name_obj};
+        return ScanToken{Lexeme::LiteralValue, name_obj};
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::WellKnownLitName invalid index {}", index);
     }
@@ -351,7 +351,7 @@
     if (index < WELLKNOWN_COUNT) {
         auto name_obj = trx->wellknown_name(static_cast<WellKnownName>(index));
         name_obj.set_executable();
-        return std::pair{Lexeme::ExecutableValue, name_obj};
+        return ScanToken{Lexeme::ExecutableValue, name_obj};
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::WellKnownExecName invalid index {}", index);
     }
@@ -366,7 +366,7 @@
     if (name_ptr.is_name()) {
         auto value_ptr = Name::name_search(trx, name_ptr);
         if (value_ptr != nullptr) {
-            return std::pair{token, value_ptr->make_clone(trx)};
+            return ScanToken{token, value_ptr->make_clone(trx)};
         } else {
             trx->error(Error::Undefined, "BinaryToken: name {} has no bound value", name_ptr.name_sv(trx));
         }
@@ -940,7 +940,7 @@
                     // init_and_interpret() stop any active string/array allocation
                     trx->vm_end_alloc();
                 }
-                return std::pair{Lexeme::EndOfStream,
+                return ScanToken{Lexeme::EndOfStream,
                                  Object::make_error_string(trx, "EndOfStream encountered within a binary-token")};
             }
 

@@ -1663,9 +1663,14 @@ public:
 
     [[nodiscard]] bool is_unset_local() const { return is_slot_ref(); }
 
-    [[nodiscard]] std::pair<bool, integer_t> integer_value(Trix *trx,
-                                                           integer_t lower = std::numeric_limits<integer_t>::min(),
-                                                           integer_t upper = std::numeric_limits<integer_t>::max()) const {
+    struct IntValue {
+        bool valid;
+        integer_t value;
+    };
+
+    [[nodiscard]] IntValue integer_value(Trix *trx,
+                                         integer_t lower = std::numeric_limits<integer_t>::min(),
+                                         integer_t upper = std::numeric_limits<integer_t>::max()) const {
         auto integer_min = std::numeric_limits<integer_t>::min();
         auto integer_max = std::numeric_limits<integer_t>::max();
         auto value = integer_t{0};
@@ -1735,7 +1740,7 @@ public:
             break;
         }
 
-        return std::pair{valid && (value >= lower) && (value <= upper), value};
+        return IntValue{valid && (value >= lower) && (value <= upper), value};
     }
 
     [[nodiscard]] static constexpr Object make_uinteger(uinteger_t value) {
@@ -1766,9 +1771,14 @@ public:
         return m_uinteger;
     }
 
-    [[nodiscard]] std::pair<bool, uinteger_t> uinteger_value(Trix *trx,
-                                                             uinteger_t lower = std::numeric_limits<uinteger_t>::min(),
-                                                             uinteger_t upper = std::numeric_limits<uinteger_t>::max()) const {
+    struct UIntValue {
+        bool valid;
+        uinteger_t value;
+    };
+
+    [[nodiscard]] UIntValue uinteger_value(Trix *trx,
+                                           uinteger_t lower = std::numeric_limits<uinteger_t>::min(),
+                                           uinteger_t upper = std::numeric_limits<uinteger_t>::max()) const {
         auto uinteger_max = std::numeric_limits<uinteger_t>::max();
         auto value = uinteger_t{0};
         auto valid = false;
@@ -1837,7 +1847,7 @@ public:
             break;
         }
 
-        return std::pair{valid && (value >= lower) && (value <= upper), value};
+        return UIntValue{valid && (value >= lower) && (value <= upper), value};
     }
 
     // ChunkKind for a heap-cell-backed Type.  Used by make_clone and any future

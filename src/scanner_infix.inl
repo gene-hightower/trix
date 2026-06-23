@@ -678,7 +678,7 @@ void pack_and_buffer_infix_tail(Trix *trx, Object *tokens_ptr, length_t count, s
             // stack; commit so the guard does not free it.
             scratch_guard.commit();
             auto lexeme = tokens_ptr[0].is_literal() ? Lexeme::LiteralValue : Lexeme::ExecutableValue;
-            return std::pair{lexeme, tokens_ptr[0]};
+            return ScanToken{lexeme, tokens_ptr[0]};
         } else {
             // Multiple tokens: pack into reusable per-stream VM buffer.
             // On VMFull, scratch_guard's destructor frees partial ExtValues.
@@ -687,7 +687,7 @@ void pack_and_buffer_infix_tail(Trix *trx, Object *tokens_ptr, length_t count, s
             pack_and_buffer_infix_tail(trx, tokens_ptr, count, "infix");
             scratch_guard.commit();
             auto lexeme = tokens_ptr[0].is_literal() ? Lexeme::LiteralValue : Lexeme::ExecutableValue;
-            return std::pair{lexeme, tokens_ptr[0]};
+            return ScanToken{lexeme, tokens_ptr[0]};
         }
     } else if (ch == EOFc) {
         trx->error(Error::SyntaxError, "infix: missing closing '{:c}'", static_cast<char>(close_ch));

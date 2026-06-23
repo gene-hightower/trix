@@ -121,7 +121,14 @@ public:
     PrintFmt(const PrintFmt &) = delete;
     PrintFmt &operator=(const PrintFmt &) = delete;
 
-    [[nodiscard]] std::pair<int, int> process() {
+    // Byte counts from process()/process_object(): bytes emitted to the output,
+    // and bytes dropped after the output buffer filled.
+    struct PrintCounts {
+        int output;
+        int dropped;
+    };
+
+    [[nodiscard]] PrintCounts process() {
         while (m_format_ptr < m_format_limit) {
             auto ch = *m_format_ptr++;
             if ((ch == '{') && (m_format_ptr < m_format_limit)) {
@@ -169,7 +176,7 @@ public:
         if ((m_output_stream == m_trx->m_stderr) && (m_output_count != 0)) {
             m_output_stream->flush(m_trx);
         }
-        return std::pair{m_output_count, m_dropped_count};
+        return PrintCounts{m_output_count, m_dropped_count};
     }
 
     [[nodiscard]] static int process_object(Trix *trx, Object val_ptr, Stream *output, bool object_form = false) {
@@ -182,11 +189,11 @@ public:
         return output_count;
     }
 
-    [[nodiscard]] static std::pair<int, int>
+    [[nodiscard]] static PrintCounts
     process_object(Trix *trx, Object val_ptr, vm_t *output, length_t capacity, bool object_form = false) {
         PrintFmt fmt(trx, output, capacity, object_form);
         fmt.print_object(val_ptr);
-        return std::pair{fmt.m_output_count, fmt.m_dropped_count};
+        return PrintCounts{fmt.m_output_count, fmt.m_dropped_count};
     }
 private:
     static constexpr int MAX_WIDTH{1024};
@@ -840,11 +847,16 @@ private:
         }
     }
 
-    [[nodiscard]] static std::pair<char, char> to_hex(vm_t value, bool uppercase) {
+    struct HexDigits {
+        char hi;
+        char lo;
+    };
+
+    [[nodiscard]] static HexDigits to_hex(vm_t value, bool uppercase) {
         static constexpr char upper[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
         static constexpr char lower[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
         auto ptr = uppercase ? upper : lower;
-        return std::pair{ptr[(value >> 4) & 0x0F], ptr[value & 0x0F]};
+        return HexDigits{ptr[(value >> 4) & 0x0F], ptr[value & 0x0F]};
     }
 public:
     // Hand-rolled to_chars-like routine for 128-bit integers: libstdc++ does not
@@ -2755,7 +2767,7 @@ private:
     length_t m_args_count;
     length_t m_output_capacity;
     int m_output_count;   // not length_t: the stream-output path is unbounded and would wrap
-    int m_dropped_count;  // (process() returns these as pair<int,int>)
+    int m_dropped_count;  // (process()/process_object() return these as PrintCounts)
     vm_t m_fill;
     vm_t m_align;
     vm_t m_sign;
