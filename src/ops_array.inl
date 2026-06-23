@@ -180,7 +180,7 @@ static void get_op(Trix *trx) {
         trx->verify_operands(VerifyKey, VerifyDict);
 
         auto dict = container_ptr->dict_value(trx);
-        auto value = dict->get(trx, index_ptr);
+        auto value = dict->get(trx, *index_ptr);
         if (value == nullptr) {
             if (index_ptr->is_name()) {
                 trx->error(Error::Undefined, "get: {} not found in dict", index_ptr->name_sv(trx));
@@ -611,7 +611,7 @@ static void sort_op(Trix *trx) {
             return (!a.boolean_value() && b.boolean_value());
 
         case +Object::Type::String:
-            return (a.string_compare(trx, &b) < 0);
+            return (a.string_compare(trx, b) < 0);
 
         case +Object::Type::Name:
             return (a.name_sv(trx) < b.name_sv(trx));
@@ -854,7 +854,7 @@ static void intersect_difference_impl(Trix *trx, bool keep_if_found) {
                 auto lookup_capacity = (len2 > 0) ? len2 : length_t{1};
                 auto [lookup, lookup_offset] = Dict::create_temp_dict(trx, lookup_capacity);
                 for (length_t i = 0; i < len2; ++i) {
-                    if (lookup->get(trx, &src2_ptr[i]) == nullptr) {
+                    if (lookup->get(trx, src2_ptr[i]) == nullptr) {
                         lookup->put(trx, src2_ptr[i].make_clone_local(trx), Object::make_boolean(true));
                     }
                 }
@@ -864,8 +864,8 @@ static void intersect_difference_impl(Trix *trx, bool keep_if_found) {
                 auto [result_ptr, result_offset] = trx->vm_alloc_n<Object>(len1);
                 length_t write = 0;
                 for (length_t i = 0; i < len1; ++i) {
-                    auto in_lookup = (lookup->get(trx, &src1_ptr[i]) != nullptr);
-                    if ((in_lookup == keep_if_found) && (seen->get(trx, &src1_ptr[i]) == nullptr)) {
+                    auto in_lookup = (lookup->get(trx, src1_ptr[i]) != nullptr);
+                    if ((in_lookup == keep_if_found) && (seen->get(trx, src1_ptr[i]) == nullptr)) {
                         result_ptr[write++] = src1_ptr[i].make_clone_local(trx);
                         seen->put(trx, src1_ptr[i].make_clone_local(trx), Object::make_boolean(true));
                     }
@@ -953,7 +953,7 @@ static void union_op(Trix *trx) {
 
                     // add unique elements from arr1
                     for (length_t i = 0; i < len1; ++i) {
-                        if (seen->get(trx, &src1_ptr[i]) == nullptr) {
+                        if (seen->get(trx, src1_ptr[i]) == nullptr) {
                             result_ptr[write++] = src1_ptr[i].make_clone_local(trx);
                             seen->put(trx, src1_ptr[i].make_clone_local(trx), Object::make_boolean(true));
                         }
@@ -961,7 +961,7 @@ static void union_op(Trix *trx) {
 
                     // add unique elements from arr2 not already in seen
                     for (length_t i = 0; i < len2; ++i) {
-                        if (seen->get(trx, &src2_ptr[i]) == nullptr) {
+                        if (seen->get(trx, src2_ptr[i]) == nullptr) {
                             result_ptr[write++] = src2_ptr[i].make_clone_local(trx);
                             seen->put(trx, src2_ptr[i].make_clone_local(trx), Object::make_boolean(true));
                         }
@@ -1238,7 +1238,7 @@ static void frequencies_op(Trix *trx) {
 
             // count each element
             for (length_t i = 0; i < count; ++i) {
-                auto existing = dict->get(trx, &src_ptr[i]);
+                auto existing = dict->get(trx, src_ptr[i]);
                 if (existing != nullptr) {
                     existing->update_integer(existing->integer_value() + 1);
                 } else {

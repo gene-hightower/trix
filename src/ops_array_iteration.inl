@@ -670,7 +670,7 @@ static void at_array_groupby_op(Trix *trx) {
             // pass 1: count elements per group using a temp-region dict
             auto [count_dict, count_dict_offset] = Dict::create_temp_dict(trx, count);
             for (length_t i = 0; i < count; ++i) {
-                auto existing = count_dict->get(trx, &keys_data[i]);
+                auto existing = count_dict->get(trx, keys_data[i]);
                 if (existing != nullptr) {
                     existing->update_integer(existing->integer_value() + 1);
                 } else {
@@ -684,8 +684,8 @@ static void at_array_groupby_op(Trix *trx) {
             // reuse count_dict values as write indices (reset to 0).
             auto [result_dict, result_dict_offset] = Dict::create_dict(trx, count, Object::DictMode::ReadWriteDynamic);
             for (length_t i = 0; i < count; ++i) {
-                if (result_dict->get(trx, &keys_data[i]) == nullptr) {
-                    auto count_val = count_dict->get(trx, &keys_data[i]);
+                if (result_dict->get(trx, keys_data[i]) == nullptr) {
+                    auto count_val = count_dict->get(trx, keys_data[i]);
                     if (count_val == nullptr) {
                         trx->error(Error::InternalError, "group-by: key missing from count_dict after pass 1 (element {})", i);
                     } else {
@@ -706,8 +706,8 @@ static void at_array_groupby_op(Trix *trx) {
 
             // pass 3: distribute elements into groups
             for (length_t i = 0; i < count; ++i) {
-                auto group_arr = result_dict->get(trx, &keys_data[i]);
-                auto write_idx = count_dict->get(trx, &keys_data[i]);
+                auto group_arr = result_dict->get(trx, keys_data[i]);
+                auto write_idx = count_dict->get(trx, keys_data[i]);
                 if ((group_arr == nullptr) || (write_idx == nullptr)) {
                     trx->error(Error::InternalError, "group-by: key missing from result_dict/count_dict in pass 3 (element {})", i);
                 } else {

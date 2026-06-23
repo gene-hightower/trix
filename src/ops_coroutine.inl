@@ -2177,7 +2177,7 @@ static void coroutine_await_op(Trix *trx) {
     auto reason = target->m_exit_reason;
     capture_joined_exit_reason(target);
     coroutine_free_context(target);
-    auto [valid, err] = is_error_name(&reason);
+    auto [valid, err] = is_error_name(reason);
     if (valid) {
         trx->error(err, "coroutine-await: rethrow {}", reason.name_sv(trx));
     } else {

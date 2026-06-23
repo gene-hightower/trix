@@ -172,7 +172,7 @@ public:
         return std::pair{m_output_count, m_dropped_count};
     }
 
-    [[nodiscard]] static int process_object(Trix *trx, const Object *val_ptr, Stream *output, bool object_form = false) {
+    [[nodiscard]] static int process_object(Trix *trx, Object val_ptr, Stream *output, bool object_form = false) {
         PrintFmt fmt(trx, output, object_form);
         fmt.print_object(val_ptr);
         auto output_count = fmt.m_output_count;
@@ -183,7 +183,7 @@ public:
     }
 
     [[nodiscard]] static std::pair<int, int>
-    process_object(Trix *trx, const Object *val_ptr, vm_t *output, length_t capacity, bool object_form = false) {
+    process_object(Trix *trx, Object val_ptr, vm_t *output, length_t capacity, bool object_form = false) {
         PrintFmt fmt(trx, output, capacity, object_form);
         fmt.print_object(val_ptr);
         return std::pair{fmt.m_output_count, fmt.m_dropped_count};
@@ -583,8 +583,8 @@ private:
         return ch;
     }
 
-    void print_object(const Object *val_ptr) {
-        auto val_type = val_ptr->type();
+    void print_object(Object val_ptr) {
+        auto val_type = val_ptr.type();
         switch (val_type) {
         case Object::Type::Null:
             print_null(val_ptr);
@@ -722,27 +722,27 @@ private:
         auto format_spec_type = get_format_spec_type(m_type);
         if ((format_spec_type & Trix::TypeToVerify(arg_ptr->type())) == 0) {
             char type_buffer[ObjectNameBufferSize];
-            auto type_length = m_trx->object_name(arg_ptr, type_buffer, false, false);
+            auto type_length = m_trx->object_name(*arg_ptr, type_buffer, false, false);
             m_trx->error(Error::InvalidFormatString,
                          "type specifier \'{:c}\' not supported for arg-id {} ({})",
                          m_type,
                          arg_id,
                          std::string_view(type_buffer, type_length));
         } else if (m_type == 'T') {
-            print_type(arg_ptr);
+            print_type(*arg_ptr);
         } else {
-            print_object(arg_ptr);
+            print_object(*arg_ptr);
         }
     }
 
     // Render a transient frame-slot reference for proc-disasm as "<slot N>".  Slot-refs
     // exist only inside packed proc bodies (slot-indexing) and are resolved
     // before execution, so this is reached only when disassembling such a body.
-    void print_slot_ref(const Object *val_ptr) {
-        assert(val_ptr->is_slot_ref());
+    void print_slot_ref(Object val_ptr) {
+        assert(val_ptr.is_slot_ref());
 
         char buffer[24];
-        auto [out, _] = std::format_to_n(buffer, sizeof(buffer), "<slot {}>", val_ptr->slot_ref_index());
+        auto [out, _] = std::format_to_n(buffer, sizeof(buffer), "<slot {}>", val_ptr.slot_ref_index());
         for (auto p = buffer; p < out; ++p) {
             emit(static_cast<vm_t>(*p));
         }
@@ -807,7 +807,7 @@ private:
 
     // Recursively emit an object in compact O-form.
     // Used by print_array, print_dict, etc. to print child elements.
-    void emit_sub_object(const Object *val_ptr) {
+    void emit_sub_object(Object val_ptr) {
         if (m_depth >= MaxPrintDepth) {
             emit_cstr("...");
         } else {
@@ -1132,7 +1132,7 @@ private:
         }
     }
 
-    void print_type(const Object *val_ptr) {
+    void print_type(Object val_ptr) {
         char buffer[ObjectNameBufferSize];
         auto length = m_trx->object_name(val_ptr, buffer, m_alt);
         string_outputter(buffer, buffer + length);
@@ -1146,13 +1146,13 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_byte(const Object *val_ptr) {
-        assert(val_ptr->is_byte());
+    void print_byte(Object val_ptr) {
+        assert(val_ptr.is_byte());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'c';
         }
-        auto value = val_ptr->byte_value();
+        auto value = val_ptr.byte_value();
 
         // Bare display forms share a dispatch short-circuit.
         switch (m_type) {
@@ -1340,13 +1340,13 @@ private:
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
     //       c: single byte codepoint (value must be 0..255)
-    void print_integer(const Object *val_ptr) {
-        assert(val_ptr->is_integer());
+    void print_integer(Object val_ptr) {
+        assert(val_ptr.is_integer());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->integer_value();
+        auto value = val_ptr.integer_value();
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1429,13 +1429,13 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_uinteger(const Object *val_ptr) {
-        assert(val_ptr->is_uinteger());
+    void print_uinteger(Object val_ptr) {
+        assert(val_ptr.is_uinteger());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->uinteger_value();
+        auto value = val_ptr.uinteger_value();
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1534,13 +1534,13 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_long(const Object *val_ptr) {
-        assert(val_ptr->is_long());
+    void print_long(Object val_ptr) {
+        assert(val_ptr.is_long());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->long_value(m_trx);
+        auto value = val_ptr.long_value(m_trx);
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1575,13 +1575,13 @@ private:
     //       o: bare octal digits (with # flag: 0o prefix)
     //       I: chrono instant (ms since 1970 UTC) formatted via strftime
     //          template body (m_chrono_*); optional `l` suffix selects local zone
-    void print_ulong(const Object *val_ptr) {
-        assert(val_ptr->is_ulong());
+    void print_ulong(Object val_ptr) {
+        assert(val_ptr.is_ulong());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->ulong_value(m_trx);
+        auto value = val_ptr.ulong_value(m_trx);
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1674,13 +1674,13 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_int128(const Object *val_ptr) {
-        assert(val_ptr->is_int128());
+    void print_int128(Object val_ptr) {
+        assert(val_ptr.is_int128());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->int128_value(m_trx);
+        auto value = val_ptr.int128_value(m_trx);
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1713,13 +1713,13 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_uint128(const Object *val_ptr) {
-        assert(val_ptr->is_uint128());
+    void print_uint128(Object val_ptr) {
+        assert(val_ptr.is_uint128());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
-        auto value = val_ptr->uint128_value(m_trx);
+        auto value = val_ptr.uint128_value(m_trx);
         switch (m_type) {
         case 'd':
         case 'O':
@@ -1752,14 +1752,14 @@ private:
     //    x, X: bare hex digits (with # flag: 0x/0X prefix)
     //       b: bare binary digits (with # flag: 0b prefix)
     //       o: bare octal digits (with # flag: 0o prefix)
-    void print_address(const Object *val_ptr) {
-        assert(val_ptr->is_address());
+    void print_address(Object val_ptr) {
+        assert(val_ptr.is_address());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 'd';
         }
 
-        auto value = val_ptr->address_value(m_trx);
+        auto value = val_ptr.address_value(m_trx);
         auto uvalue = reinterpret_cast<uintptr_t>(value);
         switch (m_type) {
         case 'd':
@@ -1904,32 +1904,32 @@ private:
         }
     }
 
-    void print_real(const Object *val_ptr) {
-        assert(val_ptr->is_real());
+    void print_real(Object val_ptr) {
+        assert(val_ptr.is_real());
 
         if ((m_type != TYPE_DEFAULT) && (m_type != 'e') && (m_type != 'E') && (m_type != 'f') && (m_type != 'F') &&
             (m_type != 'g') && (m_type != 'G') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for real", m_type);
         }
-        print_float_impl(val_ptr->real_value(), 'r', 'R', "real");
+        print_float_impl(val_ptr.real_value(), 'r', 'R', "real");
     }
 
-    void print_double(const Object *val_ptr) {
-        assert(val_ptr->is_double());
+    void print_double(Object val_ptr) {
+        assert(val_ptr.is_double());
 
         if ((m_type != TYPE_DEFAULT) && (m_type != 'e') && (m_type != 'E') && (m_type != 'f') && (m_type != 'F') &&
             (m_type != 'g') && (m_type != 'G') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for double", m_type);
         }
-        print_float_impl(val_ptr->double_value(m_trx), 'd', 'D', "double");
+        print_float_impl(val_ptr.double_value(m_trx), 'd', 'D', "double");
     }
 
     // none, s: false, true or FALSE, TRUE
     //       c: f, t or F, T
     //       d: 0 or 1
     //       O: --false-- --true--
-    void print_boolean(const Object *val_ptr) {
-        assert(val_ptr->is_boolean());
+    void print_boolean(Object val_ptr) {
+        assert(val_ptr.is_boolean());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -1937,19 +1937,19 @@ private:
         if ((m_type != 'c') && (m_type != 'd') && (m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for boolean", m_type);
         } else if (m_type == 'd') {
-            char buffer[2]{val_ptr->boolean_value() ? '1' : '0', '\0'};
+            char buffer[2]{val_ptr.boolean_value() ? '1' : '0', '\0'};
             numeric_outputter(buffer, buffer + 1);
         } else {
             using namespace std::literals::string_view_literals;
 
-            auto sv = val_ptr->boolean_value() ? "--true--"sv : "--false--"sv;
+            auto sv = val_ptr.boolean_value() ? "--true--"sv : "--false--"sv;
             auto data = sv.data();
             auto limit = (data + Trix::sv_length(sv));
             auto max_width = -1;
             if (m_type != 'O') {
                 if (m_alt) {
                     // upper case
-                    sv = val_ptr->boolean_value() ? "TRUE"sv : "FALSE"sv;
+                    sv = val_ptr.boolean_value() ? "TRUE"sv : "FALSE"sv;
                     data = sv.data();
 
                     // c is only first character
@@ -1969,8 +1969,8 @@ private:
 
     // none, s: name
     //       O: /literal or \executable
-    void print_name(const Object *val_ptr) {
-        assert(val_ptr->is_name());
+    void print_name(Object val_ptr) {
+        assert(val_ptr.is_name());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -1978,7 +1978,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for name", m_type);
         } else {
-            auto cstring_sv = val_ptr->name_sv(m_trx);
+            auto cstring_sv = val_ptr.name_sv(m_trx);
             auto ptr = cstring_sv.data();
             auto length = Trix::sv_length(cstring_sv);
 
@@ -1986,7 +1986,7 @@ private:
                 char buffer[Trix::MaxNameLength + 8];
                 auto limit = &buffer[1 + length];
 
-                buffer[0] = val_ptr->is_executable() ? '\\' : '/';
+                buffer[0] = val_ptr.is_executable() ? '\\' : '/';
                 std::copy_n(ptr, length, &buffer[1]);
                 string_outputter(buffer, limit);
             } else {
@@ -2037,8 +2037,8 @@ private:
     //       ?: copy to output using escapes if not printable, \r \xFF
     //       O: string form: (text) with suffix l or x, r or w
     //       x: base16 form: <16> with suffix l or x, r or w
-    void print_string(const Object *val_ptr) {
-        assert(val_ptr->is_string());
+    void print_string(Object val_ptr) {
+        assert(val_ptr.is_string());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2046,7 +2046,7 @@ private:
         if ((m_type != 's') && (m_type != '?') && (m_type != 'O') && (m_type != 'x')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for string", m_type);
         } else {
-            auto cstring_sv = val_ptr->sv_value(m_trx);
+            auto cstring_sv = val_ptr.sv_value(m_trx);
             auto src_ptr = cstring_sv.data();
             auto src_length = Trix::sv_length(cstring_sv);
 
@@ -2083,11 +2083,11 @@ private:
                         // suffix
                         *ptr++ = '#';
                         if (m_alt) {
-                            *ptr++ = val_ptr->is_executable() ? 'X' : 'L';
-                            *ptr++ = val_ptr->has_readonly_access() ? 'R' : 'W';
+                            *ptr++ = val_ptr.is_executable() ? 'X' : 'L';
+                            *ptr++ = val_ptr.has_readonly_access() ? 'R' : 'W';
                         } else {
-                            *ptr++ = val_ptr->is_executable() ? 'x' : 'l';
-                            *ptr++ = val_ptr->has_readonly_access() ? 'r' : 'w';
+                            *ptr++ = val_ptr.is_executable() ? 'x' : 'l';
+                            *ptr++ = val_ptr.has_readonly_access() ? 'r' : 'w';
                         }
                     }
 
@@ -2100,8 +2100,8 @@ private:
 
     // none, s: name
     //       O: --/add-- or --\add--
-    void print_operator(const Object *val_ptr) {
-        assert(val_ptr->is_operator());
+    void print_operator(Object val_ptr) {
+        assert(val_ptr.is_operator());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2109,7 +2109,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for operator", m_type);
         } else {
-            auto op_str = val_ptr->operator_string(m_trx);
+            auto op_str = val_ptr.operator_string(m_trx);
             auto ptr = op_str.data();
             auto length = Trix::sv_length(op_str);
 
@@ -2125,7 +2125,7 @@ private:
 
                     buffer[0] = '-';
                     buffer[1] = '-';
-                    buffer[2] = val_ptr->is_executable() ? '\\' : '/';
+                    buffer[2] = val_ptr.is_executable() ? '\\' : '/';
                     std::copy_n(ptr, length, &buffer[3]);
                     limit[-1] = '-';
                     limit[-2] = '-';
@@ -2149,8 +2149,8 @@ private:
 
     // none, s: mark
     //       O: --mark--
-    void print_mark([[maybe_unused]] const Object *val_ptr) {
-        assert(val_ptr->is_mark());
+    void print_mark([[maybe_unused]] Object val_ptr) {
+        assert(val_ptr.is_mark());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2172,10 +2172,10 @@ private:
 
     // none, s: null
     //       O: --/null-- or --\null--
-    void print_null(const Object *val_ptr) {
+    void print_null(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_null());
+        assert(val_ptr.is_null());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2183,7 +2183,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for null", m_type);
         } else {
-            auto sv = val_ptr->is_literal() ? "--/null--"sv : "--\\null--"sv;
+            auto sv = val_ptr.is_literal() ? "--/null--"sv : "--\\null--"sv;
             auto max_width = -1;
             if (m_type == 's') {
                 sv = m_alt ? "NULL"sv : "null"sv;
@@ -2195,10 +2195,10 @@ private:
 
     // none, s: array
     //       O: [elem1 elem2 ...] or {elem1 elem2 ...}
-    void print_array(const Object *val_ptr) {
+    void print_array(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_array());
+        assert(val_ptr.is_array());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2206,17 +2206,17 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for array", m_type);
         } else if (m_type == 'O') {
-            auto count = val_ptr->object_length();
+            auto count = val_ptr.object_length();
             // Cycle check only for non-empty arrays (empty arrays may share offsets)
-            if ((count == 0) || enter_container(val_ptr->offset())) {
-                auto [open_ch, close_ch] = val_ptr->is_executable() ? std::pair{'{', '}'} : std::pair{'[', ']'};
+            if ((count == 0) || enter_container(val_ptr.offset())) {
+                auto [open_ch, close_ch] = val_ptr.is_executable() ? std::pair{'{', '}'} : std::pair{'[', ']'};
                 emit(static_cast<vm_t>(open_ch));
-                auto elem_data = val_ptr->array_objects(m_trx);
+                auto elem_data = val_ptr.array_objects(m_trx);
                 for (length_t i = 0; i < count; ++i) {
                     if (i != 0) {
                         emit(' ');
                     }
-                    emit_sub_object(&elem_data[i]);
+                    emit_sub_object(elem_data[i]);
                 }
                 emit(static_cast<vm_t>(close_ch));
             }
@@ -2229,10 +2229,10 @@ private:
 
     // none, s: packed
     //       O: [elem1 elem2 ...] or {elem1 elem2 ...}
-    void print_packed(const Object *val_ptr) {
+    void print_packed(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_packed());
+        assert(val_ptr.is_packed());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2240,16 +2240,16 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for packed", m_type);
         } else if (m_type == 'O') {
-            auto [open_ch, close_ch] = val_ptr->is_executable() ? std::pair{'{', '}'} : std::pair{'[', ']'};
+            auto [open_ch, close_ch] = val_ptr.is_executable() ? std::pair{'{', '}'} : std::pair{'[', ']'};
             emit(static_cast<vm_t>(open_ch));
-            auto [packed_data, count] = val_ptr->packed_value(m_trx);
+            auto [packed_data, count] = val_ptr.packed_value(m_trx);
             for (length_t i = 0; i < count; ++i) {
                 if (i != 0) {
                     emit(' ');
                 }
                 auto [next, elem] = Object::extract_next_packed(m_trx, packed_data);
                 packed_data = next;
-                emit_sub_object(&elem);
+                emit_sub_object(elem);
             }
             emit(static_cast<vm_t>(close_ch));
         } else {
@@ -2261,10 +2261,10 @@ private:
 
     // none, s: dict
     //       O: <</key1 val1 /key2 val2 ...>>
-    void print_dict(const Object *val_ptr) {
+    void print_dict(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_dict());
+        assert(val_ptr.is_dict());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2272,9 +2272,9 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for dict", m_type);
         } else if (m_type == 'O') {
-            auto dict = val_ptr->dict_value(m_trx);
+            auto dict = val_ptr.dict_value(m_trx);
             // Cycle check only for non-empty dicts (empty dicts may share offsets)
-            if ((dict->length() == 0) || enter_container(val_ptr->offset())) {
+            if ((dict->length() == 0) || enter_container(val_ptr.offset())) {
                 emit('<');
                 emit('<');
                 auto entry = dict->next(m_trx, nulloffset, -1);
@@ -2284,9 +2284,9 @@ private:
                         emit(' ');
                     }
                     first = false;
-                    emit_sub_object(&entry.key);
+                    emit_sub_object(entry.key);
                     emit(' ');
-                    emit_sub_object(&entry.value);
+                    emit_sub_object(entry.value);
                     entry = dict->next(m_trx, entry.next_offset, entry.next_bucket);
                 }
                 emit('>');
@@ -2301,10 +2301,10 @@ private:
 
     // none, s: set
     //       O: {{elem1 elem2 ...}}
-    void print_set(const Object *val_ptr) {
+    void print_set(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_set());
+        assert(val_ptr.is_set());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2312,9 +2312,9 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for set", m_type);
         } else if (m_type == 'O') {
-            auto set = val_ptr->set_value(m_trx);
+            auto set = val_ptr.set_value(m_trx);
             // Cycle check only for non-empty sets (empty sets may share offsets)
-            if ((set->length() == 0) || enter_container(val_ptr->offset())) {
+            if ((set->length() == 0) || enter_container(val_ptr.offset())) {
                 emit('{');
                 emit('{');
                 auto entry = set->set_next(m_trx, nulloffset, -1);
@@ -2324,7 +2324,7 @@ private:
                         emit(' ');
                     }
                     first = false;
-                    emit_sub_object(&entry.element);
+                    emit_sub_object(entry.element);
                     entry = set->set_next(m_trx, entry.next_offset, entry.next_bucket);
                 }
                 emit('}');
@@ -2339,10 +2339,10 @@ private:
 
     // none, s: curry
     //       O: --curry functor arg--
-    void print_curry(const Object *val_ptr) {
+    void print_curry(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_curry());
+        assert(val_ptr.is_curry());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2350,11 +2350,11 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for curry", m_type);
         } else if (m_type == 'O') {
-            auto pair = val_ptr->curry_storage(m_trx);
+            auto pair = val_ptr.curry_storage(m_trx);
             emit_cstr("--curry ");
-            emit_sub_object(&pair[0]);
+            emit_sub_object(pair[0]);
             emit(' ');
-            emit_sub_object(&pair[1]);
+            emit_sub_object(pair[1]);
             emit_cstr("--");
         } else {
             auto sv = m_alt ? "CURRY"sv : "curry"sv;
@@ -2365,10 +2365,10 @@ private:
 
     // none, s: tagged
     //       O: /tag payload
-    void print_tagged(const Object *val_ptr) {
+    void print_tagged(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_tagged());
+        assert(val_ptr.is_tagged());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2376,7 +2376,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for tagged", m_type);
         } else if (m_type == 'O') {
-            auto pair = val_ptr->tagged_storage(m_trx);
+            auto pair = val_ptr.tagged_storage(m_trx);
 
             // Logic variable: --lvar:name:value-- or --lvar:unbound--
             if (pair[0].is_name() && (pair[0].name_offset() == m_trx->wellknown_offset(WellKnownName::LVar))) {
@@ -2400,7 +2400,7 @@ private:
                 } else {
                     char val_buf[32];
                     auto [val_count, val_dropped] = PrintFmt::process_object(
-                            m_trx, &elem_data[0], reinterpret_cast<vm_t *>(val_buf), static_cast<length_t>(sizeof(val_buf)));
+                            m_trx, elem_data[0], reinterpret_cast<vm_t *>(val_buf), static_cast<length_t>(sizeof(val_buf)));
                     if (val_dropped != 0) {
                         val_buf[29] = val_buf[30] = val_buf[31] = '.';
                     }
@@ -2415,9 +2415,9 @@ private:
                 }
                 return;
             } else {
-                emit_sub_object(&pair[0]);
+                emit_sub_object(pair[0]);
                 emit(' ');
-                emit_sub_object(&pair[1]);
+                emit_sub_object(pair[1]);
             }
         } else {
             auto sv = m_alt ? "TAGGED"sv : "tagged"sv;
@@ -2428,10 +2428,10 @@ private:
 
     // none, s: thunk
     //       O: --thunk result-- (evaluated) or --thunk(state)-- (other)
-    void print_thunk(const Object *val_ptr) {
+    void print_thunk(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_thunk());
+        assert(val_ptr.is_thunk());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2439,7 +2439,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for thunk", m_type);
         } else {
-            auto storage = val_ptr->thunk_storage(m_trx);
+            auto storage = val_ptr.thunk_storage(m_trx);
             auto state = storage[Object::ThunkStorageState].integer_value();
 
             if (m_type == 'O') {
@@ -2448,7 +2448,7 @@ private:
                     emit_cstr("--");
                     emit_sv(sv);
                     emit(' ');
-                    emit_sub_object(&storage[Object::ThunkStorageResult]);
+                    emit_sub_object(storage[Object::ThunkStorageResult]);
                     emit_cstr("--");
                 } else {
                     auto state_sv = (state == Object::ThunkEvaluating) ? "evaluating"sv : "unevaluated"sv;
@@ -2466,10 +2466,10 @@ private:
 
     // none, s: record
     //       O: --record {/field1: val1 /field2: val2}--
-    void print_record(const Object *val_ptr) {
+    void print_record(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_record());
+        assert(val_ptr.is_record());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2477,18 +2477,18 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for record", m_type);
         } else if (m_type == 'O') {
-            auto inst = val_ptr->record_instance(m_trx);
+            auto inst = val_ptr.record_instance(m_trx);
             auto schema = m_trx->offset_to_ptr<RecordSchema>(inst->m_schema);
-            auto field_count = val_ptr->object_length();
+            auto field_count = val_ptr.object_length();
             emit_cstr("--record {");
             for (length_t i = 0; i < field_count; ++i) {
                 if (i != 0) {
                     emit(' ');
                 }
-                emit_sub_object(&schema->m_names[i]);
+                emit_sub_object(schema->m_names[i]);
                 emit(':');
                 emit(' ');
-                emit_sub_object(&inst->m_fields[i]);
+                emit_sub_object(inst->m_fields[i]);
             }
             emit_cstr("}--");
         } else {
@@ -2501,10 +2501,10 @@ private:
     // none, s: coroutine
     //       O: --coroutine:status:used/cap--  (actor with mailbox)
     //       O: --coroutine:status--            (plain coroutine)
-    void print_coroutine(const Object *val_ptr) {
+    void print_coroutine(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_coroutine());
+        assert(val_ptr.is_coroutine());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2512,7 +2512,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for coroutine", m_type);
         } else if (m_type == 'O') {
-            auto ctx = val_ptr->coroutine_context(m_trx);
+            auto ctx = val_ptr.coroutine_context(m_trx);
             auto status_sv = (ctx->m_status == CoroutineContext::Dead)       ? "dead"sv
                              : (ctx->m_status == CoroutineContext::Running)  ? "running"sv
                              : (ctx->m_status == CoroutineContext::Ready)    ? "ready"sv
@@ -2554,10 +2554,10 @@ private:
 
     // none, s: pipe-buffer
     //       O: --pipe:count/cap--  or --pipe:closed--
-    void print_pipe_buffer(const Object *val_ptr) {
+    void print_pipe_buffer(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_pipe_buffer());
+        assert(val_ptr.is_pipe_buffer());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2565,7 +2565,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for pipe-buffer", m_type);
         } else if (m_type == 'O') {
-            auto pipe = val_ptr->pipe_buffer_header(m_trx);
+            auto pipe = val_ptr.pipe_buffer_header(m_trx);
             auto sv = m_alt ? "PIPE"sv : "pipe"sv;
             char buffer[64];
             if (pipe->m_closed) {
@@ -2584,10 +2584,10 @@ private:
 
     // none, s: cell
     //       O: --cell:value--  or --cell:dirty--  or --cell:disposed--
-    void print_cell(const Object *val_ptr) {
+    void print_cell(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_cell());
+        assert(val_ptr.is_cell());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2595,7 +2595,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for cell", m_type);
         } else if (m_type == 'O') {
-            auto header = val_ptr->cell_header(m_trx);
+            auto header = val_ptr.cell_header(m_trx);
             auto sv = m_alt ? "CELL"sv : "cell"sv;
 
             // Extract debug name if present
@@ -2622,7 +2622,7 @@ private:
                 // Print the cached value inline using process_object into a sub-buffer
                 char val_buf[32];
                 auto [val_count, val_dropped] = PrintFmt::process_object(
-                        m_trx, &header->m_value, reinterpret_cast<vm_t *>(val_buf), static_cast<length_t>(sizeof(val_buf)));
+                        m_trx, header->m_value, reinterpret_cast<vm_t *>(val_buf), static_cast<length_t>(sizeof(val_buf)));
                 if (val_dropped != 0) {
                     val_buf[29] = val_buf[30] = val_buf[31] = '.';
                 }
@@ -2644,10 +2644,10 @@ private:
 
     // none, s: continuation
     //       O: --continuation:exec=N-- or --continuation:spent--
-    void print_continuation(const Object *val_ptr) {
+    void print_continuation(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_continuation());
+        assert(val_ptr.is_continuation());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2655,7 +2655,7 @@ private:
         if ((m_type != 's') && (m_type != 'O')) {
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for continuation", m_type);
         } else if (m_type == 'O') {
-            auto ctx = val_ptr->continuation_context(m_trx);
+            auto ctx = val_ptr.continuation_context(m_trx);
             auto sv = m_alt ? "CONTINUATION"sv : "continuation"sv;
             char buffer[64];
             if (ctx->is_spent()) {
@@ -2675,10 +2675,10 @@ private:
     // none, s: opaque handle (kind name only: "screen" / "tilemap" / ...)
     //       O: --screen:COLSxROWS--, future --tilemap:...-- (kind-dependent
     //          with state-derived metadata wrapped in -- markers)
-    void print_handle(const Object *val_ptr) {
+    void print_handle(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_handle());
+        assert(val_ptr.is_handle());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2687,7 +2687,7 @@ private:
             m_trx->error(Error::InvalidFormatString, "unsupported format type '{:c}' for opaque-handle", m_type);
         } else {
             std::string_view sv;
-            switch (val_ptr->handle_kind()) {
+            switch (val_ptr.handle_kind()) {
             case Object::HandleKind::Screen:
                 sv = m_alt ? "SCREEN"sv : "screen"sv;
                 break;
@@ -2695,9 +2695,9 @@ private:
 
             if (m_type == 'O') {
                 char buffer[64];
-                switch (val_ptr->handle_kind()) {
+                switch (val_ptr.handle_kind()) {
                 case Object::HandleKind::Screen: {
-                    auto state = m_trx->offset_to_ptr<ScreenState>(val_ptr->handle_offset());
+                    auto state = m_trx->offset_to_ptr<ScreenState>(val_ptr.handle_offset());
                     auto [ptr, _] = std::format_to_n(buffer, sizeof(buffer), "--{}:{}x{}--", sv, state->m_cols, state->m_rows);
                     // O-form is the machine/debug-readable shape; like every sibling O-form
                     // printer it is NOT precision-truncated (precision only trims the bare
@@ -2715,10 +2715,10 @@ private:
 
     // none, s: stream
     //       O: --/stream sid(r)--, --\stream sid(w)--
-    void print_stream(const Object *val_ptr) {
+    void print_stream(Object val_ptr) {
         using namespace std::literals::string_view_literals;
 
-        assert(val_ptr->is_stream());
+        assert(val_ptr.is_stream());
 
         if (m_type == TYPE_DEFAULT) {
             m_type = 's';
@@ -2731,9 +2731,9 @@ private:
                 // --/(r)stream 65535--
                 char buffer[24];
 
-                auto attrib = val_ptr->is_executable() ? '\\' : '/';
-                auto access = [&]() -> char { return (val_ptr->has_write_access() ? (m_alt ? 'W' : 'w') : (m_alt ? 'R' : 'r')); }();
-                auto sid = val_ptr->stream_sid();
+                auto attrib = val_ptr.is_executable() ? '\\' : '/';
+                auto access = [&]() -> char { return (val_ptr.has_write_access() ? (m_alt ? 'W' : 'w') : (m_alt ? 'R' : 'r')); }();
+                auto sid = val_ptr.stream_sid();
                 auto [ptr, _] = std::format_to_n(buffer, sizeof(buffer), "--{}{} {}({})--", attrib, sv, sid, access);
                 string_outputter(buffer, ptr);
             } else {

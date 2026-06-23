@@ -423,55 +423,55 @@ static void promote_convert(Trix *trx, Object *val_ptr, Object::Type target) {
     Object result_obj;
     switch (+target) {
     case +T::Byte: {
-        auto v = cast_to_type<vm_t>(trx, val_ptr);
+        auto v = cast_to_type<vm_t>(trx, *val_ptr);
         result_obj = Object::make_byte(v);
         break;
     }
 
     case +T::Integer: {
-        auto v = cast_to_type<integer_t>(trx, val_ptr);
+        auto v = cast_to_type<integer_t>(trx, *val_ptr);
         result_obj = Object::make_integer(v);
         break;
     }
 
     case +T::UInteger: {
-        auto v = cast_to_type<uinteger_t>(trx, val_ptr);
+        auto v = cast_to_type<uinteger_t>(trx, *val_ptr);
         result_obj = Object::make_uinteger(v);
         break;
     }
 
     case +T::Long: {
-        auto v = cast_to_type<long_t>(trx, val_ptr);
+        auto v = cast_to_type<long_t>(trx, *val_ptr);
         result_obj = Object::make_long(trx, v);
         break;
     }
 
     case +T::ULong: {
-        auto v = cast_to_type<ulong_t>(trx, val_ptr);
+        auto v = cast_to_type<ulong_t>(trx, *val_ptr);
         result_obj = Object::make_ulong(trx, v);
         break;
     }
 
     case +T::Int128: {
-        auto v = cast_to_type<int128_t>(trx, val_ptr);
+        auto v = cast_to_type<int128_t>(trx, *val_ptr);
         result_obj = Object::make_int128(trx, v);
         break;
     }
 
     case +T::UInt128: {
-        auto v = cast_to_type<uint128_t>(trx, val_ptr);
+        auto v = cast_to_type<uint128_t>(trx, *val_ptr);
         result_obj = Object::make_uint128(trx, v);
         break;
     }
 
     case +T::Real: {
-        auto v = cast_to_type<real_t>(trx, val_ptr);
+        auto v = cast_to_type<real_t>(trx, *val_ptr);
         result_obj = Object::make_real(v);
         break;
     }
 
     case +T::Double: {
-        auto v = cast_to_type<double_t>(trx, val_ptr);
+        auto v = cast_to_type<double_t>(trx, *val_ptr);
         result_obj = Object::make_double(trx, v);
         break;
     }
@@ -614,76 +614,76 @@ static void is_executable_op(Trix *trx) {
 // assert: str bool :- --
 // Raises assert-failed if bool is false.
 template<typename T>
-static T cast_to_type(Trix *trx, const Object *val_ptr) {
-    switch (+val_ptr->type()) {
+static T cast_to_type(Trix *trx, Object val_ptr) {
+    switch (+val_ptr.type()) {
     case +Object::Type::Byte:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->byte_value() != 0);
+            return (val_ptr.byte_value() != 0);
         } else {
-            return static_cast<T>(val_ptr->byte_value());
+            return static_cast<T>(val_ptr.byte_value());
         }
 
     case +Object::Type::Integer:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->integer_value() != 0);
+            return (val_ptr.integer_value() != 0);
         } else {
-            return static_cast<T>(val_ptr->integer_value());
+            return static_cast<T>(val_ptr.integer_value());
         }
 
     case +Object::Type::UInteger:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->uinteger_value() != 0);
+            return (val_ptr.uinteger_value() != 0);
         } else {
-            return static_cast<T>(val_ptr->uinteger_value());
+            return static_cast<T>(val_ptr.uinteger_value());
         }
 
     case +Object::Type::Long:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->long_value(trx) != 0);
+            return (val_ptr.long_value(trx) != 0);
         } else {
-            return static_cast<T>(val_ptr->long_value(trx));
+            return static_cast<T>(val_ptr.long_value(trx));
         }
 
     case +Object::Type::ULong:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->ulong_value(trx) != 0);
+            return (val_ptr.ulong_value(trx) != 0);
         } else {
-            return static_cast<T>(val_ptr->ulong_value(trx));
+            return static_cast<T>(val_ptr.ulong_value(trx));
         }
 
     case +Object::Type::Int128:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->int128_value(trx) != 0);
+            return (val_ptr.int128_value(trx) != 0);
         } else {
-            return static_cast<T>(val_ptr->int128_value(trx));
+            return static_cast<T>(val_ptr.int128_value(trx));
         }
 
     case +Object::Type::UInt128:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (val_ptr->uint128_value(trx) != 0);
+            return (val_ptr.uint128_value(trx) != 0);
         } else {
-            return static_cast<T>(val_ptr->uint128_value(trx));
+            return static_cast<T>(val_ptr.uint128_value(trx));
         }
 
     case +Object::Type::Real:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (std::fpclassify(val_ptr->real_value()) != FP_ZERO);
+            return (std::fpclassify(val_ptr.real_value()) != FP_ZERO);
         } else {
-            return static_cast<T>(val_ptr->real_value());
+            return static_cast<T>(val_ptr.real_value());
         }
 
     case +Object::Type::Double:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return (std::fpclassify(val_ptr->double_value(trx)) != FP_ZERO);
+            return (std::fpclassify(val_ptr.double_value(trx)) != FP_ZERO);
         } else {
-            return static_cast<T>(val_ptr->double_value(trx));
+            return static_cast<T>(val_ptr.double_value(trx));
         }
 
     case +Object::Type::Boolean:
         if constexpr (std::is_same_v<T, boolean_t>) {
-            return val_ptr->boolean_value();
+            return val_ptr.boolean_value();
         } else {
-            return static_cast<T>(val_ptr->boolean_value());
+            return static_cast<T>(val_ptr.boolean_value());
         }
 
     default:
@@ -701,68 +701,68 @@ static void cast_op(Trix *trx) {
     auto name_ptr = trx->m_op_ptr;
     auto val_ptr = (name_ptr - 1);
 
-    auto [is_name, type] = trx->is_type_name(name_ptr);
+    auto [is_name, type] = trx->is_type_name(*name_ptr);
     if (is_name) {
         if (type != val_ptr->type()) {
             Object result_obj;
 
             switch (+type) {
             case +Object::Type::Byte: {
-                auto b = cast_to_type<vm_t>(trx, val_ptr);
+                auto b = cast_to_type<vm_t>(trx, *val_ptr);
                 result_obj = Object::make_byte(b);
                 break;
             }
 
             case +Object::Type::Integer: {
-                auto i = cast_to_type<integer_t>(trx, val_ptr);
+                auto i = cast_to_type<integer_t>(trx, *val_ptr);
                 result_obj = Object::make_integer(i);
                 break;
             }
 
             case +Object::Type::UInteger: {
-                auto ui = cast_to_type<uinteger_t>(trx, val_ptr);
+                auto ui = cast_to_type<uinteger_t>(trx, *val_ptr);
                 result_obj = Object::make_uinteger(ui);
                 break;
             }
 
             case +Object::Type::Long: {
-                auto l = cast_to_type<long_t>(trx, val_ptr);
+                auto l = cast_to_type<long_t>(trx, *val_ptr);
                 result_obj = Object::make_long(trx, l);
                 break;
             }
 
             case +Object::Type::ULong: {
-                auto ul = cast_to_type<ulong_t>(trx, val_ptr);
+                auto ul = cast_to_type<ulong_t>(trx, *val_ptr);
                 result_obj = Object::make_ulong(trx, ul);
                 break;
             }
 
             case +Object::Type::Int128: {
-                auto h = cast_to_type<int128_t>(trx, val_ptr);
+                auto h = cast_to_type<int128_t>(trx, *val_ptr);
                 result_obj = Object::make_int128(trx, h);
                 break;
             }
 
             case +Object::Type::UInt128: {
-                auto uh = cast_to_type<uint128_t>(trx, val_ptr);
+                auto uh = cast_to_type<uint128_t>(trx, *val_ptr);
                 result_obj = Object::make_uint128(trx, uh);
                 break;
             }
 
             case +Object::Type::Real: {
-                auto r = cast_to_type<real_t>(trx, val_ptr);
+                auto r = cast_to_type<real_t>(trx, *val_ptr);
                 result_obj = Object::make_real(r);
                 break;
             }
 
             case +Object::Type::Double: {
-                auto d = cast_to_type<double_t>(trx, val_ptr);
+                auto d = cast_to_type<double_t>(trx, *val_ptr);
                 result_obj = Object::make_double(trx, d);
                 break;
             }
 
             case +Object::Type::Boolean: {
-                auto b = cast_to_type<boolean_t>(trx, val_ptr);
+                auto b = cast_to_type<boolean_t>(trx, *val_ptr);
                 result_obj = Object::make_boolean(b);
                 break;
             }
@@ -829,43 +829,43 @@ static void coerce_element(Trix *trx, Object *val_ptr, Object::Type target) {
     Object result_obj;
     switch (+target) {
     case +T::Byte:
-        result_obj = Object::make_byte(cast_to_type<vm_t>(trx, val_ptr));
+        result_obj = Object::make_byte(cast_to_type<vm_t>(trx, *val_ptr));
         break;
 
     case +T::Integer:
-        result_obj = Object::make_integer(cast_to_type<integer_t>(trx, val_ptr));
+        result_obj = Object::make_integer(cast_to_type<integer_t>(trx, *val_ptr));
         break;
 
     case +T::UInteger:
-        result_obj = Object::make_uinteger(cast_to_type<uinteger_t>(trx, val_ptr));
+        result_obj = Object::make_uinteger(cast_to_type<uinteger_t>(trx, *val_ptr));
         break;
 
     case +T::Long:
-        result_obj = Object::make_long(trx, cast_to_type<long_t>(trx, val_ptr));
+        result_obj = Object::make_long(trx, cast_to_type<long_t>(trx, *val_ptr));
         break;
 
     case +T::ULong:
-        result_obj = Object::make_ulong(trx, cast_to_type<ulong_t>(trx, val_ptr));
+        result_obj = Object::make_ulong(trx, cast_to_type<ulong_t>(trx, *val_ptr));
         break;
 
     case +T::Int128:
-        result_obj = Object::make_int128(trx, cast_to_type<int128_t>(trx, val_ptr));
+        result_obj = Object::make_int128(trx, cast_to_type<int128_t>(trx, *val_ptr));
         break;
 
     case +T::UInt128:
-        result_obj = Object::make_uint128(trx, cast_to_type<uint128_t>(trx, val_ptr));
+        result_obj = Object::make_uint128(trx, cast_to_type<uint128_t>(trx, *val_ptr));
         break;
 
     case +T::Real:
-        result_obj = Object::make_real(cast_to_type<real_t>(trx, val_ptr));
+        result_obj = Object::make_real(cast_to_type<real_t>(trx, *val_ptr));
         break;
 
     case +T::Double:
-        result_obj = Object::make_double(trx, cast_to_type<double_t>(trx, val_ptr));
+        result_obj = Object::make_double(trx, cast_to_type<double_t>(trx, *val_ptr));
         break;
 
     case +T::Boolean:
-        result_obj = Object::make_boolean(cast_to_type<boolean_t>(trx, val_ptr));
+        result_obj = Object::make_boolean(cast_to_type<boolean_t>(trx, *val_ptr));
         break;
 
     default:
@@ -886,7 +886,7 @@ static void coerce_op(Trix *trx) {
     auto name_ptr = trx->m_op_ptr;
     auto container_ptr = (name_ptr - 1);
 
-    auto [is_name, target] = trx->is_type_name(name_ptr);
+    auto [is_name, target] = trx->is_type_name(*name_ptr);
     if (!is_name) {
         trx->error(Error::TypeCheck, "coerce: not a type name");
     } else {
@@ -1037,7 +1037,7 @@ static void reinterpret_op(Trix *trx) {
     auto name_ptr = trx->m_op_ptr;
     auto val_ptr = (name_ptr - 1);
 
-    auto [is_name, new_type] = trx->is_type_name(name_ptr);
+    auto [is_name, new_type] = trx->is_type_name(*name_ptr);
     if (is_name) {
         auto curr_type = val_ptr->type();
         if (new_type != curr_type) {
@@ -1112,9 +1112,8 @@ static void reinterpret_op(Trix *trx) {
 
 static constexpr int ObjectNameBufferSize = 24;
 
-[[nodiscard]] length_t
-object_name(const Object *val_ptr, char buffer[ObjectNameBufferSize], bool upper = false, bool dashes = true) {
-    auto sv = Object::type_sv(val_ptr->type());
+[[nodiscard]] length_t object_name(Object val_ptr, char buffer[ObjectNameBufferSize], bool upper = false, bool dashes = true) {
+    auto sv = Object::type_sv(val_ptr.type());
     auto suffix_sv = Object::type_suffix_sv();
     auto length = static_cast<length_t>(sv_length(sv) - sv_length(suffix_sv));
     auto ptr = buffer;
@@ -1142,10 +1141,10 @@ object_name(const Object *val_ptr, char buffer[ObjectNameBufferSize], bool upper
     return length;
 }
 
-[[nodiscard]] std::pair<bool, Object::Type> is_type_name(const Object *val_ptr) {
-    if (val_ptr->is_name()) {
+[[nodiscard]] std::pair<bool, Object::Type> is_type_name(Object val_ptr) {
+    if (val_ptr.is_name()) {
         for (int i = 0; i < Object::TypeCount; ++i) {
-            if (m_typename_offsets[i] == val_ptr->m_name) {
+            if (m_typename_offsets[i] == val_ptr.m_name) {
                 return std::pair{true, static_cast<Object::Type>(i)};
             }
         }
@@ -1153,8 +1152,8 @@ object_name(const Object *val_ptr, char buffer[ObjectNameBufferSize], bool upper
     return std::pair{false, Object::Type::Null};
 }
 
-[[nodiscard]] std::pair<bool, Error> is_error_name(const Object *val_ptr) {
-    if (val_ptr->is_name()) {
+[[nodiscard]] std::pair<bool, Error> is_error_name(Object val_ptr) {
+    if (val_ptr.is_name()) {
         for (int i = 0; i < ErrorCount; ++i) {
             // UserError is the internal slot for user-thrown Names, not a
             // distinct throwable builtin.  Report it as "not a builtin error" so
@@ -1163,7 +1162,7 @@ object_name(const Object *val_ptr, char buffer[ObjectNameBufferSize], bool upper
             // a literal `/user-error throw` raises UserError without writing the
             // name (error() leaves it intact for UserError), so last-error would
             // report a stale name instead of /user-error.
-            if ((m_errorname_offsets[i] == val_ptr->m_name) && (static_cast<Error>(i) != Error::UserError)) {
+            if ((m_errorname_offsets[i] == val_ptr.m_name) && (static_cast<Error>(i) != Error::UserError)) {
                 return std::pair{true, static_cast<Error>(i)};
             }
         }
@@ -1181,7 +1180,7 @@ static void to_string_op(Trix *trx) {
     auto any_ptr = (str_ptr - 1);
     auto tmp_obj = *str_ptr;
 
-    auto [output_count, dropped_count] = PrintFmt::process_object(trx, any_ptr, tmp_obj.string_vptr(trx), tmp_obj.string_length());
+    auto [output_count, dropped_count] = PrintFmt::process_object(trx, *any_ptr, tmp_obj.string_vptr(trx), tmp_obj.string_length());
     if (dropped_count == 0) {
         any_ptr->maybe_free_extvalue(trx);
 

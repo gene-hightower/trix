@@ -53,11 +53,11 @@
 
 // protocol_find_dispatch_dict: look up the dispatch dict for a method name.
 // Returns nullptr if the method name is not registered in any protocol.
-[[nodiscard]] Dict *protocol_find_dispatch_dict(const Object *method_name_ptr) {
+[[nodiscard]] Dict *protocol_find_dispatch_dict(Object method_name_ptr) {
     auto registry = offset_to_ptr<Dict>(m_protocol_registry_offset);
 
     // Walk all protocols looking for one that owns this method name
-    auto method_hash = method_name_ptr->hash(this);
+    auto method_hash = method_name_ptr.hash(this);
     auto entry_offset = nulloffset;
     integer_t bucket_idx = -1;
     while (true) {
@@ -67,7 +67,7 @@
         } else {
             // value is a protocol-dict (method-name -> dispatch-dict)
             auto protocol_dict = value.dict_value(this);
-            auto method_entry = protocol_dict->find_dict_entry(this, *method_name_ptr, method_hash);
+            auto method_entry = protocol_dict->find_dict_entry(this, method_name_ptr, method_hash);
             if (method_entry == nullptr) {
                 entry_offset = next_offset;
                 bucket_idx = next_idx;
@@ -113,7 +113,7 @@ static void def_protocol_op(Trix *trx) {
         for (length_t i = 0; i < methods_length; ++i) {
             if (!methods_ptr[i].is_name()) {
                 trx->error(Error::TypeCheck, "def-protocol: method-names must contain only names");
-            } else if (trx->protocol_find_dispatch_dict(&methods_ptr[i]) != nullptr) {
+            } else if (trx->protocol_find_dispatch_dict(methods_ptr[i]) != nullptr) {
                 auto method_sv = methods_ptr[i].name_sv(trx);
                 trx->error(Error::Protocol, "def-protocol: method /{} is already claimed by another protocol", method_sv);
             }
@@ -152,10 +152,10 @@ static void def_protocol_op(Trix *trx) {
 
 // protocol_lookup_method_dispatch: find the dispatch dict for a method name,
 // verifying it belongs to an existing protocol.  Raises Error::Protocol if not found.
-[[nodiscard]] Dict *protocol_lookup_method_dispatch(const Object *method_name_ptr) {
+[[nodiscard]] Dict *protocol_lookup_method_dispatch(Object method_name_ptr) {
     auto dispatch_dict = protocol_find_dispatch_dict(method_name_ptr);
     if (dispatch_dict == nullptr) {
-        auto method_sv = method_name_ptr->name_sv(this);
+        auto method_sv = method_name_ptr.name_sv(this);
         error(Error::Protocol, "method /{} is not part of any protocol", method_sv);
     } else {
         return dispatch_dict;
@@ -173,9 +173,9 @@ static void def_method_op(Trix *trx) {
     auto proc_obj = *(trx->m_op_ptr - 2);
 
     // Verify type-name is a valid type name
-    auto [is_valid_type, _] = trx->is_type_name(&type_name_obj);
+    auto [is_valid_type, _] = trx->is_type_name(type_name_obj);
     if (is_valid_type) {
-        auto dispatch_dict = trx->protocol_lookup_method_dispatch(&method_name_obj);
+        auto dispatch_dict = trx->protocol_lookup_method_dispatch(method_name_obj);
         static_cast<void>(dispatch_dict->put(trx, type_name_obj.make_clone(trx), proc_obj.make_clone(trx)));
 
         trx->m_op_ptr -= 3;
@@ -195,7 +195,7 @@ static void def_default_method_op(Trix *trx) {
     auto method_name_obj = trx->m_op_ptr[0];
     auto proc_obj = trx->m_op_ptr[-1];
 
-    auto dispatch_dict = trx->protocol_lookup_method_dispatch(&method_name_obj);
+    auto dispatch_dict = trx->protocol_lookup_method_dispatch(method_name_obj);
     auto default_name_obj = trx->wellknown_name(WellKnownName::Default);
     static_cast<void>(dispatch_dict->put(trx, default_name_obj, proc_obj.make_clone(trx)));
 
@@ -214,7 +214,7 @@ static void extend_protocol_op(Trix *trx) {
     auto impl_dict_obj = *(trx->m_op_ptr - 2);
 
     // Verify type-name
-    auto [is_valid_type, _] = trx->is_type_name(&type_name_obj);
+    auto [is_valid_type, _] = trx->is_type_name(type_name_obj);
     if (!is_valid_type) {
         auto type_sv = type_name_obj.name_sv(trx);
         trx->error(Error::TypeCheck, "extend-protocol: /{} is not a valid type name", type_sv);

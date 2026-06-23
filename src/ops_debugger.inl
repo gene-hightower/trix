@@ -270,7 +270,7 @@ bool debug_try_latch_breakpoint(Object obj) {
         auto dict = offset_to_ptr<Dict>(m_debug.m_breakpoints_offset);
         auto probe = obj;
         probe.set_literal();  // Dict lookup compares literal Names by atom
-        auto val_ptr = dict->get(this, &probe);
+        auto val_ptr = dict->get(this, probe);
         if (val_ptr != nullptr) {
             // Hot-path increment: read the existing Integer count and
             // overwrite in place.  Dict is in global VM so journaling
@@ -525,7 +525,7 @@ static void debug_break_op(Trix *trx) {
     trx->verify_operands(VerifyName);
     auto name = *trx->m_op_ptr--;
     auto dict = trx->debug_breakpoints_dict();
-    auto existing = dict->get(trx, &name);
+    auto existing = dict->get(trx, name);
     if (existing == nullptr) {
         static_cast<void>(dict->put(trx, name, Object::make_integer(0)));
     }
@@ -783,7 +783,7 @@ static void debug_bp_hits_op(Trix *trx) {
     integer_t count = 0;
     if (trx->m_debug.m_breakpoints_offset != nulloffset) {
         auto dict = trx->offset_to_ptr<Dict>(trx->m_debug.m_breakpoints_offset);
-        auto val_ptr = dict->get(trx, name_ptr);
+        auto val_ptr = dict->get(trx, *name_ptr);
         if ((val_ptr != nullptr) && val_ptr->is_integer()) {
             count = val_ptr->integer_value();
         }
@@ -824,7 +824,7 @@ static void stream_name_op(Trix *trx) {
         if (trx->m_debug.m_sid_path_cache_offset != nulloffset) {
             auto dict = trx->offset_to_ptr<Dict>(trx->m_debug.m_sid_path_cache_offset);
             auto key = Object::make_integer(static_cast<integer_t>(target_sid));
-            auto val_ptr = dict->get(trx, &key);
+            auto val_ptr = dict->get(trx, key);
             if (val_ptr != nullptr) {
                 *trx->m_op_ptr = *val_ptr;
                 return;
@@ -869,7 +869,7 @@ Object debug_format_object(Object obj, integer_t n) {
             auto cap = static_cast<length_t>(std::min<vm_size_t>(cap_raw, static_cast<vm_size_t>(MaxStringLength)));
             auto [buf, buf_off] = vm_alloc_dispatch<vm_t>(static_cast<vm_size_t>(cap) + 1, ChunkKind::String);
             auto obj_ptr = &obj;
-            auto [output_count, dropped_count] = PrintFmt::process_object(this, obj_ptr, buf, cap, true);
+            auto [output_count, dropped_count] = PrintFmt::process_object(this, *obj_ptr, buf, cap, true);
             auto written = static_cast<length_t>(output_count);
             // The formatter may have stopped mid-UTF-8 or mid-token; the
             // resulting bytes are still a valid C-string after we nul-
@@ -956,7 +956,7 @@ Object debug_disasm_row(Object elem, int32_t line) {
     } else {
         // Use object_name with dashes=false (compact type tag like
         // "Integer", "Array", etc.).
-        static_cast<void>(object_name(&elem, name_buf, /*upper=*/false, /*dashes=*/false));
+        static_cast<void>(object_name(elem, name_buf, /*upper=*/false, /*dashes=*/false));
         name_sv = std::string_view{name_buf};
     }
     auto name_obj = Object::make_string_dispatch(this, name_sv);

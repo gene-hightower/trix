@@ -239,7 +239,7 @@ private:
                 } else {
                     char buffer[ObjectNameBufferSize];
 
-                    static_cast<void>(trx->object_name(curr_ptr, buffer));
+                    static_cast<void>(trx->object_name(*curr_ptr, buffer));
                     trx->error(Error::InvalidRestore, "{} past 'save' barrier present in {} Stack during restore", buffer, desc);
                 }
             }
@@ -291,7 +291,7 @@ private:
                 if (!dict->is_frame()) {
                     char buffer[ObjectNameBufferSize];
 
-                    static_cast<void>(trx->object_name(curr_ptr, buffer));
+                    static_cast<void>(trx->object_name(*curr_ptr, buffer));
                     trx->error(Error::InvalidRestore, "{} past 'save' barrier present in Dictionary Stack during restore", buffer);
                 }
             }
@@ -327,7 +327,7 @@ private:
             if (curr_ptr->uses_vm() && (curr_ptr->offset() >= barrier) && !trx->is_global(curr_ptr->offset())) {
                 char buffer[ObjectNameBufferSize];
 
-                static_cast<void>(trx->object_name(curr_ptr, buffer));
+                static_cast<void>(trx->object_name(*curr_ptr, buffer));
                 trx->error(Error::InvalidRestore,
                            "{} past 'save' barrier present in suspended coroutine's Dictionary Stack during restore",
                            buffer);
@@ -1275,8 +1275,8 @@ public:
         std::unreachable();
     }
 
-    [[nodiscard]] static save_level_t save_level(const Object *save_ptr) {
-        return token_level(static_cast<vm_offset_t>(save_ptr->integer_value()));
+    [[nodiscard]] static save_level_t save_level(Object save_ptr) {
+        return token_level(static_cast<vm_offset_t>(save_ptr.integer_value()));
     }
 
     //===--- Save-token packing ---===//

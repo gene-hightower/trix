@@ -3953,13 +3953,13 @@ public:
     // -1: ("this" < "other")
     //  0: ("this" == "other")
     // +1: ("this" > "other")
-    [[nodiscard]] int string_compare(Trix *trx, const Object *other) const {
+    [[nodiscard]] int string_compare(Trix *trx, Object other) const {
         assert(is_string());
-        assert(other->is_string());
+        assert(other.is_string());
 
         auto x = sv_value(trx);
         auto x_begin = reinterpret_cast<const vm_t *>(x.data());
-        auto y = other->sv_value(trx);
+        auto y = other.sv_value(trx);
         auto y_begin = reinterpret_cast<const vm_t *>(y.data());
         auto cmp = std::lexicographical_compare_three_way(x_begin, (x_begin + sv_length(x)), y_begin, (y_begin + sv_length(y)));
         return (std::is_lt(cmp) ? -1 : (std::is_gt(cmp) ? +1 : 0));
@@ -4781,9 +4781,9 @@ public:
         vm_offset_t value;
     };
 
-    [[nodiscard]] static PackedEncoding classify_for_packing(Trix *trx, const Object *object) {
-        auto is_readonly = (object->has_object_access() && object->has_readonly_access());
-        auto attrib = object->is_executable() ? PackedExecutableAttrib : PackedLiteralAttrib;
+    [[nodiscard]] static PackedEncoding classify_for_packing(Trix *trx, Object object) {
+        auto is_readonly = (object.has_object_access() && object.has_readonly_access());
+        auto attrib = object.is_executable() ? PackedExecutableAttrib : PackedLiteralAttrib;
         auto SS_value = SS_Null;
         auto packed_type = PackedType::Simple;
 
@@ -4797,20 +4797,20 @@ public:
         // carries the per-ref length (written after the subcode, before gen, in
         // 1 or 2 bytes per Short/Long subcode variant).  Dict/Set carry no length.
         // Checked before the type switch because eqrefs reuse the normal type tags.
-        if (object->is_eqref()) {
+        if (object.is_eqref()) {
             packed_type = PackedType::PackedExt;
-            value = object->m_generation;
+            value = object.m_generation;
             value_size = packed_value_size(+packed_type, value);
-            if (object->is_eqdict_ref() || object->is_eqset_ref()) {
+            if (object.is_eqdict_ref() || object.is_eqset_ref()) {
                 length = 0;
                 length_size = 0;
             } else {
-                length = object->is_string() ? object->m_string_length : object->m_arrays_length;
+                length = object.is_string() ? object.m_string_length : object.m_arrays_length;
                 length_size = (length < 256) ? 1 : 2;
             }
             return PackedEncoding{+packed_type, attrib, SS_value, length_size, length, value_size, value};
         } else {
-            switch (object->type()) {
+            switch (object.type()) {
             case Type::Null:
                 packed_type = PackedType::Simple;
                 SS_value = SS_Null;
@@ -4819,61 +4819,61 @@ public:
 
             case Type::Byte:
                 packed_type = PackedType::Byte;
-                value = object->m_byte;
+                value = object.m_byte;
                 value_size = 1;
                 break;
 
             case Type::Integer:
                 packed_type = PackedType::Integer;
-                value = static_cast<vm_offset_t>(static_cast<uint32_t>(object->m_integer));
+                value = static_cast<vm_offset_t>(static_cast<uint32_t>(object.m_integer));
                 break;
 
             case Type::UInteger:
                 packed_type = PackedType::UInteger;
-                value = object->m_uinteger;
+                value = object.m_uinteger;
                 break;
 
             case Type::Long:
                 packed_type = PackedType::Long;
-                value = object->m_long;
+                value = object.m_long;
                 break;
 
             case Type::ULong:
                 packed_type = PackedType::ULong;
-                value = object->m_ulong;
+                value = object.m_ulong;
                 break;
 
             case Type::Address:
                 packed_type = PackedType::Address;
                 attrib = PackedLiteralAttrib;  // strip address cache bits
-                value = object->m_address;
+                value = object.m_address;
                 break;
 
             case Type::Real:
                 packed_type = PackedType::Real;
-                value = object->m_offset;  // read m_real's bit pattern via union (m_offset overlays m_real)
+                value = object.m_offset;  // read m_real's bit pattern via union (m_offset overlays m_real)
                 break;
 
             case Type::Double:
                 packed_type = PackedType::Double;
-                value = object->m_double;
+                value = object.m_double;
                 break;
 
             case Type::Boolean:
                 packed_type = PackedType::Simple;
                 value_size = -2;
-                SS_value = object->m_boolean ? SS_True : SS_False;
+                SS_value = object.m_boolean ? SS_True : SS_False;
                 break;
 
             case Type::Operator: {
                 // Check for the 8 most-frequent operators (post-bind procedures).
                 // Executable common-op -> PackedCommonOp (1 byte).
                 // Literal op or any other op -> PackedOperator (2+ bytes).
-                auto op = object->m_operator;
+                auto op = object.m_operator;
                 auto common_op_count = std::size(sm_common_op_index);
                 auto slot = common_op_count;
 
-                if (object->is_executable()) {
+                if (object.is_executable()) {
                     for (slot = 0; slot < common_op_count; ++slot) {
                         if (op == sm_common_op_index[slot]) {
                             break;
@@ -4902,11 +4902,11 @@ public:
 
             case Type::Name:
                 packed_type = PackedType::Name;
-                value = object->m_name;
+                value = object.m_name;
                 break;
 
             case Type::Array:
-                length = object->m_arrays_length;
+                length = object.m_arrays_length;
                 if (length < 256) {
                     packed_type = is_readonly ? PackedType::ReadOnlyShortLengthArray : PackedType::ShortLengthArray;
                     length_size = 1;
@@ -4914,11 +4914,11 @@ public:
                     packed_type = is_readonly ? PackedType::ReadOnlyLongLengthArray : PackedType::LongLengthArray;
                     length_size = 2;
                 }
-                value = object->m_array;
+                value = object.m_array;
                 break;
 
             case Type::Packed:
-                length = object->m_arrays_length;
+                length = object.m_arrays_length;
                 if (length < 256) {
                     packed_type = PackedType::ReadOnlyShortLengthPacked;
                     length_size = 1;
@@ -4926,11 +4926,11 @@ public:
                     packed_type = PackedType::ReadOnlyLongLengthPacked;
                     length_size = 2;
                 }
-                value = object->m_packed;
+                value = object.m_packed;
                 break;
 
             case Type::String:
-                length = object->m_string_length;
+                length = object.m_string_length;
                 if (length < 256) {
                     packed_type = is_readonly ? PackedType::ReadOnlyShortLengthString : PackedType::ShortLengthString;
                     length_size = 1;
@@ -4938,11 +4938,11 @@ public:
                     packed_type = is_readonly ? PackedType::ReadOnlyLongLengthString : PackedType::LongLengthString;
                     length_size = 2;
                 }
-                value = object->m_string;
+                value = object.m_string;
                 break;
 
             case Type::Stream:
-                length = object->m_sid;
+                length = object.m_sid;
                 if (length < 256) {
                     packed_type = is_readonly ? PackedType::ReadOnlyShortLengthStream : PackedType::ShortLengthStream;
                     length_size = 1;
@@ -4950,17 +4950,17 @@ public:
                     packed_type = is_readonly ? PackedType::ReadOnlyLongLengthStream : PackedType::LongLengthStream;
                     length_size = 2;
                 }
-                value = object->m_stream;
+                value = object.m_stream;
                 break;
 
             case Type::Dict:
                 packed_type = PackedType::Dict;
-                value = object->m_dict;
+                value = object.m_dict;
                 break;
 
             case Type::Set:
                 packed_type = PackedType::Dict;  // Set shares Dict's packed slot
-                value = object->m_set;
+                value = object.m_set;
                 break;
 
             case Type::SourceLoc:
@@ -4968,12 +4968,12 @@ public:
 
             case Type::Curry:
                 packed_type = PackedType::Curry;
-                value = object->m_curry;
+                value = object.m_curry;
                 break;
 
             case Type::Tagged:
                 packed_type = PackedType::Curry;  // Tagged shares Curry's packed slot
-                value = object->m_tagged;
+                value = object.m_tagged;
                 break;
 
             case Type::Thunk:
@@ -4998,26 +4998,26 @@ public:
                 // length_t/uint16_t and supports the 2-byte form via packed_ext_length_bytes
                 // if the kind space ever grows).  value = m_handle = vm_offset_t.
                 packed_type = PackedType::PackedExt;
-                value = object->m_handle;
-                length = +object->m_handle_kind;
+                value = object.m_handle;
+                length = +object.m_handle_kind;
                 length_size = (length < 256) ? 1 : 2;
                 break;
 
             case Type::Record:
                 packed_type = PackedType::Record;
-                value = object->m_record;
+                value = object.m_record;
                 break;
 
             case Type::Int128:
                 // 128-bit values use the PackedExt slot with a subcode byte discriminator.
                 // The actual emission is handled specially in emit_packed_element().
                 packed_type = PackedType::PackedExt;
-                value = object->m_int128;
+                value = object.m_int128;
                 break;
 
             case Type::UInt128:
                 packed_type = PackedType::PackedExt;
-                value = object->m_uint128;
+                value = object.m_uint128;
                 break;
 
             case Type::SlotRef:
@@ -5027,7 +5027,7 @@ public:
                 // header carries the X (literal/executable) bit, value bytes carry the
                 // slot index (1-2 bytes; length_t is <= 65535).  No length bytes.
                 packed_type = PackedType::SlotRef;
-                value = object->slot_ref_index();
+                value = object.slot_ref_index();
                 break;
             }
 
@@ -5039,7 +5039,7 @@ public:
         }
     }
 
-    static int emit_packed_element(Trix *trx, packed_data_t *&ptr, const Object *object, const PackedEncoding &enc) {
+    static int emit_packed_element(Trix *trx, packed_data_t *&ptr, Object object, const PackedEncoding &enc) {
         auto packed_type = static_cast<PackedType>(enc.packed_type);
         auto attrib = enc.attrib;
         auto SS_value = enc.SS_value;
@@ -5051,7 +5051,7 @@ public:
         // PackedRecord: custom encoding -- X=fc_width, SS=offset_size-1, TTTTT=Record
         // [header] [field_count: 1 or 2 bytes] [offset: SS+1 bytes]
         if (packed_type == PackedType::Record) {
-            auto fc = object->object_length();
+            auto fc = object.object_length();
             auto x_bit = static_cast<packed_data_t>((fc > 255) ? 0x80 : 0);
             auto ss = static_cast<packed_data_t>(((value_size - 1) & 3) << 5);
             *ptr++ = (x_bit | ss | +PackedType::Record);
@@ -5073,35 +5073,35 @@ public:
                 *ptr++ = (ss | +PackedType::PackedExt);
                 auto is_short = (length_size == 1);
                 packed_data_t subcode;
-                if (object->is_int128()) {
+                if (object.is_int128()) {
                     subcode = PackedExtSubcode_Int128;
-                } else if (object->is_uint128()) {
+                } else if (object.is_uint128()) {
                     subcode = PackedExtSubcode_UInt128;
-                } else if (object->is_eqstring_ref()) {
-                    if (object->has_readonly_access()) {
+                } else if (object.is_eqstring_ref()) {
+                    if (object.has_readonly_access()) {
                         subcode = is_short ? PackedExtSubcode_EqStringShortRO : PackedExtSubcode_EqStringLongRO;
                     } else {
                         subcode = is_short ? PackedExtSubcode_EqStringShortRW : PackedExtSubcode_EqStringLongRW;
                     }
-                } else if (object->is_eqarray_ref()) {
-                    if (object->has_readonly_access()) {
+                } else if (object.is_eqarray_ref()) {
+                    if (object.has_readonly_access()) {
                         subcode = is_short ? PackedExtSubcode_EqArrayShortRO : PackedExtSubcode_EqArrayLongRO;
                     } else {
                         subcode = is_short ? PackedExtSubcode_EqArrayShortRW : PackedExtSubcode_EqArrayLongRW;
                     }
-                } else if (object->is_eqproc_ref()) {
-                    if (object->is_packed()) {
+                } else if (object.is_eqproc_ref()) {
+                    if (object.is_packed()) {
                         subcode = is_short ? PackedExtSubcode_EqProcPackedShort : PackedExtSubcode_EqProcPackedLong;
-                    } else if (object->has_readonly_access()) {
+                    } else if (object.has_readonly_access()) {
                         subcode = is_short ? PackedExtSubcode_EqProcArrayShortRO : PackedExtSubcode_EqProcArrayLongRO;
                     } else {
                         subcode = is_short ? PackedExtSubcode_EqProcArrayShortRW : PackedExtSubcode_EqProcArrayLongRW;
                     }
-                } else if (object->is_eqdict_ref()) {
+                } else if (object.is_eqdict_ref()) {
                     subcode = PackedExtSubcode_EqDict;
-                } else if (object->is_eqset_ref()) {
+                } else if (object.is_eqset_ref()) {
                     subcode = PackedExtSubcode_EqSet;
-                } else if (object->is_handle()) {
+                } else if (object.is_handle()) {
                     subcode = is_short ? PackedExtSubcode_OpaqueHandleShort : PackedExtSubcode_OpaqueHandleLong;
                 } else {
                     trx->error(Error::InternalError, "emit_packed_element: unclassified PackedExt source");
@@ -5171,8 +5171,8 @@ public:
             auto packed_size = vm_size_t{0};
             auto [ptr, remaining] = trx->vm_start_alloc<packed_data_t>();
             for (auto remaining_count = count; remaining_count-- != 0; ++object) {
-                auto enc = classify_for_packing(trx, object);
-                auto n = static_cast<vm_size_t>(emit_packed_element(trx, ptr, object, enc));
+                auto enc = classify_for_packing(trx, *object);
+                auto n = static_cast<vm_size_t>(emit_packed_element(trx, ptr, *object, enc));
                 remaining -= n;
                 packed_size += n;
             }
@@ -5774,7 +5774,7 @@ public:
             if (src->is_executable()) {
                 auto save_policy = (src->save_level() != curr_save_level) ? SavePolicy::Save : SavePolicy::DoNotSave;
                 if (src->is_name()) {
-                    auto value = Name::name_search(trx, src);
+                    auto value = Name::name_search(trx, *src);
                     if ((value != nullptr) && value->is_operator() && !frame_scope_contains(trx, active, src->name_offset())) {
                         if ((save_policy == SavePolicy::Save) && (kind != ArrayKind::EqArray)) {
                             Save::save_object(trx, src);
@@ -5814,7 +5814,7 @@ public:
                 auto [next, object] = extract_next_packed(trx, src);
                 if (object.is_executable()) {
                     if (object.is_name()) {
-                        auto name_value = Name::name_search(trx, &object);
+                        auto name_value = Name::name_search(trx, object);
                         if ((name_value != nullptr) && name_value->is_operator() &&
                             !frame_scope_contains(trx, active, object.name_offset())) {
                             auto header = *src;
@@ -6438,14 +6438,14 @@ static void release_packed_temp(Trix *trx, Object *buf, length_t count) {
 // copy_array: copy elements from src into dst, cloning ExtValues and honoring save/restore.
 // Contrast with bind_array, which RESOLVES executable name elements to their bound operator
 // values in-place within a single array -- it does not copy between two arrays.
-static void copy_array(Trix *trx, const Object *src, Object *dst) {
-    auto src_length = src->arrays_length();
-    auto src_is_array = src->is_array();
+static void copy_array(Trix *trx, Object src, Object *dst) {
+    auto src_length = src.arrays_length();
+    auto src_is_array = src.is_array();
     auto [dst_ptr, dst_length] = dst->array_value(trx);
     if (dst_length >= src_length) {
         auto dst_is_eqarray = dst->is_eqarray(trx);
         if (src_is_array) {
-            auto src_ptr = src->array_objects(trx);
+            auto src_ptr = src.array_objects(trx);
             if (dst_ptr != src_ptr) {
                 auto curr_save_level = trx->m_curr_save_level;
                 for (auto remaining = src_length; remaining != 0; --remaining) {
@@ -6462,7 +6462,7 @@ static void copy_array(Trix *trx, const Object *src, Object *dst) {
                 }
             }
         } else {
-            auto packed_data = src->const_packed_span(trx);
+            auto packed_data = src.const_packed_span(trx);
             auto destination = dst_is_eqarray ? Object::ExtractPackedDestination::EqArray : Object::ExtractPackedDestination::Array;
             Object::extract_packed(trx, packed_data.data(), dst_ptr, src_length, destination);
         }

@@ -196,12 +196,12 @@ public:
         }
     }
 
-    [[nodiscard]] static const Object *name_search(Trix *trx, const Object *key_ptr) {
-        assert(key_ptr->is_name());
+    [[nodiscard]] static const Object *name_search(Trix *trx, Object key_ptr) {
+        assert(key_ptr.is_name());
 
-        auto name = key_ptr->name_value(trx);
+        auto name = key_ptr.name_value(trx);
 
-        auto binding_offset = cached_binding(trx, name, key_ptr->name_offset());
+        auto binding_offset = cached_binding(trx, name, key_ptr.name_offset());
         if (binding_offset != nulloffset) {
             return trx->offset_to_ptr<Object>(binding_offset);
         } else {
@@ -233,7 +233,7 @@ public:
                 if (binding_offset != nulloffset) {
                     result_ptr = trx->offset_to_ptr<Object>(binding_offset);
                 } else {
-                    result_ptr = Dict::name_lookup_in_stack(trx, &key_obj, name);
+                    result_ptr = Dict::name_lookup_in_stack(trx, key_obj, name);
                 }
             }
         }
@@ -400,7 +400,7 @@ private:
                 auto root_name = sv.substr(1, colon_pos - 1);
                 auto [found, name_obj] = find(trx, root_name);
                 if (found) {
-                    auto val_ptr = trx->m_systemdict->get(trx, &name_obj);
+                    auto val_ptr = trx->m_systemdict->get(trx, name_obj);
                     if ((val_ptr != nullptr) && val_ptr->is_dict()) {
                         return std::pair{val_ptr->dict_value(trx), sv.data() + colon_pos + 1};
                     }
@@ -425,7 +425,7 @@ private:
             auto seg_length = static_cast<length_t>(seg_end - seg_start);
             auto [path_name_found, path_name_obj] = find(trx, std::string_view{seg_start, seg_length});
             if (path_name_found) {
-                auto value_ptr = dict->get(trx, &path_name_obj);
+                auto value_ptr = dict->get(trx, path_name_obj);
                 if ((value_ptr != nullptr) && value_ptr->is_dict()) {
                     dict = value_ptr->dict_value(trx);
                     seg_start = (seg_end + 1);
@@ -485,7 +485,7 @@ private:
                 if (name_found) {
                     dict = walk_dict_path(trx, dict, path, name_string);
                     if (dict != nullptr) {
-                        return dict->get(trx, &name_obj);
+                        return dict->get(trx, name_obj);
                     }
                 }
             }

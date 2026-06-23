@@ -147,8 +147,8 @@ static constexpr vm_size_t MaxScreenCells{(1ull << 24)};  // 16M cells = 128 MiB
 // Pulls a ScreenState* from an Object.  Caller must have already passed
 // the operand through verify_operands(VerifyScreen, ...), which guarantees
 // type=OpaqueHandle and kind=Screen, so this is a pure offset deref.
-[[nodiscard]] static ScreenState *screen_state(Trix *trx, const Object *obj_ptr) {
-    return trx->offset_to_ptr<ScreenState>(obj_ptr->handle_offset());
+[[nodiscard]] static ScreenState *screen_state(Trix *trx, Object obj_ptr) {
+    return trx->offset_to_ptr<ScreenState>(obj_ptr.handle_offset());
 }
 
 // make-screen: cols rows :- screen
@@ -178,7 +178,7 @@ static void make_screen_op(Trix *trx) {
 static void screen_cols_op(Trix *trx) {
     trx->verify_operands(VerifyScreen);
     auto screen_ptr = trx->m_op_ptr;
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
     *screen_ptr = Object::make_integer(static_cast<integer_t>(state->m_cols));
 }
 
@@ -188,7 +188,7 @@ static void screen_cols_op(Trix *trx) {
 static void screen_rows_op(Trix *trx) {
     trx->verify_operands(VerifyScreen);
     auto screen_ptr = trx->m_op_ptr;
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
     *screen_ptr = Object::make_integer(static_cast<integer_t>(state->m_rows));
 }
 
@@ -201,7 +201,7 @@ static void screen_rows_op(Trix *trx) {
 static void screen_clear_op(Trix *trx) {
     trx->verify_operands(VerifyScreen);
     auto screen_ptr = trx->m_op_ptr;
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
     auto cell_count = static_cast<vm_size_t>(state->m_cols) * static_cast<vm_size_t>(state->m_rows);
     auto cells = trx->offset_to_ptr<ScreenCell>(state->m_cells_offset);
     std::fill_n(cells, cell_count, DefaultScreenCell);
@@ -237,7 +237,7 @@ static void screen_resize_op(Trix *trx) {
                    "dangle on restore (current sl={})",
                    trx->m_curr_save_level);
     }
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
     auto [rows_valid, rows_val] = rows_ptr->uinteger_value(trx);
     auto [cols_valid, cols_val] = cols_ptr->uinteger_value(trx);
     if (!rows_valid || !cols_valid || (rows_val == 0) || (cols_val == 0) || (rows_val > std::numeric_limits<length_t>::max()) ||
@@ -318,8 +318,8 @@ static void screen_write_cell(Trix *trx,
 }
 
 // Pull a 0..255 byte-clamped palette index from any non-negative integer.
-[[nodiscard]] static uint8_t verify_color_arg(Trix *trx, const Object *obj_ptr, std::string_view op_name, std::string_view label) {
-    auto [valid, val] = obj_ptr->uinteger_value(trx);
+[[nodiscard]] static uint8_t verify_color_arg(Trix *trx, Object obj_ptr, std::string_view op_name, std::string_view label) {
+    auto [valid, val] = obj_ptr.uinteger_value(trx);
     if (!valid || (val > 255)) {
         trx->error(Error::RangeCheck, "{}: {} must be 0..255, got {}", op_name, label, valid ? val : 0u);
     } else {
@@ -331,8 +331,8 @@ static void screen_write_cell(Trix *trx,
 // non-negative integer.  Rejects values that set bit 7 so the renderer
 // can use bit 7 as a free sentinel/marker (see make-screen and resize
 // prev-buffer initialization).
-[[nodiscard]] static uint8_t verify_attrs_arg(Trix *trx, const Object *obj_ptr, std::string_view op_name) {
-    auto [valid, val] = obj_ptr->uinteger_value(trx);
+[[nodiscard]] static uint8_t verify_attrs_arg(Trix *trx, Object obj_ptr, std::string_view op_name) {
+    auto [valid, val] = obj_ptr.uinteger_value(trx);
     if (!valid || (val > 127)) {
         trx->error(Error::RangeCheck, "{}: attrs must be 0..127 (bit 7 reserved), got {}", op_name, valid ? val : 0u);
     } else {
@@ -359,7 +359,7 @@ static void screen_put_cell_op(Trix *trx) {
     auto row_ptr = (attrs_ptr - 4);
     auto col_ptr = (attrs_ptr - 5);
     auto screen_ptr = (attrs_ptr - 6);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
 
     auto [col_valid, col_val] = col_ptr->uinteger_value(trx);
     auto [row_valid, row_val] = row_ptr->uinteger_value(trx);
@@ -368,9 +368,9 @@ static void screen_put_cell_op(Trix *trx) {
         (row_val > std::numeric_limits<length_t>::max()) || (ch_val > 0x10FFFF) || ((ch_val >= 0xD800) && (ch_val <= 0xDFFF))) {
         trx->error(Error::RangeCheck, "screen-put-cell: col/row/codepoint out of range");
     }
-    auto fg = verify_color_arg(trx, fg_ptr, "screen-put-cell", "fg");
-    auto bg = verify_color_arg(trx, bg_ptr, "screen-put-cell", "bg");
-    auto attrs = verify_attrs_arg(trx, attrs_ptr, "screen-put-cell");
+    auto fg = verify_color_arg(trx, *fg_ptr, "screen-put-cell", "fg");
+    auto bg = verify_color_arg(trx, *bg_ptr, "screen-put-cell", "bg");
+    auto attrs = verify_attrs_arg(trx, *attrs_ptr, "screen-put-cell");
 
     screen_write_cell(trx,
                       state,
@@ -408,7 +408,7 @@ static void screen_put_string_op(Trix *trx) {
     auto row_ptr = (attrs_ptr - 4);
     auto col_ptr = (attrs_ptr - 5);
     auto screen_ptr = (attrs_ptr - 6);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
 
     auto [col_valid, col_val] = col_ptr->uinteger_value(trx);
     auto [row_valid, row_val] = row_ptr->uinteger_value(trx);
@@ -421,9 +421,9 @@ static void screen_put_string_op(Trix *trx) {
     if (row >= state->m_rows) {
         trx->error(Error::RangeCheck, "screen-put-string: row {} >= rows {}", row, state->m_rows);
     } else {
-        auto fg = verify_color_arg(trx, fg_ptr, "screen-put-string", "fg");
-        auto bg = verify_color_arg(trx, bg_ptr, "screen-put-string", "bg");
-        auto attrs = verify_attrs_arg(trx, attrs_ptr, "screen-put-string");
+        auto fg = verify_color_arg(trx, *fg_ptr, "screen-put-string", "fg");
+        auto bg = verify_color_arg(trx, *bg_ptr, "screen-put-string", "bg");
+        auto attrs = verify_attrs_arg(trx, *attrs_ptr, "screen-put-string");
 
         auto str_data = str_ptr->string_data_ptr(trx);
         auto str_len = str_ptr->m_string_length;
@@ -462,7 +462,7 @@ static void screen_fill_rect_op(Trix *trx) {
     auto y_ptr = (attrs_ptr - 6);
     auto x_ptr = (attrs_ptr - 7);
     auto screen_ptr = (attrs_ptr - 8);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
 
     auto [x_valid, x_val] = x_ptr->uinteger_value(trx);
     auto [y_valid, y_val] = y_ptr->uinteger_value(trx);
@@ -474,9 +474,9 @@ static void screen_fill_rect_op(Trix *trx) {
         (h_val > LMAX) || (ch_val > 0x10FFFF) || ((ch_val >= 0xD800) && (ch_val <= 0xDFFF))) {
         trx->error(Error::RangeCheck, "screen-fill-rect: rect or codepoint args out of range");
     }
-    auto fg = verify_color_arg(trx, fg_ptr, "screen-fill-rect", "fg");
-    auto bg = verify_color_arg(trx, bg_ptr, "screen-fill-rect", "bg");
-    auto attrs = verify_attrs_arg(trx, attrs_ptr, "screen-fill-rect");
+    auto fg = verify_color_arg(trx, *fg_ptr, "screen-fill-rect", "fg");
+    auto bg = verify_color_arg(trx, *bg_ptr, "screen-fill-rect", "bg");
+    auto attrs = verify_attrs_arg(trx, *attrs_ptr, "screen-fill-rect");
 
     auto x = static_cast<length_t>(x_val);
     auto y = static_cast<length_t>(y_val);
@@ -726,7 +726,7 @@ static void screen_render_op(Trix *trx) {
     } else {
         trx->verify_operands(VerifyScreen);
         auto screen_ptr = trx->m_op_ptr;
-        auto state = screen_state(trx, screen_ptr);
+        auto state = screen_state(trx, *screen_ptr);
 
         // Flush m_stdout so prior print bytes don't arrive AFTER our direct
         // ::write output (the stream buffer's userspace write is independent
@@ -810,7 +810,7 @@ static void screen_render_to_op(Trix *trx) {
     trx->verify_operands(VerifyStream | VerifyRW, VerifyScreen);
     auto stream_ptr = trx->m_op_ptr;
     auto screen_ptr = (stream_ptr - 1);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
     auto [stream, sid] = stream_ptr->stream_value(trx);
     if (!stream->is_open(sid)) {
         trx->error(Error::InvalidStream, "screen-render-to: stream not open");
@@ -838,7 +838,7 @@ static void screen_get_cell_op(Trix *trx) {
     auto row_ptr = trx->m_op_ptr;
     auto col_ptr = (row_ptr - 1);
     auto screen_ptr = (row_ptr - 2);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
 
     auto [col_valid, col_val] = col_ptr->uinteger_value(trx);
     auto [row_valid, row_val] = row_ptr->uinteger_value(trx);
@@ -973,7 +973,7 @@ static void screen_put_utf8_string_op(Trix *trx) {
     auto row_ptr = (attrs_ptr - 4);
     auto col_ptr = (attrs_ptr - 5);
     auto screen_ptr = (attrs_ptr - 6);
-    auto state = screen_state(trx, screen_ptr);
+    auto state = screen_state(trx, *screen_ptr);
 
     auto [col_valid, col_val] = col_ptr->uinteger_value(trx);
     auto [row_valid, row_val] = row_ptr->uinteger_value(trx);
@@ -986,9 +986,9 @@ static void screen_put_utf8_string_op(Trix *trx) {
     if (row >= state->m_rows) {
         trx->error(Error::RangeCheck, "screen-put-utf8-string: row {} >= rows {}", row, state->m_rows);
     } else {
-        auto fg = verify_color_arg(trx, fg_ptr, "screen-put-utf8-string", "fg");
-        auto bg = verify_color_arg(trx, bg_ptr, "screen-put-utf8-string", "bg");
-        auto attrs = verify_attrs_arg(trx, attrs_ptr, "screen-put-utf8-string");
+        auto fg = verify_color_arg(trx, *fg_ptr, "screen-put-utf8-string", "fg");
+        auto bg = verify_color_arg(trx, *bg_ptr, "screen-put-utf8-string", "bg");
+        auto attrs = verify_attrs_arg(trx, *attrs_ptr, "screen-put-utf8-string");
 
         auto str_data = str_ptr->string_data_ptr(trx);
         auto str_len = static_cast<size_t>(str_ptr->m_string_length);
@@ -1035,23 +1035,23 @@ static void screen_blit_op(Trix *trx) {
     auto sx_ptr = (dy_ptr - 6);
     auto src_ptr = (dy_ptr - 7);
 
-    auto src_state = screen_state(trx, src_ptr);
-    auto dst_state = screen_state(trx, dst_ptr);
+    auto src_state = screen_state(trx, *src_ptr);
+    auto dst_state = screen_state(trx, *dst_ptr);
 
-    auto extract = [&](const Object *p) -> length_t {
-        auto [valid, val] = p->uinteger_value(trx);
+    auto extract = [&](Object p) -> length_t {
+        auto [valid, val] = p.uinteger_value(trx);
         if (!valid || (val > std::numeric_limits<length_t>::max())) {
             trx->error(Error::RangeCheck, "screen-blit: coordinate/dim out of length_t range");
         } else {
             return static_cast<length_t>(val);
         }
     };
-    auto sx = extract(sx_ptr);
-    auto sy = extract(sy_ptr);
-    auto w = extract(w_ptr);
-    auto h = extract(h_ptr);
-    auto dx = extract(dx_ptr);
-    auto dy = extract(dy_ptr);
+    auto sx = extract(*sx_ptr);
+    auto sy = extract(*sy_ptr);
+    auto w = extract(*w_ptr);
+    auto h = extract(*h_ptr);
+    auto dx = extract(*dx_ptr);
+    auto dy = extract(*dy_ptr);
 
     // Clip src rect to src dimensions.
     if (sx >= src_state->m_cols) {

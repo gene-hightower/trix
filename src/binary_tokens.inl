@@ -362,13 +362,13 @@
 // token selects LiteralValue vs. ExecutableValue for the returned object.
 // The returned object's attributes come from the dictionary (not from name's attrib).
 // Raises: InternalError if name is not a Name Object; Undefined if name has no binding.
-[[nodiscard]] ScanToken bt_name_to_value(Trix *trx, const Object *name_ptr, Lexeme token) {
-    if (name_ptr->is_name()) {
+[[nodiscard]] ScanToken bt_name_to_value(Trix *trx, Object name_ptr, Lexeme token) {
+    if (name_ptr.is_name()) {
         auto value_ptr = Name::name_search(trx, name_ptr);
         if (value_ptr != nullptr) {
             return std::pair{token, value_ptr->make_clone(trx)};
         } else {
-            trx->error(Error::Undefined, "BinaryToken: name {} has no bound value", name_ptr->name_sv(trx));
+            trx->error(Error::Undefined, "BinaryToken: name {} has no bound value", name_ptr.name_sv(trx));
         }
     } else {
         trx->error(Error::InternalError, "bt_name_to_value: name is not a Name object");
@@ -382,7 +382,7 @@
 [[nodiscard]] ScanToken bt_literal_systemvalue(Trix *trx, uint16_t index) {
     if (index < SYSTEMNAME_COUNT) {
         auto name_obj = Name::make_system(trx, static_cast<SystemName>(index));
-        return bt_name_to_value(trx, &name_obj, Lexeme::LiteralValue);
+        return bt_name_to_value(trx, name_obj, Lexeme::LiteralValue);
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::SystemValue invalid index {}", index);
     }
@@ -395,7 +395,7 @@
 [[nodiscard]] ScanToken bt_executable_systemvalue(Trix *trx, uint16_t index) {
     if (index < SYSTEMNAME_COUNT) {
         auto name_obj = Name::make_system(trx, static_cast<SystemName>(index));
-        return bt_name_to_value(trx, &name_obj, Lexeme::ExecutableValue);
+        return bt_name_to_value(trx, name_obj, Lexeme::ExecutableValue);
     } else {
         trx->error(Error::IndexCheck, "BinaryToken::SystemValue invalid index {}", index);
     }

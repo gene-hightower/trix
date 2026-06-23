@@ -335,25 +335,25 @@ enum class MatchPolicy { AnyType, AllMustMatch };
 
 // Check floating-point range constraints for a single operand.
 // Called only when (formal & VerifyFloatConstraints) != 0 and actual is a floating-point Object.
-void check_float_range(verify_t formal, const Object *actual_ptr, int param_num) {
+void check_float_range(verify_t formal, Object actual_ptr, int param_num) {
     auto trx = this;
-    if (((formal & VerifyNotInf) != 0) && actual_ptr->is_floating_point_inf(trx)) {
+    if (((formal & VerifyNotInf) != 0) && actual_ptr.is_floating_point_inf(trx)) {
         error(Error::NumericalINF, "operand #{} is INF", param_num);
-    } else if (((formal & VerifyNotNan) != 0) && actual_ptr->is_floating_point_nan(trx)) {
+    } else if (((formal & VerifyNotNan) != 0) && actual_ptr.is_floating_point_nan(trx)) {
         error(Error::NumericalNaN, "operand #{} is NaN", param_num);
-    } else if (((formal & VerifyIsAbsLessEqOne) != 0) && !actual_ptr->is_floating_point_is_abs_lesseq_one(trx)) {
+    } else if (((formal & VerifyIsAbsLessEqOne) != 0) && !actual_ptr.is_floating_point_is_abs_lesseq_one(trx)) {
         error(Error::RangeCheck, "|operand #{}| > 1", param_num);
-    } else if (((formal & VerifyGreaterEqualOne) != 0) && !actual_ptr->is_floating_point_greater_eq_one(trx)) {
+    } else if (((formal & VerifyGreaterEqualOne) != 0) && !actual_ptr.is_floating_point_greater_eq_one(trx)) {
         error(Error::RangeCheck, "operand #{} is < 1", param_num);
-    } else if (((formal & VerifyIsAbsLessOne) != 0) && !actual_ptr->is_floating_point_is_abs_less_one(trx)) {
+    } else if (((formal & VerifyIsAbsLessOne) != 0) && !actual_ptr.is_floating_point_is_abs_less_one(trx)) {
         error(Error::RangeCheck, "|operand #{}| >= 1", param_num);
-    } else if (((formal & VerifyGreaterThanNegOne) != 0) && !actual_ptr->is_floating_point_greater_than_neg_one(trx)) {
+    } else if (((formal & VerifyGreaterThanNegOne) != 0) && !actual_ptr.is_floating_point_greater_than_neg_one(trx)) {
         error(Error::RangeCheck, "operand #{} is <= -1", param_num);
-    } else if (((formal & VerifyNotNonPositiveInteger) != 0) && actual_ptr->is_floating_point_nonpositive_integer(trx)) {
+    } else if (((formal & VerifyNotNonPositiveInteger) != 0) && actual_ptr.is_floating_point_nonpositive_integer(trx)) {
         error(Error::RangeCheck, "operand #{} is a non-positive integer (pole)", param_num);
-    } else if (((formal & VerifyIsNormal) != 0) && !actual_ptr->is_floating_point_normal(trx)) {
+    } else if (((formal & VerifyIsNormal) != 0) && !actual_ptr.is_floating_point_normal(trx)) {
         error(Error::NumericalINF, "operand #{} is not normal", param_num);
-    } else if (((formal & VerifyIsFinite) != 0) && !actual_ptr->is_floating_point_finite(trx)) {
+    } else if (((formal & VerifyIsFinite) != 0) && !actual_ptr.is_floating_point_finite(trx)) {
         error(Error::NumericalINF, "operand #{} is not finite", param_num);
     }
 }
@@ -390,10 +390,10 @@ void verify_type_check(verify_t formal, int actual_type, bool actual_is_literal,
 // Verify that an OpaqueHandle operand has the requested kind.  No-op unless
 // formal carries a VerifyHandle<Kind> bit.  Only inspected when the type
 // check passed and the actual operand is an OpaqueHandle.
-void verify_handle_kind(verify_t formal, const Object *actual_ptr, int actual_type, int param_num) {
+void verify_handle_kind(verify_t formal, Object actual_ptr, int actual_type, int param_num) {
     auto kind_constraints = (formal & VerifyHandleKindMask);
     if ((kind_constraints != 0) && (actual_type == +Object::Type::OpaqueHandle)) {
-        auto kind = +actual_ptr->handle_kind();
+        auto kind = +actual_ptr.handle_kind();
         auto kind_bit = (1ull << (VerifyHandleKindShift + kind));
         if ((kind_constraints & kind_bit) == 0) {
             error(Error::TypeCheck, "operand #{}: opaque-handle kind mismatch", param_num);
@@ -402,12 +402,12 @@ void verify_handle_kind(verify_t formal, const Object *actual_ptr, int actual_ty
 }
 
 // Verify that the actual operand has ReadWrite access when formal requires it.
-void verify_rw_access(verify_t formal, const Object *actual_ptr, int actual_type, int param_num) {
+void verify_rw_access(verify_t formal, Object actual_ptr, int actual_type, int param_num) {
     auto trx = this;
-    if (((formal & VerifyRW) != 0) && (actual_ptr->has_object_access() || actual_ptr->is_dict() || actual_ptr->is_set())) {
-        auto actual_access = actual_ptr->has_object_access() ? actual_ptr->access()
-                             : actual_ptr->is_dict()         ? actual_ptr->dict_value(trx)->access()
-                                                             : actual_ptr->set_value(trx)->access();
+    if (((formal & VerifyRW) != 0) && (actual_ptr.has_object_access() || actual_ptr.is_dict() || actual_ptr.is_set())) {
+        auto actual_access = actual_ptr.has_object_access() ? actual_ptr.access()
+                             : actual_ptr.is_dict()         ? actual_ptr.dict_value(trx)->access()
+                                                            : actual_ptr.set_value(trx)->access();
         if (actual_access == Object::ReadOnlyAccess) {
             char actual_buf[VERIFY_TYPE_BUFFER_SIZE];
             auto actual_desc = verify_description(actual_buf, sizeof(actual_buf), (1ull << actual_type));
@@ -430,28 +430,28 @@ void verify_type_match(int first_type, int actual_type, int param_num) {
 }
 
 // Verify numeric constraints (NotZero, NotNegative) and key/float range constraints.
-void verify_value_constraints(verify_t formal, const Object *actual_ptr, int param_num) {
+void verify_value_constraints(verify_t formal, Object actual_ptr, int param_num) {
     auto trx = this;
-    if (((formal & VerifyNotZero) != 0) && actual_ptr->is_number() && actual_ptr->is_number_zero(trx)) {
+    if (((formal & VerifyNotZero) != 0) && actual_ptr.is_number() && actual_ptr.is_number_zero(trx)) {
         error(Error::RangeCheck, "operand #{} is zero", param_num);
-    } else if (((formal & VerifyNotNegative) != 0) && actual_ptr->is_signed_number() && actual_ptr->is_number_negative(trx)) {
+    } else if (((formal & VerifyNotNegative) != 0) && actual_ptr.is_signed_number() && actual_ptr.is_number_negative(trx)) {
         error(Error::RangeCheck, "operand #{} is less than zero", param_num);
-    } else if ((formal == VerifyKey) && actual_ptr->is_floating_point()) {
-        if (actual_ptr->is_floating_point_inf(trx)) {
+    } else if ((formal == VerifyKey) && actual_ptr.is_floating_point()) {
+        if (actual_ptr.is_floating_point_inf(trx)) {
             error(Error::NumericalINF, "operand #{} is INF and cannot be used as a dict key", param_num);
-        } else if (actual_ptr->is_floating_point_nan(trx)) {
+        } else if (actual_ptr.is_floating_point_nan(trx)) {
             error(Error::NumericalNaN, "operand #{} is NaN and cannot be used as a dict key", param_num);
         }
     }
 
-    if (((formal & VerifyFloatConstraints) != 0) && actual_ptr->is_floating_point()) {
+    if (((formal & VerifyFloatConstraints) != 0) && actual_ptr.is_floating_point()) {
         check_float_range(formal, actual_ptr, param_num);
     }
 
-    if (((formal & VerifyLazy) != 0) && actual_ptr->is_array()) {
-        if (actual_ptr->arrays_length() != 2) {
+    if (((formal & VerifyLazy) != 0) && actual_ptr.is_array()) {
+        if (actual_ptr.arrays_length() != 2) {
             error(Error::TypeCheck, "operand #{} expected lazy-seq (2-element array)", param_num);
-        } else if (!actual_ptr->array_objects(trx)[1].is_thunk()) {
+        } else if (!actual_ptr.array_objects(trx)[1].is_thunk()) {
             error(Error::TypeCheck, "operand #{} lazy-seq tail must be a thunk", param_num);
         }
     }
@@ -492,12 +492,12 @@ void verify_operands(Object *top_ptr, Args... args) {
 
             if (!fast_path) [[unlikely]] {
                 verify_type_check(formal, actual_type, actual_is_literal, param_num);
-                verify_handle_kind(formal, actual_ptr, actual_type, param_num);
-                verify_rw_access(formal, actual_ptr, actual_type, param_num);
+                verify_handle_kind(formal, *actual_ptr, actual_type, param_num);
+                verify_rw_access(formal, *actual_ptr, actual_type, param_num);
                 if constexpr (Policy == MatchPolicy::AllMustMatch) {
                     verify_type_match(first_type, actual_type, param_num);
                 }
-                verify_value_constraints(formal, actual_ptr, param_num);
+                verify_value_constraints(formal, *actual_ptr, param_num);
             }
 
             ++param_num;

@@ -846,13 +846,13 @@ static void powmod_op(Trix *trx) {
     auto base_type = base_ptr->type();
 
     // extract all three as ulong_t, validate non-negative
-    auto extract = [trx](const Object *obj, Object::Type t, const char *name) -> ulong_t {
+    auto extract = [trx](Object obj, Object::Type t, const char *name) -> ulong_t {
         switch (+t) {
         case +Object::Type::Byte:
-            return obj->byte_value();
+            return obj.byte_value();
 
         case +Object::Type::Integer: {
-            auto v = obj->integer_value();
+            auto v = obj.integer_value();
             if (v < 0) {
                 trx->error(Error::RangeCheck, "pow-mod: {} must be non-negative", name);
             } else {
@@ -861,10 +861,10 @@ static void powmod_op(Trix *trx) {
         }
 
         case +Object::Type::UInteger:
-            return obj->uinteger_value();
+            return obj.uinteger_value();
 
         case +Object::Type::Long: {
-            auto v = obj->long_value(trx);
+            auto v = obj.long_value(trx);
             if (v < 0) {
                 trx->error(Error::RangeCheck, "pow-mod: {} must be non-negative", name);
             } else {
@@ -873,7 +873,7 @@ static void powmod_op(Trix *trx) {
         }
 
         case +Object::Type::ULong:
-            return obj->ulong_value(trx);
+            return obj.ulong_value(trx);
 
         case +Object::Type::Int128:
         case +Object::Type::UInt128:
@@ -886,9 +886,9 @@ static void powmod_op(Trix *trx) {
         }
     };
 
-    auto base_val = extract(base_ptr, base_type, "base");
-    auto exp_val = extract(exp_ptr, exp_type, "exponent");
-    auto mod_val = extract(mod_ptr, mod_type, "modulus");
+    auto base_val = extract(*base_ptr, base_type, "base");
+    auto exp_val = extract(*exp_ptr, exp_type, "exponent");
+    auto mod_val = extract(*mod_ptr, mod_type, "modulus");
 
     if (mod_val == 0) {
         trx->error(Error::RangeCheck, "pow-mod: modulus must be > 0");
@@ -1362,7 +1362,7 @@ static void add_op(Trix *trx) {
             trx->error(Error::TypeCheck, "add: cannot add two Address values");
         } else {
             auto addr = reinterpret_cast<uintptr_t>(addr_ptr->address_value(trx));
-            auto offset = address_offset(trx, int_ptr);
+            auto offset = address_offset(trx, *int_ptr);
             auto result = reinterpret_cast<address_t>(addr + static_cast<uintptr_t>(offset));
             // Construct the result BEFORE freeing the operands' ExtValues: a
             // vm-full raised by the allocation after the frees would leave freed
@@ -1467,7 +1467,7 @@ static void sub_op(Trix *trx) {
             *x_ptr = result_obj;
         } else {
             // Address - Integer -> Address (same construct-before-free order)
-            auto offset = address_offset(trx, y_ptr);
+            auto offset = address_offset(trx, *y_ptr);
             auto result = reinterpret_cast<address_t>(x_addr - static_cast<uintptr_t>(offset));
             auto result_obj = Object::make_address(trx, result);
             y_ptr->maybe_free_extvalue(trx);
@@ -1672,7 +1672,7 @@ static void min_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return ((x->string_compare(p, y) < 0) ? x : y);
+            return ((x->string_compare(p, *y) < 0) ? x : y);
         } else {
             return std::min(x, y);
         }
@@ -1688,7 +1688,7 @@ static void max_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return ((x->string_compare(p, y) > 0) ? x : y);
+            return ((x->string_compare(p, *y) > 0) ? x : y);
         } else {
             return std::max(x, y);
         }
@@ -1704,7 +1704,7 @@ static void ge_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return (x->string_compare(p, y) >= 0);
+            return (x->string_compare(p, *y) >= 0);
         } else {
             return (x >= y);
         }
@@ -1720,7 +1720,7 @@ static void gt_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return (x->string_compare(p, y) > 0);
+            return (x->string_compare(p, *y) > 0);
         } else {
             return (x > y);
         }
@@ -1736,7 +1736,7 @@ static void le_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return (x->string_compare(p, y) <= 0);
+            return (x->string_compare(p, *y) <= 0);
         } else {
             return (x <= y);
         }
@@ -1752,7 +1752,7 @@ static void lt_op(Trix *trx) {
         static_assert(std::is_same_v<T, decltype(y)>);
 
         if constexpr (std::is_same_v<T, Object *>) {
-            return (x->string_compare(p, y) < 0);
+            return (x->string_compare(p, *y) < 0);
         } else {
             return (x < y);
         }
@@ -2789,12 +2789,12 @@ static void clamp_op(Trix *trx) {
 
                 if constexpr (std::is_same_v<T, Object *>) {
                     // v = min(v, hi);
-                    if (v->string_compare(p, hi) > 0) {
+                    if (v->string_compare(p, *hi) > 0) {
                         *v = *hi;
                     }
 
                     // v = max(v, lo);
-                    if (v->string_compare(p, lo) < 0) {
+                    if (v->string_compare(p, *lo) < 0) {
                         *v = *lo;
                     }
                     return v;

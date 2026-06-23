@@ -167,7 +167,7 @@ static void eq_print_impl(Trix *trx, bool object_form) {
         trx->require_op_count(1);
 
         auto top_ptr = trx->m_op_ptr;
-        auto output_count = PrintFmt::process_object(trx, top_ptr, out, object_form);
+        auto output_count = PrintFmt::process_object(trx, *top_ptr, out, object_form);
         if (output_count != 0) {
             out->putc(trx, ASCII_LF);
             out->flush(trx);
@@ -200,7 +200,7 @@ static void print_stack_impl(Trix *trx, bool object_form) {
     if (out != nullptr) {
         bool any_output = false;
         for (auto curr_ptr = trx->m_op_ptr; curr_ptr >= trx->m_op_base; --curr_ptr) {
-            auto output_count = PrintFmt::process_object(trx, curr_ptr, out, object_form);
+            auto output_count = PrintFmt::process_object(trx, *curr_ptr, out, object_form);
             if (output_count != 0) {
                 out->putc(trx, ASCII_LF);
                 any_output = true;

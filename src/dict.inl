@@ -1613,7 +1613,7 @@ public:
     // Populates the cache on a successful match.
     //   Name entries:   offset equality (VM-interned names hash-collide-free by identity).
     //   String entries: content comparison against Name::equal (binary-token-stream dicts).
-    [[nodiscard]] static const Object *name_lookup_in_stack(Trix *trx, const Object *key_ptr, const Name *name) {
+    [[nodiscard]] static const Object *name_lookup_in_stack(Trix *trx, Object key_ptr, const Name *name) {
         auto hash = name->hash();
         auto name_offset = trx->ptr_to_offset(name);
         for (auto dict_obj_ptr = trx->m_dict_ptr; (dict_obj_ptr >= trx->m_dict_base); --dict_obj_ptr) {
@@ -1629,7 +1629,7 @@ public:
                 }
                 if (matched && !entry->m_value.is_unset_local()) {
                     auto value_ptr = &entry->m_value;
-                    key_ptr->set_name_binding(trx, value_ptr);
+                    key_ptr.set_name_binding(trx, value_ptr);
                     return value_ptr;
                 } else {
                     // No match, or an unset-local marker (a reserved declared-local slot):
@@ -1700,19 +1700,17 @@ public:
         return nullptr;
     }
 
-    [[nodiscard]] Object *get(Trix *trx, const Object *key_ptr) const {
-        assert(!key_ptr->is_null());
+    [[nodiscard]] Object *get(Trix *trx, Object key_obj) const {
+        assert(!key_obj.is_null());
 
-        auto hash = key_ptr->hash(trx);
+        auto hash = key_obj.hash(trx);
         auto entry = find_in_chain<DictEntry>(
-                trx, *key_ptr, m_buckets[fastmod_u32(hash, bucket_magic_for(m_bucket_count), m_bucket_count)]);
+                trx, key_obj, m_buckets[fastmod_u32(hash, bucket_magic_for(m_bucket_count), m_bucket_count)]);
         // A reserved-but-unassigned declared frame local holds the unset-local marker;
         // treat it as not-present for value reads (so a read sees /undefined or falls
         // through, never the marker).  Non-frame dicts never hold a marker value.
         return (((entry != nullptr) && !entry->m_value.is_unset_local()) ? &entry->m_value : nullptr);
     }
-
-    [[nodiscard]] Object *get(Trix *trx, Object key_obj) const { return get(trx, &key_obj); }
 
     [[nodiscard]] Object get(Trix *trx, SystemName systemname_key) const {
         auto value_ptr = get(trx, Name::make_system(trx, systemname_key));

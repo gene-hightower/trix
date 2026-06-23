@@ -1321,7 +1321,7 @@ private:
             m_trx->error(Error::ScanTypeFail, "type specifier must be provided for null Object arg-id {}", arg_id);
         } else if ((format_spec_type & Trix::TypeToVerify(arg_ptr->type())) == 0) {
             char buffer[24];
-            static_cast<void>(m_trx->object_name(arg_ptr, buffer));
+            static_cast<void>(m_trx->object_name(*arg_ptr, buffer));
             m_trx->error(Error::TypeCheck, "type specifier \'{:c}\' not supported for {} arg-id {}", m_type, buffer, arg_id);
         } else if (m_type == 'I') {
             scan_instant(arg_ptr);

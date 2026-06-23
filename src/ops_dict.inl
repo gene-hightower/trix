@@ -229,9 +229,9 @@ static void countdictstack_op(Trix *trx) {
 // banner, docs) holds and a user cannot shadow or hand-bind a control op.
 // Non-name keys cannot start with '@', so they pass through untouched.
 // throws: invalid-name
-static void reject_reserved_name(Trix *trx, const Object *key_ptr) {
-    if (key_ptr->is_name()) {
-        auto name_sv = key_ptr->name_sv(trx);
+static void reject_reserved_name(Trix *trx, Object key_ptr) {
+    if (key_ptr.is_name()) {
+        auto name_sv = key_ptr.name_sv(trx);
         if (!name_sv.empty() && (name_sv.front() == '@')) {
             trx->error(Error::InvalidName, "names beginning with '@' are reserved for internal use");
         }
@@ -244,8 +244,8 @@ static void reject_reserved_name(Trix *trx, const Object *key_ptr) {
 // regardless of any user binding already standing higher on the dict stack --
 // which is why re-`override`-ing an already-shadowed name still succeeds.
 // Non-name keys (binary-token String keys) never name an operator.
-[[nodiscard]] static bool names_builtin_operator(Trix *trx, const Object *key_ptr) {
-    if (key_ptr->is_name()) {
+[[nodiscard]] static bool names_builtin_operator(Trix *trx, Object key_ptr) {
+    if (key_ptr.is_name()) {
         auto existing_ptr = trx->m_systemdict->get(trx, key_ptr);
         return ((existing_ptr != nullptr) && existing_ptr->is_operator());
     } else {
@@ -261,11 +261,11 @@ static void reject_reserved_name(Trix *trx, const Object *key_ptr) {
 // an operator name (see require_operator_to_override), so the two operators
 // partition every bindable name -- exactly one accepts any given name.
 // throws: invalid-name
-static void reject_operator_shadow(Trix *trx, const Object *key_ptr) {
+static void reject_operator_shadow(Trix *trx, Object key_ptr) {
     if (names_builtin_operator(trx, key_ptr)) {
         trx->error(Error::InvalidName,
                    "'{}' names a built-in operator; use `override` to shadow it deliberately",
-                   key_ptr->name_sv(trx));
+                   key_ptr.name_sv(trx));
     }
 }
 
@@ -274,7 +274,7 @@ static void reject_operator_shadow(Trix *trx, const Object *key_ptr) {
 // longer an operator (renamed / removed since the override was written) becomes
 // a loud /undefined instead of silently degrading to a plain def.
 // throws: undefined
-static void require_operator_to_override(Trix *trx, const Object *key_ptr) {
+static void require_operator_to_override(Trix *trx, Object key_ptr) {
     if (!names_builtin_operator(trx, key_ptr)) {
         trx->error(Error::Undefined, "override: no built-in operator of this name to shadow; use `def` instead");
     }
@@ -288,8 +288,8 @@ static void require_operator_to_override(Trix *trx, const Object *key_ptr) {
 // throws: vm-full, dict-full, opstack-underflow, read-only, type-check, invalid-name
 static void def_op(Trix *trx) {
     trx->verify_operands(VerifyAny, VerifyKey);
-    reject_reserved_name(trx, trx->m_op_ptr - 1);
-    reject_operator_shadow(trx, trx->m_op_ptr - 1);
+    reject_reserved_name(trx, *(trx->m_op_ptr - 1));
+    reject_operator_shadow(trx, *(trx->m_op_ptr - 1));
 
     auto dict_obj_ptr = Dict::dict_stack_first_nonframe(trx);
     auto dict = dict_obj_ptr->dict_value(trx);
@@ -320,8 +320,8 @@ static void def_op(Trix *trx) {
 // throws: vm-full, dict-full, opstack-underflow, read-only, type-check, invalid-name, undefined
 static void override_op(Trix *trx) {
     trx->verify_operands(VerifyAny, VerifyKey);
-    reject_reserved_name(trx, trx->m_op_ptr - 1);
-    require_operator_to_override(trx, trx->m_op_ptr - 1);
+    reject_reserved_name(trx, *(trx->m_op_ptr - 1));
+    require_operator_to_override(trx, *(trx->m_op_ptr - 1));
 
     auto dict_obj_ptr = Dict::dict_stack_first_nonframe(trx);
     auto dict = dict_obj_ptr->dict_value(trx);
@@ -348,8 +348,8 @@ static void override_op(Trix *trx) {
 // throws: above-barrier, vm-full, dict-full, opstack-underflow, read-only, type-check, invalid-name
 static void def_persist_op(Trix *trx) {
     trx->verify_operands(VerifyAny, VerifyKey);
-    reject_reserved_name(trx, trx->m_op_ptr - 1);
-    reject_operator_shadow(trx, trx->m_op_ptr - 1);
+    reject_reserved_name(trx, *(trx->m_op_ptr - 1));
+    reject_operator_shadow(trx, *(trx->m_op_ptr - 1));
 
     auto dict_obj_ptr = Dict::dict_stack_first_nonframe(trx);
     auto dict = dict_obj_ptr->dict_value(trx);
@@ -386,7 +386,7 @@ static void def_persist_op(Trix *trx) {
 // throws: vm-full, dict-full, opstack-underflow, read-only, type-check, unsupported, invalid-name
 static void local_def_op(Trix *trx) {
     trx->verify_operands(VerifyAny, VerifyKey);
-    reject_reserved_name(trx, trx->m_op_ptr - 1);
+    reject_reserved_name(trx, *(trx->m_op_ptr - 1));
 
     auto dict = trx->m_dict_ptr->dict_value(trx);
     if (!dict->is_frame()) {
@@ -434,7 +434,7 @@ static void bind_locals_op(Trix *trx) {
                 if (!names_base[i].is_name()) {
                     trx->error(Error::TypeCheck, "bind-locals: names-array element {} is not a Name", i);
                 } else {
-                    reject_reserved_name(trx, &names_base[i]);
+                    reject_reserved_name(trx, names_base[i]);
                     for (length_t j = 0; j < i; ++j) {
                         if (names_base[i].name_offset() == names_base[j].name_offset()) {
                             trx->error(Error::Unsupported,
@@ -666,7 +666,7 @@ static void known_op(Trix *trx) {
     auto key_ptr = trx->m_op_ptr;
     auto dict_ptr = (key_ptr - 1);
     auto dict = dict_ptr->dict_value(trx);
-    auto is_known = (dict->get(trx, key_ptr) != nullptr);
+    auto is_known = (dict->get(trx, *key_ptr) != nullptr);
     key_ptr->maybe_free_extvalue(trx);
     *dict_ptr = Object::make_boolean(is_known);
     trx->m_op_ptr = dict_ptr;
@@ -681,7 +681,7 @@ static void knownget_op(Trix *trx) {
     auto key_ptr = trx->m_op_ptr;
     auto dict_ptr = (key_ptr - 1);
     auto dict = dict_ptr->dict_value(trx);
-    auto value = dict->get(trx, key_ptr);
+    auto value = dict->get(trx, *key_ptr);
     auto result = (value != nullptr);
     key_ptr->maybe_free_extvalue(trx);
     if (result) {
@@ -703,7 +703,7 @@ static void getdefault_op(Trix *trx) {
     auto dict_ptr = (default_ptr - 2);
 
     auto dict = dict_ptr->dict_value(trx);
-    auto value = dict->get(trx, key_ptr);
+    auto value = dict->get(trx, *key_ptr);
     key_ptr->maybe_free_extvalue(trx);
     if (value != nullptr) {
         *dict_ptr = value->make_clone(trx);
@@ -723,7 +723,7 @@ static void load_op(Trix *trx) {
     auto key_ptr = trx->m_op_ptr;
     const Object *value{nullptr};
     if (key_ptr->is_name()) {
-        value = Name::name_search(trx, key_ptr);
+        value = Name::name_search(trx, *key_ptr);
     } else {
         std::tie(std::ignore, value) = Dict::key_lookup(trx, key_ptr);
     }
@@ -783,7 +783,7 @@ static void update_op(Trix *trx) {
     auto dict_ptr = (proc_ptr - 2);
 
     auto dict = dict_ptr->dict_value(trx);
-    auto value = dict->get(trx, key_ptr);
+    auto value = dict->get(trx, *key_ptr);
     if (value == nullptr) {
         trx->error(Error::Undefined, "update: key not found in dict");
     } else {
@@ -819,7 +819,7 @@ static void update_persist_op(Trix *trx) {
         trx->error(Error::AboveBarrier, "update-persist: key lives above the save barrier");
     } else {
         auto dict = dict_ptr->dict_value(trx);
-        auto value = dict->get(trx, key_ptr);
+        auto value = dict->get(trx, *key_ptr);
         if (value == nullptr) {
             trx->error(Error::Undefined, "update-persist: key not found in dict");
         } else {

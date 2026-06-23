@@ -304,9 +304,9 @@ static void dupn_op(Trix *trx) {
     }
 }
 
-static void copy_string(Trix *trx, const Object *src, Object *dst) {
-    auto src_ptr = src->string_vptr(trx);
-    auto src_length = src->string_length();
+static void copy_string(Trix *trx, Object src, Object *dst) {
+    auto src_ptr = src.string_vptr(trx);
+    auto src_length = src.string_length();
     auto dst_ptr = dst->string_vptr(trx);
     auto dst_length = dst->string_length();
     if (dst_length >= src_length) {
@@ -319,8 +319,8 @@ static void copy_string(Trix *trx, const Object *src, Object *dst) {
     }
 }
 
-static void copy_set(Trix *trx, const Object *src, Object *dst) {
-    auto src_set = src->set_value(trx);
+static void copy_set(Trix *trx, Object src, Object *dst) {
+    auto src_set = src.set_value(trx);
     auto dst_set = dst->set_value(trx);
     if (dst_set != src_set) {
         auto dst_capacity = dst_set->capacity();
@@ -334,8 +334,8 @@ static void copy_set(Trix *trx, const Object *src, Object *dst) {
     }
 }
 
-static void copy_dict(Trix *trx, const Object *src, Object *dst) {
-    auto src_dict = src->dict_value(trx);
+static void copy_dict(Trix *trx, Object src, Object *dst) {
+    auto src_dict = src.dict_value(trx);
     auto dst_dict = dst->dict_value(trx);
     if (dst_dict != src_dict) {
         auto dst_capacity = dst_dict->capacity();
@@ -362,19 +362,19 @@ static void copy_op(Trix *trx) {
     if (dst_ptr->is_array()) {
         trx->verify_operands(VerifyRWArray, VerifyArrays);
 
-        copy_array(trx, src_ptr, dst_ptr);
+        copy_array(trx, *src_ptr, dst_ptr);
     } else if (dst_ptr->is_string()) {
         trx->verify_operands(VerifyRWString, VerifyString);
 
-        copy_string(trx, src_ptr, dst_ptr);
+        copy_string(trx, *src_ptr, dst_ptr);
     } else if (dst_ptr->is_set()) {
         trx->verify_operands(VerifyRWSet, VerifySet);
 
-        copy_set(trx, src_ptr, dst_ptr);
+        copy_set(trx, *src_ptr, dst_ptr);
     } else {
         trx->verify_operands(VerifyRWDict, VerifyDict);
 
-        copy_dict(trx, src_ptr, dst_ptr);
+        copy_dict(trx, *src_ptr, dst_ptr);
     }
 
     *src_ptr = *dst_ptr;

@@ -166,22 +166,22 @@ static void bittoggle_op(Trix *trx) {
 
 // Returns the signed byte offset from an integer-typed Object.
 // Accepts Byte, Integer, UInteger, Long, ULong.
-[[nodiscard]] static long_t address_offset(Trix *trx, const Object *val_ptr) {
-    switch (+val_ptr->type()) {
+[[nodiscard]] static long_t address_offset(Trix *trx, Object val_ptr) {
+    switch (+val_ptr.type()) {
     case +Object::Type::Byte:
-        return val_ptr->byte_value();
+        return val_ptr.byte_value();
 
     case +Object::Type::Integer:
-        return val_ptr->integer_value();
+        return val_ptr.integer_value();
 
     case +Object::Type::UInteger:
-        return val_ptr->uinteger_value();
+        return val_ptr.uinteger_value();
 
     case +Object::Type::Long:
-        return val_ptr->long_value(trx);
+        return val_ptr.long_value(trx);
 
     case +Object::Type::ULong: {
-        auto ul = val_ptr->ulong_value(trx);
+        auto ul = val_ptr.ulong_value(trx);
         return static_cast<long_t>(ul);
     }
 

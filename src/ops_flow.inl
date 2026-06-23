@@ -705,10 +705,10 @@ static void case_op(Trix *trx) {
     auto container_ptr = (key_ptr - 1);
 
     auto dict = container_ptr->dict_value(trx);
-    auto value = dict->get(trx, key_ptr);
+    auto value = dict->get(trx, *key_ptr);
     if (value == nullptr) {
         auto default_name_obj = trx->wellknown_name(WellKnownName::Default);
-        value = dict->get(trx, &default_name_obj);
+        value = dict->get(trx, default_name_obj);
     }
 
     if (value == nullptr) {
@@ -1423,10 +1423,10 @@ static void at_catcherror_op(Trix *trx) {
         auto container = *trx->m_err_ptr--;
 
         auto dict = container.dict_value(trx);
-        auto value = dict->get(trx, errorname);
+        auto value = dict->get(trx, *errorname);
         if (value == nullptr) {
             auto default_name_obj = trx->wellknown_name(WellKnownName::Default);
-            value = dict->get(trx, &default_name_obj);
+            value = dict->get(trx, default_name_obj);
         }
 
         if ((value == nullptr) || value->is_literal() || value->ignores_execute()) {
@@ -1511,7 +1511,7 @@ static void throw_op(Trix *trx) {
     trx->verify_operands(VerifyName);
 
     auto errorname = trx->m_op_ptr--;
-    auto [valid, error] = trx->is_error_name(errorname);
+    auto [valid, error] = trx->is_error_name(*errorname);
     if (valid && (error == Error::NoError)) {
         trx->error(Error::InvalidThrow, "throw: /no-error is reserved");
     } else if (valid) {
@@ -1532,7 +1532,7 @@ static void throw_with_op(Trix *trx) {
 
     auto data_obj = *trx->m_op_ptr--;
     auto errorname = trx->m_op_ptr--;
-    auto [valid, error] = trx->is_error_name(errorname);
+    auto [valid, error] = trx->is_error_name(*errorname);
     if (valid && (error == Error::NoError)) {
         data_obj.maybe_free_extvalue(trx);
         trx->error(Error::InvalidThrow, "throw-with: /no-error is reserved");

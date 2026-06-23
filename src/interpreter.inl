@@ -420,11 +420,11 @@ void execute_value(Object value) {
 
 void execute_name(Object name) {
     auto trx = this;
-    auto value = Name::name_search(trx, &name);
+    auto value = Name::name_search(trx, name);
     if (value == nullptr) [[unlikely]] {
         error(Error::Undefined, "executable name {} is not associated with any Object", name.name_sv(trx));
     } else {
-        execute_resolved_value(value, name);
+        execute_resolved_value(*value, name);
     }
 }
 
@@ -438,9 +438,9 @@ void execute_name(Object name) {
 // Optimization -- so a slot-ref call gets exactly the same TCO (incl. the
 // closure @end-locals-over-@call case, which fires for frame-proc tails where
 // slot-refs live) as the equivalent name call.
-void execute_resolved_value(const Object *value, Object name) {
+void execute_resolved_value(Object value, Object name) {
     auto trx = this;
-    if (value->is_literal() || value->ignores_execute()) {
+    if (value.is_literal() || value.ignores_execute()) {
         // a proc encountered indirectly via an \name lookup is pushed on the execution stack
         // and called as a procedure.
         // ignores_execute() is used (not pushop_direct()) because Array/Packed do NOT have
@@ -448,12 +448,12 @@ void execute_resolved_value(const Object *value, Object name) {
         // clone value and push on operand stack
         require_op_capacity(1);
 
-        *++m_op_ptr = value->make_clone(trx);
-    } else if (value->is_operator()) {
+        *++m_op_ptr = value.make_clone(trx);
+    } else if (value.is_operator()) {
         // Operator: self-identifying via m_last_operator_ptr; no @call frame needed.
         // Operators do not use ExtValue, so make_clone would be a struct copy -- dispatch directly
         // on the bound value.  No exec-stack slot is consumed, so no capacity check is required.
-        value->operator_execute(trx);
+        value.operator_execute(trx);
     } else {
         // TCO shape detection: done BEFORE capacity reservation so that tail calls
         // (which grow the exec stack by only +1 slot) do not need to reserve the
@@ -472,7 +472,7 @@ void execute_resolved_value(const Object *value, Object name) {
         // but the pattern is preserved for future types that may violate that.)
         require_exec_capacity(is_tco ? 1 : 4);
 
-        auto clone = value->make_clone(trx);
+        auto clone = value.make_clone(trx);
         if (!clone.is_null()) [[likely]] {
             // Non-operator executable (proc, string, stream): push a literal Name
             // companion followed by an @call marker so format_backtrace() can identify
@@ -978,7 +978,7 @@ void execute_proc(Object proc) {
                 require_exec_capacity(1);
                 *++m_exec_ptr = proc;
             }
-            execute_resolved_value(slot_value, frame_dict->frame_slot_key(slot));
+            execute_resolved_value(*slot_value, frame_dict->frame_slot_key(slot));
             return;
         }
 

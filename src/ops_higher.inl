@@ -767,7 +767,7 @@ static void at_end_module_op(Trix *trx) {
 
         // Register in modules dict.  Duplicate module name is an error.
         auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-        if (modules_dict->get(trx, &name_obj) != nullptr) {
+        if (modules_dict->get(trx, name_obj) != nullptr) {
             trx->error(Error::Undefined, "module: '{}' is already defined", name_obj.name_sv(trx));
         } else {
             auto name_for_dict = name_obj.make_clone(trx);
@@ -817,7 +817,7 @@ static void module_dict_op(Trix *trx) {
 
     auto name_obj = *trx->m_op_ptr;
     auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-    auto value = modules_dict->get(trx, &name_obj);
+    auto value = modules_dict->get(trx, name_obj);
     if (value != nullptr) {
         *trx->m_op_ptr = *value;
     } else {
@@ -833,7 +833,7 @@ static void module_pred_op(Trix *trx) {
 
     auto name_obj = *trx->m_op_ptr;
     auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-    auto value = modules_dict->get(trx, &name_obj);
+    auto value = modules_dict->get(trx, name_obj);
     *trx->m_op_ptr = Object::make_boolean(value != nullptr);
 }
 
@@ -846,7 +846,7 @@ static void use_op(Trix *trx) {
 
     auto name_obj = *trx->m_op_ptr;
     auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-    auto value = modules_dict->get(trx, &name_obj);
+    auto value = modules_dict->get(trx, name_obj);
     if (value != nullptr) {
         --trx->m_op_ptr;
 
@@ -881,7 +881,7 @@ static void import_op(Trix *trx) {
         } else {
             // Look up module.
             auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-            auto mod_value = modules_dict->get(trx, &module_name_obj);
+            auto mod_value = modules_dict->get(trx, module_name_obj);
             if (mod_value == nullptr) {
                 trx->error(Error::Undefined, "import: module '{}' not found", module_name_obj.name_sv(trx));
             } else {
@@ -900,7 +900,7 @@ static void import_op(Trix *trx) {
                         if (!entry_name_obj.is_name()) {
                             trx->error(Error::TypeCheck, "import: entry name must be a name");
                         } else {
-                            auto entry_value = mod_dict->get(trx, &entry_name_obj);
+                            auto entry_value = mod_dict->get(trx, entry_name_obj);
                             if (entry_value != nullptr) {
                                 auto cloned_name = entry_name_obj.make_clone(trx);
                                 auto cloned_value = entry_value->make_clone(trx);
@@ -928,7 +928,7 @@ static void at_check_module_op(Trix *trx) {
     auto name_obj = *trx->m_exec_ptr--;
 
     auto modules_dict = trx->offset_to_ptr<Dict>(trx->m_modules_dict_offset);
-    if (modules_dict->get(trx, &name_obj) == nullptr) {
+    if (modules_dict->get(trx, name_obj) == nullptr) {
         trx->error(Error::Undefined, "require-module: file did not define module '{}'", name_obj.name_sv(trx));
     }
 }
@@ -1354,7 +1354,7 @@ static void closure_capture_op(Trix *trx) {
         }
 
         for (length_t i = 0; i < names_length; ++i) {
-            auto value = Name::name_search(trx, &names[i]);
+            auto value = Name::name_search(trx, names[i]);
             if (value == nullptr) {
                 trx->error(Error::Undefined, "closure-capture: name /{} not found", names[i].name_sv(trx));
             } else {

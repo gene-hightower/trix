@@ -913,7 +913,7 @@ static void record_from_dict_op(Trix *trx) {
     auto dict = dict_ptr->dict_value(trx);
     auto curr_save_level = trx->m_curr_save_level;
     for (length_t i = 0; i < name_count; ++i) {
-        auto value = dict->get(trx, &names[i]);
+        auto value = dict->get(trx, names[i]);
         if (value == nullptr) {
             // error() resets the gc-root stack on the throw path, so the temp
             // root needs no manual drop here.
@@ -1088,7 +1088,7 @@ static void record_group_by_op(Trix *trx) {
                         }
                     }
                     count_dict = trx->offset_to_ptr<Dict>(count_dict_offset);
-                    auto existing = count_dict->get(trx, key_ptr);
+                    auto existing = count_dict->get(trx, *key_ptr);
                     if (existing != nullptr) {
                         existing->update_integer(existing->integer_value() + 1);
                     } else {
@@ -1162,8 +1162,8 @@ static void record_group_by_op(Trix *trx) {
 
             auto key = inst->m_fields[fidx];
 
-            auto arr_obj = result_dict->get(trx, &key);
-            auto idx_obj = idx_dict->get(trx, &key);
+            auto arr_obj = result_dict->get(trx, key);
+            auto idx_obj = idx_dict->get(trx, key);
             if ((arr_obj == nullptr) || (idx_obj == nullptr)) {
                 trx->error(Error::InternalError, "record-group-by: key missing from result_dict/idx_dict in pass 2 (record {})", i);
             } else {

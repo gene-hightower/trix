@@ -1984,7 +1984,7 @@ void format_backtrace_report() {
         // value/length descriptor -- no recursive expansion, no heap-walks.
         if ((m_last_error_data_ptr != nullptr) && !m_last_error_data_ptr->is_null()) {
             char buffer[ObjectNameBufferSize];
-            static_cast<void>(trx->object_name(m_last_error_data_ptr, buffer));
+            static_cast<void>(trx->object_name(*m_last_error_data_ptr, buffer));
             switch (+m_last_error_data_ptr->type()) {
             case +Object::Type::Boolean:
                 diag_println("  last-error-data: {} {}", buffer, m_last_error_data_ptr->boolean_value() ? "true" : "false");
@@ -2216,7 +2216,7 @@ void format_backtrace_report() {
                 auto object = (m_op_ptr - i);
 
                 char buffer[ObjectNameBufferSize];
-                static_cast<void>(trx->object_name(object, buffer));
+                static_cast<void>(trx->object_name(*object, buffer));
                 switch (+object->type()) {
                 case +Object::Type::Boolean:
                     diag_print(" {} {}", buffer, object->boolean_value() ? "true" : "false");
@@ -2330,7 +2330,7 @@ void format_backtrace_report() {
                     diag_print("  preview [#{}]: [", preview_index);
                     for (int j = 0; j < cap; ++j) {
                         char b[ObjectNameBufferSize];
-                        static_cast<void>(trx->object_name(&elems[j], b));
+                        static_cast<void>(trx->object_name(elems[j], b));
                         if (j == 0) {
                             diag_print("{}", b);
                         } else {
@@ -2439,7 +2439,7 @@ void format_backtrace_report() {
     // fall back to the /user-error entry (default-handler).
     if ((value == nullptr) && (m_last_error == Error::UserError)) {
         auto fallback_obj = error_name(Error::UserError);
-        value = m_handlersdict->get(trx, &fallback_obj);
+        value = m_handlersdict->get(trx, fallback_obj);
     }
     if ((value == nullptr) || value->is_literal() || value->ignores_execute()) {
         auto cause = (value == nullptr) ? "missing" : "invalid";

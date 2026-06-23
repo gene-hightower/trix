@@ -178,7 +178,7 @@ static void peek_op(Trix *trx) {
         auto name_ptr = trx->m_op_ptr;
         auto addr_ptr = (name_ptr - 1);
 
-        auto [is_name, type] = trx->is_type_name(name_ptr);
+        auto [is_name, type] = trx->is_type_name(*name_ptr);
         if (!is_name) {
             trx->error(Error::TypeCheck, "peek: not a type name");
         } else if ((TypeToVerify(type) & VerifyNumbers) == 0) {
@@ -557,22 +557,22 @@ static T pack_maybe_swap(T value, std::endian target) {
 }
 
 // Extract a signed 64-bit integer from any integer-typed Object for pack.
-static int64_t pack_extract_signed(Trix *trx, const Object *arg, char spec) {
-    switch (arg->type()) {
+static int64_t pack_extract_signed(Trix *trx, Object arg, char spec) {
+    switch (arg.type()) {
     case Object::Type::Byte:
-        return static_cast<int64_t>(arg->byte_value());
+        return static_cast<int64_t>(arg.byte_value());
 
     case Object::Type::Integer:
-        return static_cast<int64_t>(arg->integer_value());
+        return static_cast<int64_t>(arg.integer_value());
 
     case Object::Type::UInteger:
-        return static_cast<int64_t>(arg->uinteger_value());
+        return static_cast<int64_t>(arg.uinteger_value());
 
     case Object::Type::Long:
-        return static_cast<int64_t>(arg->long_value(trx));
+        return static_cast<int64_t>(arg.long_value(trx));
 
     case Object::Type::ULong:
-        return static_cast<int64_t>(arg->ulong_value(trx));
+        return static_cast<int64_t>(arg.ulong_value(trx));
 
     case Object::Type::Null:
     case Object::Type::Address:
@@ -603,19 +603,19 @@ static int64_t pack_extract_signed(Trix *trx, const Object *arg, char spec) {
     case Object::Type::SlotRef:
         // 128-bit integers need the 'q'/'Q' specifier; the others are non-integer types
         // (SlotRef is a transient slot-index that never reaches a pack op).
-        trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg->type()));
+        trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg.type()));
     }
     std::unreachable();
 }
 
 // Extract an unsigned 64-bit integer from any integer-typed Object for pack.
-static uint64_t pack_extract_unsigned(Trix *trx, const Object *arg, char spec) {
-    switch (arg->type()) {
+static uint64_t pack_extract_unsigned(Trix *trx, Object arg, char spec) {
+    switch (arg.type()) {
     case Object::Type::Byte:
-        return static_cast<uint64_t>(arg->byte_value());
+        return static_cast<uint64_t>(arg.byte_value());
 
     case Object::Type::Integer: {
-        auto v = arg->integer_value();
+        auto v = arg.integer_value();
         if (v < 0) {
             trx->error(Error::RangeCheck, "pack '{:c}': negative value {}", spec, v);
         } else {
@@ -624,10 +624,10 @@ static uint64_t pack_extract_unsigned(Trix *trx, const Object *arg, char spec) {
     }
 
     case Object::Type::UInteger:
-        return static_cast<uint64_t>(arg->uinteger_value());
+        return static_cast<uint64_t>(arg.uinteger_value());
 
     case Object::Type::Long: {
-        auto v = arg->long_value(trx);
+        auto v = arg.long_value(trx);
         if (v < 0) {
             trx->error(Error::RangeCheck, "pack '{:c}': negative value {}", spec, v);
         } else {
@@ -636,7 +636,7 @@ static uint64_t pack_extract_unsigned(Trix *trx, const Object *arg, char spec) {
     }
 
     case Object::Type::ULong:
-        return static_cast<uint64_t>(arg->ulong_value(trx));
+        return static_cast<uint64_t>(arg.ulong_value(trx));
 
     case Object::Type::Null:
     case Object::Type::Address:
@@ -667,35 +667,35 @@ static uint64_t pack_extract_unsigned(Trix *trx, const Object *arg, char spec) {
     case Object::Type::SlotRef:
         // 128-bit integers need the 'q'/'Q' specifier; the others are non-integer types
         // (SlotRef is a transient slot-index that never reaches a pack op).
-        trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg->type()));
+        trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg.type()));
     }
     std::unreachable();
 }
 
 // Extract a signed 128-bit integer from any integer-typed Object for pack.
 // Widens narrower integer types into Int128.
-static int128_t pack_extract_int128(Trix *trx, const Object *arg, char spec) {
-    switch (+arg->type()) {
+static int128_t pack_extract_int128(Trix *trx, Object arg, char spec) {
+    switch (+arg.type()) {
     case +Object::Type::Byte:
-        return static_cast<int128_t>(arg->byte_value());
+        return static_cast<int128_t>(arg.byte_value());
 
     case +Object::Type::Integer:
-        return static_cast<int128_t>(arg->integer_value());
+        return static_cast<int128_t>(arg.integer_value());
 
     case +Object::Type::UInteger:
-        return static_cast<int128_t>(arg->uinteger_value());
+        return static_cast<int128_t>(arg.uinteger_value());
 
     case +Object::Type::Long:
-        return static_cast<int128_t>(arg->long_value(trx));
+        return static_cast<int128_t>(arg.long_value(trx));
 
     case +Object::Type::ULong:
-        return static_cast<int128_t>(arg->ulong_value(trx));
+        return static_cast<int128_t>(arg.ulong_value(trx));
 
     case +Object::Type::Int128:
-        return arg->int128_value(trx);
+        return arg.int128_value(trx);
 
     case +Object::Type::UInt128: {
-        auto u = arg->uint128_value(trx);
+        auto u = arg.uint128_value(trx);
         if (u > static_cast<uint128_t>(std::numeric_limits<int128_t>::max())) {
             trx->error(Error::RangeCheck, "pack '{:c}': uint128 value out of int128 range", spec);
         } else {
@@ -706,18 +706,18 @@ static int128_t pack_extract_int128(Trix *trx, const Object *arg, char spec) {
     default:
         break;
     }
-    trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg->type()));
+    trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg.type()));
 }
 
 // Extract an unsigned 128-bit integer from any integer-typed Object for pack.
 // Widens narrower integer types into UInt128; rejects negative signed values.
-static uint128_t pack_extract_uint128(Trix *trx, const Object *arg, char spec) {
-    switch (+arg->type()) {
+static uint128_t pack_extract_uint128(Trix *trx, Object arg, char spec) {
+    switch (+arg.type()) {
     case +Object::Type::Byte:
-        return static_cast<uint128_t>(arg->byte_value());
+        return static_cast<uint128_t>(arg.byte_value());
 
     case +Object::Type::Integer: {
-        auto v = arg->integer_value();
+        auto v = arg.integer_value();
         if (v < 0) {
             trx->error(Error::RangeCheck, "pack '{:c}': negative value {}", spec, v);
         } else {
@@ -726,10 +726,10 @@ static uint128_t pack_extract_uint128(Trix *trx, const Object *arg, char spec) {
     }
 
     case +Object::Type::UInteger:
-        return static_cast<uint128_t>(arg->uinteger_value());
+        return static_cast<uint128_t>(arg.uinteger_value());
 
     case +Object::Type::Long: {
-        auto v = arg->long_value(trx);
+        auto v = arg.long_value(trx);
         if (v < 0) {
             trx->error(Error::RangeCheck, "pack '{:c}': negative value {}", spec, v);
         } else {
@@ -738,10 +738,10 @@ static uint128_t pack_extract_uint128(Trix *trx, const Object *arg, char spec) {
     }
 
     case +Object::Type::ULong:
-        return static_cast<uint128_t>(arg->ulong_value(trx));
+        return static_cast<uint128_t>(arg.ulong_value(trx));
 
     case +Object::Type::Int128: {
-        auto v = arg->int128_value(trx);
+        auto v = arg.int128_value(trx);
         if (v < 0) {
             trx->error(Error::RangeCheck, "pack '{:c}': negative int128 value", spec);
         } else {
@@ -750,37 +750,37 @@ static uint128_t pack_extract_uint128(Trix *trx, const Object *arg, char spec) {
     }
 
     case +Object::Type::UInt128:
-        return arg->uint128_value(trx);
+        return arg.uint128_value(trx);
 
     default:
         break;
     }
-    trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg->type()));
+    trx->error(Error::TypeCheck, "pack '{:c}': expected integer type, got {}", spec, Object::type_sv(arg.type()));
 }
 
 // Extract a double from any numeric Object for pack.
-static double pack_extract_double(Trix *trx, const Object *arg, char spec) {
-    switch (arg->type()) {
+static double pack_extract_double(Trix *trx, Object arg, char spec) {
+    switch (arg.type()) {
     case Object::Type::Byte:
-        return static_cast<double>(arg->byte_value());
+        return static_cast<double>(arg.byte_value());
 
     case Object::Type::Integer:
-        return static_cast<double>(arg->integer_value());
+        return static_cast<double>(arg.integer_value());
 
     case Object::Type::UInteger:
-        return static_cast<double>(arg->uinteger_value());
+        return static_cast<double>(arg.uinteger_value());
 
     case Object::Type::Long:
-        return static_cast<double>(arg->long_value(trx));
+        return static_cast<double>(arg.long_value(trx));
 
     case Object::Type::ULong:
-        return static_cast<double>(arg->ulong_value(trx));
+        return static_cast<double>(arg.ulong_value(trx));
 
     case Object::Type::Real:
-        return static_cast<double>(arg->real_value());
+        return static_cast<double>(arg.real_value());
 
     case Object::Type::Double:
-        return arg->double_value(trx);
+        return arg.double_value(trx);
 
     case Object::Type::Null:
     case Object::Type::Address:
@@ -807,7 +807,7 @@ static double pack_extract_double(Trix *trx, const Object *arg, char spec) {
     case Object::Type::SourceLoc:
     case Object::Type::OpaqueHandle:
     case Object::Type::SlotRef:
-        trx->error(Error::TypeCheck, "pack '{:c}': expected numeric type, got {}", spec, Object::type_sv(arg->type()));
+        trx->error(Error::TypeCheck, "pack '{:c}': expected numeric type, got {}", spec, Object::type_sv(arg.type()));
     }
     std::unreachable();
 }
@@ -854,7 +854,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'b': {
-                    auto val = pack_extract_signed(trx, &args_ptr[arg_index++], 'b');
+                    auto val = pack_extract_signed(trx, args_ptr[arg_index++], 'b');
                     if ((val < -128) || (val > 127)) {
                         trx->error(Error::RangeCheck, "pack 'b': value {} out of int8 range", val);
                     } else {
@@ -866,7 +866,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'B': {
-                    auto val = pack_extract_unsigned(trx, &args_ptr[arg_index++], 'B');
+                    auto val = pack_extract_unsigned(trx, args_ptr[arg_index++], 'B');
                     if (val > 255) {
                         trx->error(Error::RangeCheck, "pack 'B': value {} out of uint8 range", val);
                     } else {
@@ -878,7 +878,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'h': {
-                    auto val = pack_extract_signed(trx, &args_ptr[arg_index++], 'h');
+                    auto val = pack_extract_signed(trx, args_ptr[arg_index++], 'h');
                     if ((val < -32768) || (val > 32767)) {
                         trx->error(Error::RangeCheck, "pack 'h': value {} out of int16 range", val);
                     } else {
@@ -890,7 +890,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'H': {
-                    auto val = pack_extract_unsigned(trx, &args_ptr[arg_index++], 'H');
+                    auto val = pack_extract_unsigned(trx, args_ptr[arg_index++], 'H');
                     if (val > 65535) {
                         trx->error(Error::RangeCheck, "pack 'H': value {} out of uint16 range", val);
                     } else {
@@ -902,7 +902,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'i': {
-                    auto val = pack_extract_signed(trx, &args_ptr[arg_index++], 'i');
+                    auto val = pack_extract_signed(trx, args_ptr[arg_index++], 'i');
                     auto v = pack_maybe_swap(static_cast<int32_t>(val), endian);
                     std::memcpy(out, &v, 4);
                     out += 4;
@@ -910,7 +910,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'I': {
-                    auto val = pack_extract_unsigned(trx, &args_ptr[arg_index++], 'I');
+                    auto val = pack_extract_unsigned(trx, args_ptr[arg_index++], 'I');
                     if (val > 0xFFFFFFFFu) {
                         trx->error(Error::RangeCheck, "pack 'I': value {} out of uint32 range", val);
                     } else {
@@ -922,7 +922,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'l': {
-                    auto val = pack_extract_signed(trx, &args_ptr[arg_index++], 'l');
+                    auto val = pack_extract_signed(trx, args_ptr[arg_index++], 'l');
                     auto v = pack_maybe_swap(static_cast<int64_t>(val), endian);
                     std::memcpy(out, &v, 8);
                     out += 8;
@@ -930,7 +930,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'L': {
-                    auto val = pack_extract_unsigned(trx, &args_ptr[arg_index++], 'L');
+                    auto val = pack_extract_unsigned(trx, args_ptr[arg_index++], 'L');
                     auto v = pack_maybe_swap(static_cast<uint64_t>(val), endian);
                     std::memcpy(out, &v, 8);
                     out += 8;
@@ -938,7 +938,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'q': {
-                    auto val = pack_extract_int128(trx, &args_ptr[arg_index++], 'q');
+                    auto val = pack_extract_int128(trx, args_ptr[arg_index++], 'q');
                     auto v = pack_maybe_swap(static_cast<uint128_t>(val), endian);
                     std::memcpy(out, &v, 16);
                     out += 16;
@@ -946,7 +946,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'Q': {
-                    auto val = pack_extract_uint128(trx, &args_ptr[arg_index++], 'Q');
+                    auto val = pack_extract_uint128(trx, args_ptr[arg_index++], 'Q');
                     auto v = pack_maybe_swap(val, endian);
                     std::memcpy(out, &v, 16);
                     out += 16;
@@ -954,7 +954,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'f': {
-                    auto val = static_cast<float>(pack_extract_double(trx, &args_ptr[arg_index++], 'f'));
+                    auto val = static_cast<float>(pack_extract_double(trx, args_ptr[arg_index++], 'f'));
                     auto v = pack_maybe_swap(val, endian);
                     std::memcpy(out, &v, 4);
                     out += 4;
@@ -962,7 +962,7 @@ static void pack_op(Trix *trx) {
                 }
 
                 case 'd': {
-                    auto val = pack_extract_double(trx, &args_ptr[arg_index++], 'd');
+                    auto val = pack_extract_double(trx, args_ptr[arg_index++], 'd');
                     auto v = pack_maybe_swap(val, endian);
                     std::memcpy(out, &v, 8);
                     out += 8;

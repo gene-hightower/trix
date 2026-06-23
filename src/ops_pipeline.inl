@@ -2260,10 +2260,10 @@ static Object pipe_walk_chain(Trix *trx, Object descriptor, PipeStageInfo *stage
             auto dict = current.dict_value(trx);
             auto type_key = trx->wellknown_name(WellKnownName::IKeyType);
             auto source_key = trx->wellknown_name(WellKnownName::IKeySource);
-            auto type_val = dict->get(trx, &type_key);
+            auto type_val = dict->get(trx, type_key);
             if (type_val == nullptr) {
                 // Dict has no /type key.  If it has /source, it's a malformed descriptor.
-                if (dict->get(trx, &source_key) != nullptr) {
+                if (dict->get(trx, source_key) != nullptr) {
                     trx->error(Error::TypeCheck, "pipeline: descriptor dict has /source but no /type");
                 } else {
                     break;  // not a pipeline descriptor -- treat as root source
@@ -2305,7 +2305,7 @@ static Object pipe_walk_chain(Trix *trx, Object descriptor, PipeStageInfo *stage
                 if ((info.type == PipeStageBatch) || (info.type == PipeStageTake) || (info.type == PipeStageDrop) ||
                     (info.type == PipeStageWindow)) {
                     auto n_key = trx->wellknown_name(WellKnownName::IKeyN);
-                    auto n_val = dict->get(trx, &n_key);
+                    auto n_val = dict->get(trx, n_key);
                     if ((n_val != nullptr) && !n_val->is_integer()) {
                         trx->error(Error::TypeCheck, "pipeline: descriptor /n must be an integer");
                     } else {
@@ -2313,20 +2313,20 @@ static Object pipe_walk_chain(Trix *trx, Object descriptor, PipeStageInfo *stage
                     }
                 } else if (info.type == PipeStageScan) {
                     auto proc_key = trx->wellknown_name(WellKnownName::IKeyProc);
-                    auto proc_val = dict->get(trx, &proc_key);
+                    auto proc_val = dict->get(trx, proc_key);
                     info.proc = (proc_val != nullptr) ? *proc_val : Object::make_null();
                     auto init_key = trx->wellknown_name(WellKnownName::IKeyInit);
-                    auto init_val = dict->get(trx, &init_key);
+                    auto init_val = dict->get(trx, init_key);
                     info.init = (init_val != nullptr) ? *init_val : Object::make_null();
                 } else {
                     auto proc_key = trx->wellknown_name(WellKnownName::IKeyProc);
-                    auto proc_val = dict->get(trx, &proc_key);
+                    auto proc_val = dict->get(trx, proc_key);
                     info.proc = (proc_val != nullptr) ? *proc_val : Object::make_null();
                 }
 
                 rev[rev_count++] = info;
 
-                auto source_val = dict->get(trx, &source_key);
+                auto source_val = dict->get(trx, source_key);
                 current = (source_val != nullptr) ? *source_val : Object::make_null();
             }
         }
@@ -2365,7 +2365,7 @@ pipe_materialize_multi_source(Trix *trx, Object root_source, Object first_buf, i
     } else {
         auto root_dict = root_source.dict_value(trx);
         auto type_key = trx->wellknown_name(WellKnownName::IKeyType);
-        auto type_val = root_dict->get(trx, &type_key);
+        auto type_val = root_dict->get(trx, type_key);
         if ((type_val == nullptr) || !type_val->is_name()) {
             return false;
         } else {
@@ -2376,7 +2376,7 @@ pipe_materialize_multi_source(Trix *trx, Object root_source, Object first_buf, i
                 auto is_merge = (type_sv == "pipe-merge");
 
                 auto sources_key = trx->wellknown_name(WellKnownName::IKeySources);
-                auto sources_val = root_dict->get(trx, &sources_key);
+                auto sources_val = root_dict->get(trx, sources_key);
                 if (sources_val == nullptr) {
                     trx->error(Error::TypeCheck, "pipeline: merge/zip descriptor missing /sources key");
                 } else if (!sources_val->is_array()) {
