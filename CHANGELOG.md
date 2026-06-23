@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Whitespace-only -- no behavior change.
 - README metrics table refreshed: source ~87,500 lines C++23 / 69 `.inl` files;
   20,700+ test assertions across 263 test files (operators unchanged at 838).
+- Pass `Object` by value instead of `const Object *` for single-object,
+  read-only parameters -- `Object` is a POD 8-byte handle (`sizeof(Object) == 8`,
+  no owning members), so a by-value copy is the same size as a pointer with no
+  indirection or spurious nullability. Applied across ~55 functions and their
+  call sites; `Dict::get`'s redundant `const Object *` overload is folded into
+  the existing by-value `get(Object)`. Parameters whose address is taken
+  (save/restore journaling), or that are walked as an array or a range, keep
+  their pointer by design. Behavior-preserving -- no snapshot-format change.
 
 ## [0.10.1] - 2026-06-21
 
