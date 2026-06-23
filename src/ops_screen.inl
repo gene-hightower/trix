@@ -607,6 +607,12 @@ static void screen_render_emit(Trix *trx, ScreenState *state, Emit emit_bytes) {
     // bound: cursor move (up to 10 bytes) + SGR (up to ~40 bytes) + UTF-8 (4 bytes).
     std::array<vm_t, 64> buf;
 
+    // SGR attribute bit -> code digit: bold=1 dim=2 italic=3 underline=4
+    // blink=5 reverse=7 strike=9 (codes 6 and 8 are intentionally skipped).
+    static constexpr std::array<std::pair<vm_t, vm_t>, 7> sgr_attr_codes{
+            {{0x01, '1'}, {0x02, '2'}, {0x04, '3'}, {0x08, '4'}, {0x10, '5'}, {0x20, '7'}, {0x40, '9'}}
+    };
+
     for (length_t row = 0; row < rows; ++row) {
         auto row_base = static_cast<vm_size_t>(row) * cols;
         for (length_t col = 0; col < cols; ++col) {
@@ -637,33 +643,11 @@ static void screen_render_emit(Trix *trx, ScreenState *state, Emit emit_bytes) {
                     buf[pos++] = 0x1B;
                     buf[pos++] = '[';
                     buf[pos++] = '0';
-                    if ((cur.m_attrs & 0x01) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '1';
-                    }
-                    if ((cur.m_attrs & 0x02) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '2';
-                    }
-                    if ((cur.m_attrs & 0x04) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '3';
-                    }
-                    if ((cur.m_attrs & 0x08) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '4';
-                    }
-                    if ((cur.m_attrs & 0x10) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '5';
-                    }
-                    if ((cur.m_attrs & 0x20) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '7';
-                    }
-                    if ((cur.m_attrs & 0x40) != 0) {
-                        buf[pos++] = ';';
-                        buf[pos++] = '9';
+                    for (auto [mask, code] : sgr_attr_codes) {
+                        if ((cur.m_attrs & mask) != 0) {
+                            buf[pos++] = ';';
+                            buf[pos++] = code;
+                        }
                     }
                     // Always emit fg/bg explicitly so the output is deterministic
                     // and independent of terminal default-color state.
