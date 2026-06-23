@@ -405,6 +405,7 @@ public:
     // returns the topmost active save level (BASE when none active);
     // is_active() is the common-case shorthand "are we inside a save?".
     [[nodiscard]] static save_level_t current_level(const Trix *trx) { return trx->m_curr_save_level; }
+
     [[nodiscard]] static bool is_active(const Trix *trx) { return (trx->m_curr_save_level != BASE); }
 
     //

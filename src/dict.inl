@@ -190,12 +190,14 @@ public:
     // a declared frame name and begin-locals reserved it).  frame_slot_key returns
     // the bound name for backtrace identification (the @call companion).
     [[nodiscard]] Object *frame_slot_value(length_t slot) { return &frame_entries()[slot].m_value; }
+
     [[nodiscard]] Object frame_slot_key(length_t slot) const { return frame_entries()[slot].m_key; }
 
     // True if this dict's contents are guaranteed local-VM only (no global
     // refs, transitively).  GC walker short-circuits on these.  See the
     // NoGlobalRefs flag comment above for the invariant.
     [[nodiscard]] bool has_no_global_refs() const { return ((m_access & NoGlobalRefs) != 0); }
+
     void set_no_global_refs_no_save() { m_access |= NoGlobalRefs; }
 
     // Tag a freshly-created dict as a frame dict (|locals|#N scope).  Set
@@ -242,6 +244,7 @@ public:
     // because the Trix GC helpers live outside the Dict class but
     // need direct access to this field.
     [[nodiscard]] vm_offset_t next_in_visit() const { return m_next_in_visit; }
+
     void set_next_in_visit_no_save(vm_offset_t off) { m_next_in_visit = off; }
 private:
     // Dispatches to make_real (single arg) or make_double (trx + arg) by type.

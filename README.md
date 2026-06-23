@@ -73,7 +73,7 @@ in concatenative.
 
 Trix is a concatenative (PostScript/Forth-style) stack language: values go on the stack,
 operators consume them.  It is implemented as a single-header C++23 library
-(68 `.inl` files assembled by `trix.h`).
+(69 `.inl` files assembled by `trix.h`).
 
 Output conventions in the examples below: `=` pops and prints a value
 (shows the type name for composites like arrays), while `==` pretty-prints
@@ -446,9 +446,9 @@ user-operator and interrupt APIs, and the complete Config table.
 
 | Metric               | Value                                                           |
 | -------------------- | --------------------------------------------------------------- |
-| Source               | ~85,000 lines C++23 (68 .inl files)                             |
+| Source               | ~87,500 lines C++23 (69 .inl files)                             |
 | Operators            | 838                                                             |
-| Test assertions      | 20,200+ across 270 test files                                   |
+| Test assertions      | 20,700+ across 263 test files                                   |
 | Fuzz testing         | libFuzzer harness (full interpreter)                            |
 | Interpreter dispatch | ~47M ops/sec (representative mix; see [benchmark/](benchmark/)) |
 | Frame-local read     | ~23M reads/sec, 1.21x vs name lookup (slot-indexing)            |

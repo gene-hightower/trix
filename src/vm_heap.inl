@@ -750,6 +750,7 @@ void gc_root_push_oneoff(T obj) {
     require_gc_root_capacity(1);
     *++m_gc_roots_ptr = obj;
 }
+
 void gc_root_pop_oneoff() {
     reset_gc_root(1);
 }

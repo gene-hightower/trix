@@ -87,7 +87,9 @@ public:
     // spawn count) flushes every m_binding; restore() in single-coroutine
     // mode does the same.
     [[nodiscard]] vm_offset_t binding() const { return m_binding; }
+
     void set_binding(vm_offset_t value_offset) { m_binding = value_offset; }
+
     void clear_binding() { m_binding = nulloffset; }
 
     [[nodiscard]] hash_t hash() const { return m_hash; }

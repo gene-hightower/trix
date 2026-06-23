@@ -24,6 +24,7 @@ static hash_t fnv1a32_void(const void *data, size_t size) {
     }
     return value;
 }
+
 static hash_t fnv1a32_sv(std::string_view sv) {
     return fnv1a32_void(sv.data(), sv.size());
 }
@@ -34,15 +35,18 @@ static uint64_t wy_read8(const char *p) {
     std::memcpy(&v, p, 8);
     return v;
 }
+
 static uint64_t wy_read4(const char *p) {
     uint32_t v;
     std::memcpy(&v, p, 4);
     return static_cast<uint64_t>(v);
 }
+
 static uint64_t wy_mum(uint64_t a, uint64_t b) {
     __uint128_t r = static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b);
     return static_cast<uint64_t>(r) ^ static_cast<uint64_t>(r >> 64);
 }
+
 static hash_t wyhash32_sv(std::string_view sv) {
     constexpr uint64_t S0 = 0xa0761d6478bd642fULL;
     constexpr uint64_t S1 = 0xe7037ed1a0b428dbULL;
