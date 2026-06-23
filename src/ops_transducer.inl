@@ -182,6 +182,30 @@ static std::pair<Object *, length_t> xf_get_steps(Trix *trx, Object *xf_ptr) {
 
 enum struct XfTarget { Array, Lazy, Pipe };
 
+// Maps a transducer step tag (xf-map, xf-filter, ...) to the array/lazy/pipe
+// operator that realizes it, plus argument shape.  pipe_op is meaningful only
+// when pipe_supported; unsupported steps error using the tag's own name
+// (e.g. "xf-take not supported for pipeline target").
+struct XfStepDispatch {
+    WellKnownName tag;
+    SystemName array_op;
+    SystemName lazy_op;
+    SystemName pipe_op;
+    bool pipe_supported;
+    bool has_arg;
+    bool is_scan;
+};
+
+static constexpr XfStepDispatch xf_step_dispatch[] = {
+        {     WellKnownName::XfMap,     SystemName::Map,     SystemName::LazyMap,    SystemName::PipeMap,  true,  true, false},
+        {  WellKnownName::XfFilter,  SystemName::Filter,  SystemName::LazyFilter, SystemName::PipeFilter,  true,  true, false},
+        {    WellKnownName::XfTake,    SystemName::Take,    SystemName::LazyTake,       SystemName::Take, false,  true, false},
+        {    WellKnownName::XfDrop,    SystemName::Drop,    SystemName::LazyDrop,       SystemName::Drop, false,  true, false},
+        {    WellKnownName::XfScan,    SystemName::Scan,    SystemName::LazyScan,       SystemName::Scan, false, false,  true},
+        { WellKnownName::XfFlatten, SystemName::Flatten, SystemName::LazyFlatten,    SystemName::Flatten, false, false, false},
+        {WellKnownName::XfDistinct,  SystemName::Dedupe,  SystemName::LazyDedupe,     SystemName::Dedupe, false, false, false},
+};
+
 // xf_push_steps_for_target: push transducer steps onto the exec stack as
 // target-specific operations.  Steps are pushed in reverse (LIFO) so they
 // execute in the correct order.  A step's tag-value, when present, is pushed as
@@ -202,75 +226,32 @@ static void xf_push_steps_for_target(Trix *trx, Object *steps_ptr, length_t step
             auto tag_name_obj = pair[Object::TaggedNameIndex];
             auto payload_obj = pair[Object::TaggedValueIndex];
 
-            // Dispatch on tag name to find target operator
-            SystemName op{};
-            auto has_arg = true;
-            auto is_scan = false;
-
-            if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfMap))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Map;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyMap;
-                } else {
-                    op = SystemName::PipeMap;
+            // Dispatch on tag name to the target-specific operator.
+            const XfStepDispatch *dispatch = nullptr;
+            for (const auto &row : xf_step_dispatch) {
+                if (tag_name_obj.equal(trx, trx->wellknown_name(row.tag))) {
+                    dispatch = &row;
+                    break;
                 }
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfFilter))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Filter;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyFilter;
-                } else {
-                    op = SystemName::PipeFilter;
-                }
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfTake))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Take;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyTake;
-                } else {
-                    trx->error(Error::Unsupported, "xf-take not supported for pipeline target");
-                }
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfDrop))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Drop;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyDrop;
-                } else {
-                    trx->error(Error::Unsupported, "xf-drop not supported for pipeline target");
-                }
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfScan))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Scan;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyScan;
-                } else {
-                    trx->error(Error::Unsupported, "xf-scan not supported for pipeline target");
-                }
-                has_arg = false;
-                is_scan = true;
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfFlatten))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Flatten;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyFlatten;
-                } else {
-                    trx->error(Error::Unsupported, "xf-flatten not supported for pipeline target");
-                }
-                has_arg = false;
-            } else if (tag_name_obj.equal(trx, trx->wellknown_name(WellKnownName::XfDistinct))) {
-                if (target == XfTarget::Array) {
-                    op = SystemName::Dedupe;
-                } else if (target == XfTarget::Lazy) {
-                    op = SystemName::LazyDedupe;
-                } else {
-                    trx->error(Error::Unsupported, "xf-distinct not supported for pipeline target");
-                }
-                has_arg = false;
-            } else {
+            }
+            if (dispatch == nullptr) {
                 auto sv = tag_name_obj.name_sv(trx);
                 trx->error(Error::TypeCheck, "unknown transducer step tag: /{}", sv);
             }
+
+            SystemName op{};
+            if (target == XfTarget::Array) {
+                op = dispatch->array_op;
+            } else if (target == XfTarget::Lazy) {
+                op = dispatch->lazy_op;
+            } else if (dispatch->pipe_supported) {
+                op = dispatch->pipe_op;
+            } else {
+                auto sv = tag_name_obj.name_sv(trx);
+                trx->error(Error::Unsupported, "{} not supported for pipeline target", sv);
+            }
+            auto has_arg = dispatch->has_arg;
+            auto is_scan = dispatch->is_scan;
 
             if (has_arg) {
                 auto arg_obj = payload_obj.make_clone(trx);
