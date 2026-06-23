@@ -549,7 +549,10 @@ static void snapshot_op(Trix *trx) {
                 h.operator_count = static_cast<uint32_t>(SYSOPERATOR_COUNT);
                 h.endian_le = (std::endian::native == std::endian::little) ? uint8_t{1} : uint8_t{0};
 
-                h.vm_base_addr = reinterpret_cast<uint64_t>(trx->m_vm_base);
+                // Normalized to 0 (not the real m_vm_base) so the image is byte-reproducible:
+                // the actual address varies with ASLR and is diagnostic-only -- thaw never
+                // reads it (all VM pointers are vm_offset_t, so no rebasing is needed).
+                h.vm_base_addr = 0;
                 h.vm_used = static_cast<uint32_t>(trx->m_vm_ptr - trx->m_vm_base);
                 h.vm_global_used = static_cast<uint32_t>(trx->m_vm_limit - trx->m_vm_global);
                 h.vm_capacity = static_cast<uint32_t>(trx->m_vm_limit - trx->m_vm_base);
@@ -749,6 +752,20 @@ static void snapshot_op(Trix *trx) {
                     }
                 };
 
+                // Emit the local VM blob in three segments, substituting zeros for the
+                // m_vm_temp_save region (per-save-level temp watermarks -- absolute pointers
+                // that vary with ASLR).  Those bytes are don't-care: thaw CRC-checks them and
+                // then re-derives the array from the new m_vm_limit, so zeroing them keeps
+                // snapshots byte-reproducible without affecting thaw.  on_real(ptr,len) takes a
+                // real span; on_zeros(len) takes a zero run.
+                auto emit_vm_blob = [&](auto on_real, auto on_zeros) {
+                    auto ts_off = static_cast<vm_size_t>(reinterpret_cast<const vm_t *>(trx->m_vm_temp_save) - trx->m_vm_base);
+                    auto ts_len = static_cast<vm_size_t>(trx->m_max_save_level * sizeof(vm_t *));
+                    on_real(trx->m_vm_base, ts_off);
+                    on_zeros(ts_len);
+                    on_real(trx->m_vm_base + ts_off + ts_len, h.vm_used - ts_off - ts_len);
+                };
+
                 // Section CRC pass: memory-stream section, then user-file section.
                 {
                     crc32_t mem_crc = 0;
@@ -775,7 +792,15 @@ static void snapshot_op(Trix *trx) {
                             [&](int range_fd, off64_t off, size_t n) { crc = crc_fd_range(trx, range_fd, off, n, crc); });
                     walk_user_file_blocks([&](const void *p, size_t n) { crc = crc32_update(crc, p, n); },
                                           [&](Stream *s) { crc = crc_stream_path(trx, s, crc); });
-                    crc = crc32_update(crc, trx->m_vm_base, h.vm_used);
+                    emit_vm_blob([&](const vm_t *p, vm_size_t n) { crc = crc32_update(crc, p, n); },
+                                 [&](vm_size_t n) {
+                                     static constexpr vm_t zeros[256]{};
+                                     while (n > 0) {
+                                         auto chunk = std::min<vm_size_t>(n, sizeof(zeros));
+                                         crc = crc32_update(crc, zeros, chunk);
+                                         n -= chunk;
+                                     }
+                                 });
                     // Global region (if any): bytes from m_vm_global to m_vm_limit.
                     if (h.vm_global_used > 0) {
                         crc = crc32_update(crc, trx->m_vm_global, h.vm_global_used);
@@ -813,8 +838,18 @@ static void snapshot_op(Trix *trx) {
                             },
                             [&](Stream *s) { write_stream_path(trx, s, fd); });
 
-                    // Write: 4. Local VM blob
-                    if (!write_all(fd, trx->m_vm_base, h.vm_used)) {
+                    // Write: 4. Local VM blob (m_vm_temp_save region zeroed for reproducibility).
+                    bool vm_blob_ok = true;
+                    emit_vm_blob([&](const vm_t *p, vm_size_t n) { vm_blob_ok = vm_blob_ok && write_all(fd, p, n); },
+                                 [&](vm_size_t n) {
+                                     static constexpr vm_t zeros[256]{};
+                                     while (vm_blob_ok && (n > 0)) {
+                                         auto chunk = std::min<vm_size_t>(n, sizeof(zeros));
+                                         vm_blob_ok = write_all(fd, zeros, chunk);
+                                         n -= chunk;
+                                     }
+                                 });
+                    if (!vm_blob_ok) {
                         auto errno_str = errno_string();
                         trx->error(Error::IOWriteError, "snap-shot: VM data write failed: {}/{}", errno, errno_str);
                     } else {
