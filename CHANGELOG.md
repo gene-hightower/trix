@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   previously accepted silently (last write won). Param/local and local/local
   duplicates are likewise rejected, and all parameters must precede any `/local`.
 
+### Internal
+- Code style: enforce the house rule of a blank line between every adjacent
+  function definition (including single-line accessors) across the source.
+  Whitespace-only -- no behavior change.
+- README metrics table refreshed: source ~87,500 lines C++23 / 69 `.inl` files;
+  20,700+ test assertions across 263 test files (operators unchanged at 838).
+
 ## [0.10.1] - 2026-06-21
 
 ### Fixed
