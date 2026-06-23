@@ -169,6 +169,12 @@ explicit Trix(void *mem, vm_size_t mem_size, Config config) : m_mutex{}, m_cond{
 private:
 //===--- Initialisation ---===//
 void init_and_interpret(Config config) {
+    // Apply an explicit RNG seed for reproducible fresh runs.  thaw / -l later
+    // restore the snapshot's saved RNG state, so this governs fresh runs only.
+    if (config.m_seed_set) {
+        m_pcg32.seed(config.m_seed);
+    }
+
     const char *filename = config.m_filename;
     const StartupMode mode = config.m_mode;
     const bool resident = config.m_resident;

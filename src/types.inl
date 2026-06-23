@@ -347,6 +347,8 @@ struct Config {
     uint32_t m_coroutine_quantum = DefaultCoroutineQuantum;  // default quantum for new coroutines
     uint64_t m_max_ops = 0;                                  // max operations before halt (0 = unlimited)
     uint64_t m_sleep_budget_ms{0};                           // cumulative sleep/timeout grant, ms (0 = unlimited)
+    uint64_t m_seed{0};                                      // --seed: PCG32 seed for a fresh run (used only when m_seed_set)
+    bool m_seed_set = false;                                 // whether --seed was given; thaw/-l restore saved RNG state regardless
 
     // Module search path: colon-separated list of directories searched by
     // require / require-module when the requested filename is relative and

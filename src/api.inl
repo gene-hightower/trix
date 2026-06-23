@@ -64,6 +64,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
         OptSandbox,
         OptNoBanner,
         OptResident,
+        OptSeed,
         OptQuantum,
         OptMaxOps,
         OptSleepBudget,
@@ -115,6 +116,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
             {           "max-ops", required_argument, nullptr,           OptMaxOps},
             {      "sleep-budget", required_argument, nullptr,      OptSleepBudget},
             {       "module-path", required_argument, nullptr,       OptModulePath},
+            {              "seed", required_argument, nullptr,             OptSeed},
 #ifdef TRIX_DEBUGGER
             {           "inspect",       no_argument, nullptr,          OptInspect},
             {  "inspect-on-error",       no_argument, nullptr,   OptInspectOnError},
@@ -378,6 +380,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "      --no-banner          Suppress only the startup banner (diagnostics kept;\n"
                      "                           for scripted interactive sessions)\n"
                      "      --sandbox            Disable filesystem, system, and raw memory ops\n"
+                     "      --seed N             Seed the RNG for reproducible runs (fresh runs only)\n"
                      "      --resident           Stay resident after the script or input ends:\n"
                      "                           wait for host-delivered work instead of exiting\n"
                      "      --about              Show extended version/build/config info\n"
@@ -569,6 +572,11 @@ static ParseResult parse_args(int argc, char *argv[]) {
 
         case OptResident:
             cfg.m_resident = true;
+            break;
+
+        case OptSeed:
+            cfg.m_seed = parse_clamped("seed", optarg, 0, std::numeric_limits<uint64_t>::max());
+            cfg.m_seed_set = true;
             break;
 
         case OptStdIn:
