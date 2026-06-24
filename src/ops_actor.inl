@@ -169,6 +169,21 @@ static void mailbox_append_blocked_sender(Trix *trx, MailboxHeader *mbx) {
     }
 }
 
+// Wake the head of a mailbox's blocked-sender list after a slot is freed: one
+// freed slot lets exactly one parked sender proceed.  No-op if no senders are
+// blocked.  Counterpart to mailbox_append_blocked_sender; shared by the recv /
+// recv-match / recv-match-timeout slot-free paths so the unlink+wake discipline
+// lives in one place.
+static void mailbox_wake_head_sender(Trix *trx, MailboxHeader *mbx) {
+    if (mbx->m_blocked_sender != nulloffset) {
+        auto head = mbx->m_blocked_sender;
+        auto head_ctx = trx->offset_to_ptr<CoroutineContext>(head);
+        mbx->m_blocked_sender = head_ctx->m_blocked_sender_next;
+        head_ctx->m_blocked_sender_next = nulloffset;
+        trx->coroutine_wake(head);
+    }
+}
+
 // Sentinel stored in m_head while a mailbox is parked on the free-list pool.
 // Used to detect double-recycle at O(1) (same principle as Dict::RecycleSentinel).
 static constexpr length_t MailboxRecycleSentinel{0xFFFF};
@@ -445,14 +460,7 @@ static void actor_recv_complete(Trix *trx, MailboxHeader *mbx) {
     mbx->m_head = static_cast<length_t>((mbx->m_head + 1) % mbx->m_capacity);
     --mbx->m_count;
 
-    // Wake head blocked sender (one slot freed = one sender can proceed)
-    if (mbx->m_blocked_sender != nulloffset) {
-        auto head = mbx->m_blocked_sender;
-        auto head_ctx = trx->offset_to_ptr<CoroutineContext>(head);
-        mbx->m_blocked_sender = head_ctx->m_blocked_sender_next;
-        head_ctx->m_blocked_sender_next = nulloffset;
-        trx->coroutine_wake(head);
-    }
+    mailbox_wake_head_sender(trx, mbx);
 
     trx->require_op_capacity(1);
     *++trx->m_op_ptr = message;
@@ -686,14 +694,7 @@ static void at_actor_recv_match_check_op(Trix *trx) {
                 auto message = data[phys_idx];
                 mailbox_remove_at(mbx, static_cast<length_t>(scan_idx));
 
-                // Wake head blocked sender (one slot freed)
-                if (mbx->m_blocked_sender != nulloffset) {
-                    auto head = mbx->m_blocked_sender;
-                    auto head_ctx = trx->offset_to_ptr<CoroutineContext>(head);
-                    mbx->m_blocked_sender = head_ctx->m_blocked_sender_next;
-                    head_ctx->m_blocked_sender_next = nulloffset;
-                    trx->coroutine_wake(head);
-                }
+                mailbox_wake_head_sender(trx, mbx);
 
                 trx->m_exec_ptr -= 2;  // pop companions [pred] [scan-index]
                 trx->require_op_capacity(1);
@@ -822,14 +823,7 @@ static void at_actor_recv_match_timeout_check_op(Trix *trx) {
                 auto message = data[phys_idx];
                 mailbox_remove_at(mbx, static_cast<length_t>(scan_idx));
 
-                // Wake head blocked sender (one slot freed)
-                if (mbx->m_blocked_sender != nulloffset) {
-                    auto head = mbx->m_blocked_sender;
-                    auto head_ctx = trx->offset_to_ptr<CoroutineContext>(head);
-                    mbx->m_blocked_sender = head_ctx->m_blocked_sender_next;
-                    head_ctx->m_blocked_sender_next = nulloffset;
-                    trx->coroutine_wake(head);
-                }
+                mailbox_wake_head_sender(trx, mbx);
 
                 deadline_obj.maybe_free_extvalue(trx);
                 trx->m_exec_ptr -= 3;  // pop companions
