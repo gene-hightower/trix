@@ -101,6 +101,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pipeline path did) -- a provably-dead store, since that field is read only for
   `FlagWasActor` contexts, which always recapture it at mailbox recycle.
   Behavior-preserving (-14 lines).
+- Hoist the triplicated "wake the head blocked sender after freeing a mailbox
+  slot" block (`ops_actor.inl`, the recv / recv-match / recv-match-timeout
+  paths) into one `mailbox_wake_head_sender` helper, counterpart to the existing
+  `mailbox_append_blocked_sender`. A future fix to the wake protocol now touches
+  one site, not three. Behavior-preserving.
+- Hoist the modular-exponentiation loop (binary exponentiation over `__uint128_t`
+  intermediates) shared by `prime?`'s Miller-Rabin witness test and `pow-mod`
+  into one `mod_pow(base, exp, mod)` helper. Behavior-preserving.
+- Collapse the 15 `instant-FIELD` / `instant-FIELD-local` accessor ops
+  (`ops_chrono.inl`) -- whose bodies only differed by UTC-vs-local and which
+  `CalendarParts` field -- onto two shared helpers (`instant_int_accessor` taking
+  a `CalendarParts` member pointer, `instant_weekday_accessor`). The 15 named
+  `_op` functions and their per-op docs stay as one-line dispatch wrappers, so
+  the operator table is unchanged. Behavior-preserving.
+- Add `Dict::set_for_each` / `Dict::set_all_of` adapters (set counterparts to
+  `for_each`, the latter short-circuiting like `std::ranges::all_of`) and route
+  the nine hand-rolled `SetEntry` cursors in `ops_set.inl` through them:
+  set-union / set-intersection / set-difference / symmetric-difference / members
+  via `set_for_each`, and `subset?` / `disjoint?` via `set_all_of` (preserving
+  their early-out). The re-entrant `@set-map` / `@set-filter` / `@set-for-all`
+  scheduler trampolines keep `set_next`, since their cursor state lives on the
+  exec stack across ticks. Behavior-preserving.
 
 ## [0.10.1] - 2026-06-21
 
