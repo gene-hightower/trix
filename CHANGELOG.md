@@ -73,6 +73,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (returned positionally as `TypeName{...}`); distinct-typed, locally-
   destructured pairs (allocator ptr+offset, `scan_proc_suffix`, etc.) keep
   `std::pair`. Behavior-preserving.
+- Replace the three designated-initializer `ScreenCell` aggregates (the only
+  designated-init in the tree) with positional init per house style, and hoist
+  the duplicated render sentinel into a named `SentinelScreenCell` constant.
+  Behavior-preserving.
+- Table-drive `verify_description`: the 14-arm if/else composite-mask chain
+  becomes a `verify_composites` lookup table, and the bit-emit loop a range-for
+  over `verify_sv`. Behavior-preserving.
+- Rename `ChildEntry::padding` to `restart_marked`: the field documented as
+  unused padding actually carries the transient OneForAll/RestForOne per-wave
+  "terminated" marker. Still `uint32_t`; 32-byte layout unchanged; stale comments
+  corrected.
+- Table-drive screen-render SGR attribute emission: the seven copy-paste
+  attribute-bit blocks in the render diff become a `{mask, code}` table walked in
+  one loop, removing per-bit transcription risk (the codes are non-contiguous --
+  reverse=7, strike=9). Behavior-preserving.
+- Table-drive transducer step dispatch: the 7-way if/equal cascade in
+  `xf_push_steps_for_target` (each repeating the same Array/Lazy/Pipe target
+  if/else) becomes an `xf_step_dispatch` table keyed by step tag; pipe-unsupported
+  errors reuse the tag's own name, so messages are byte-identical.
+  Behavior-preserving.
+- Unify the numeric-cast switches behind `cast_object()`: `promote_convert`,
+  `cast_op`, and `coerce_element` each repeated the same per-`Object::Type` switch
+  building `make_<type>(cast_to_type<T>(...))`. Factor it into `cast_object()` plus
+  an `is_numeric_or_boolean_type()` predicate (also replacing `coerce_op`'s inline
+  10-term target check); `cast_op` gates on the predicate so its "cannot cast to
+  non-numeric type" error is preserved exactly. Behavior-preserving.
+- Single-source the snapshot stream-block serialization: the memory-stream,
+  startup-tail, and user-file-stream block fields were emitted three times in the
+  same order (section CRC, overall CRC, write pass) -- a silent format-divergence
+  hazard if a field were added to one pass but not another. Factor the field order
+  into two walkers (`walk_memory_blocks` / `walk_user_file_blocks`) driven by
+  per-pass callbacks, so the on-disk order lives in one place. Byte-identical
+  output (no `SNAPSHOT_VERSION` bump; all 75 snapshot tests incl. the adversarial
+  format-drift calibration pass).
 - Snapshot images are now byte-reproducible across runs: the ASLR-varying
   absolute addresses that thaw discards and re-derives are normalized out of the
   image. The diagnostic `vm_base_addr` header field is written as 0; the
