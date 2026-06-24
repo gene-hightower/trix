@@ -1045,7 +1045,8 @@ line via `parse_args` (see [Command-Line Argument Parsing](#command-line-argumen
 | Parameter | Default | CLI Flag | Purpose |
 | --- | --- | --- | --- |
 | `m_filename` | nullptr | `[filename]` | Script or image file to load |
-| `m_mode` | ScriptFile | `-i`, `-l`, `--stdin` | ScriptFile, ImageFile, StdIn, Interactive, FileAndInteractive, or InspectFile (debugger builds only) |
+| `m_eval_source` | nullptr | `-e`, `--eval` | Inline source string to execute instead of a file (selects `Eval` mode; no filename is consumed) |
+| `m_mode` | ScriptFile | `-i`, `-l`, `--stdin`, `-e` | ScriptFile, Eval, ImageFile, StdIn, Interactive, FileAndInteractive, EvalAndInteractive, or InspectFile (debugger builds only) |
 | `m_stream_enable` | StdIOEnabled | `--stream-io` | Bitmask: stdin, stdout, stderr, stdedit |
 | `m_stream_count` | 4 | `--stream-count` | Max simultaneous file streams |
 | `m_stream_buffer_size` | 4K | `--stream-buffer` | Per-stream I/O buffer size |
@@ -1064,9 +1065,11 @@ line via `parse_args` (see [Command-Line Argument Parsing](#command-line-argumen
 | `m_eqdict_maxlength` | 32 | `--eq-dict` | Equality comparison dict buffer |
 | `m_eqset_maxlength` | 32 | `--eq-set` | Equality comparison set buffer |
 | `m_sandbox` | false | `--sandbox` | Disable filesystem, system, and raw memory ops |
+| `m_check_only` | false | `-c`, `--check` | Scan the source for lexical/structural errors without executing it |
 | `m_coroutine_quantum` | 0 | `--quantum` | Default quantum for new coroutines (0 = unlimited) |
 | `m_max_ops` | 0 | `--max-ops` | Execution-limit cap on total ops (0 = unlimited) |
 | `m_sleep_budget_ms` | 0 | `--sleep-budget` | Cumulative wall-clock park grant in ms; spent budget turns timed parks into immediate wakes (0 = unlimited) |
+| `m_timeout_ms` | 0 | `--timeout` | Wall-clock deadline in ms; raises `/time-limit` once exceeded while executing (0 = unlimited) |
 | `m_module_path` | nullptr | `--module-path` | Colon-separated `require` / `require-module` search path |
 | `m_debug` | false | `-d`, `--debug` | Enable interactive debugger |
 | `m_quiet` | false | `-q`, `--quiet` | Suppress startup banner AND all diagnostic stderr (error messages, backtraces, warnings) |

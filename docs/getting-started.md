@@ -43,13 +43,16 @@ it a few different ways:
 $ ./build.sh                       # builds ./trix  (see BUILDING.md)
 $ ./trix                           # start the interactive REPL
 $ ./trix program.trx               # run a program file
+$ ./trix -e '2 3 add ='            # run inline source, then exit
+5
 $ echo '2 3 add =' | ./trix --stdin
 5
 ```
 
 With no arguments `trix` starts an interactive read-eval-print loop; pass a
-filename to run a program, or `--stdin` to pipe one in.  The full command-line
-reference -- every flag and startup mode -- is in [Running Trix](cli.md).
+filename to run a program, `-e EXPR` to run inline source, or `--stdin` to pipe
+one in.  The full command-line reference -- every flag and startup mode -- is in
+[Running Trix](cli.md).
 
 ---
 

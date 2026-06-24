@@ -158,6 +158,7 @@ runtime to surface latent bugs:
 | `--test-eqgen-preload=N` | CLI flag | Preloads all five eq-storage generation counters (e.g. to `UINT32_MAX`) so the 2^32 wrap/LimitCheck path is reachable in one step instead of four billion. |
 | `--max-ops=N` | CLI flag | Hard execution-limit watchdog: raises `/execution-limit` after N operations.  Used to bound runaway-loop tests. |
 | `--sleep-budget=N` | CLI flag | Wall-clock companion to `--max-ops` (op counter cannot tick while parked): caps TOTAL granted sleep/timeout park time at N ms, then timed parks wake immediately.  The fuzz harness sets 500. |
+| `--timeout=MS` | CLI flag | Real-time deadline: raises `/time-limit` (exit 59) after MS ms of wall-clock since the run started.  Like `--max-ops`, only fires while ops execute; bounds elapsed time rather than op count. |
 | `--vm-size` / `--userdict-size` / depth flags | CLI flags | Starvation harnesses: a tiny VM or stack turns "works in practice" into deterministic `vm-full` / overflow paths.  Fuzz seeds use tight `--vm-size` to force GC mid-operation. |
 | `--sandbox` | CLI flag | Verifies the host-op ban is airtight: every filesystem/system/terminal op must raise `/unsupported` (a dedicated battery step runs `test_raw_mode_sandbox.trx` this way). |
 | `TRIX_HEAP_TRACKING` | build flag (debug default) | Per-callsite allocation accounting: `alloc-stats`, `vm-heap-snapshot` / `vm-heap-diff` let tests assert *which sites* allocated between two points. |

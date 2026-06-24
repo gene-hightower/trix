@@ -1035,9 +1035,44 @@ void execute_proc(Object proc) {
     }
 }
 
+// -c/--check: after each top-level token, drop the operand stack back to empty
+// so a long script's unconsumed literals cannot overflow it (in check mode the
+// operators that would normally consume them are skipped).  A Mark on the stack
+// means a composite ([ ], << >>, {{ }}) is mid-build -- its mark and elements
+// must survive until the closing delimiter collapses them -- so leave the stack
+// intact in that case.  Freed ExtValues keep the active-count balanced.
+void check_drain_operands() {
+    auto in_composite = false;
+    for (auto p = m_op_base; (p <= m_op_ptr) && !in_composite; ++p) {
+        in_composite = p->is_mark();
+    }
+    if (!in_composite) {
+        while (m_op_ptr >= m_op_base) {
+            m_op_ptr->maybe_free_extvalue(this);
+            --m_op_ptr;
+        }
+    }
+}
+
 void execute_input_token(Lexeme token, Object value) {
     // no need to clone value, Object was just created from input String/Stream
-    if (token == Lexeme::LiteralValue) {
+    //
+    // -c/--check: validate structure without running the program.  Literals --
+    // numbers, strings, names, and the scanner-built [ ], << >>, {{ }}, { }
+    // values -- must still flow onto the operand stack so the scanner can
+    // assemble and structurally check composites; executable tokens (operators,
+    // bare names) are skipped instead of run.  The scanner still raises
+    // SyntaxError on malformed input.  Scope is the top-level source only:
+    // `require` and friends never execute, so nested files are not pulled in.
+    if (m_check_only) [[unlikely]] {
+        if (token == Lexeme::LiteralValue) {
+            require_op_capacity(1);
+            *++m_op_ptr = value;
+        } else {
+            value.maybe_free_extvalue(this);
+        }
+        check_drain_operands();
+    } else if (token == Lexeme::LiteralValue) {
         require_op_capacity(1);
 
         *++m_op_ptr = value;
@@ -1263,7 +1298,18 @@ void dispatch_loop() {
 
         // periodic IRQ check: break to outer loop every N operations
         if (--irq_countdown == 0) {
-            break;
+            // wall-clock deadline (--timeout): one clock read per IRQ interval,
+            // and only when a timeout is armed.  Like the m_max_ops check above,
+            // this only ticks while ops execute -- a run blocked in a syscall or
+            // parked idle does not trip it.  Re-arm the deadline before throwing
+            // so a custom error handler gets a fresh window (mirrors the
+            // m_op_count reset on the ExecutionLimit path).
+            if ((m_timeout_ms != 0) && (std::chrono::steady_clock::now() >= m_deadline)) [[unlikely]] {
+                m_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(m_timeout_ms);
+                error(Error::TimeLimit, "wall-clock timeout reached ({} ms)", m_timeout_ms);
+            } else {
+                break;
+            }
         }
     }
 }
@@ -1273,6 +1319,13 @@ void interpreter() {
 
     // interpreter is active
     m_active = true;
+
+    // Arm the wall-clock deadline (--timeout) for this run.  Measured from the
+    // start of interpretation; idle/parked time counts toward it, but the check
+    // itself only fires while the dispatch loop is executing ops.
+    if (m_timeout_ms != 0) {
+        m_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(m_timeout_ms);
+    }
 
     while (true) {
         try {

@@ -57,6 +57,8 @@ trix [options] [filename] [script-args...]
   Options must come *before* the filename.
 - **`[filename]`** -- a `.trx` script to run, or (with `-l` / `--image`) a
   snapshot image to resume. If omitted, `trix` starts an interactive REPL.
+  With `-e` / `--eval` there is no filename: the inline source is the program,
+  and any remaining tokens are the script's args.
 - **`[script-args...]`** -- everything after the filename is **not**
   interpreted by `trix`. Those tokens are handed to the script unchanged and
   surfaced by the `command-line-args` operator. Option parsing stops at the
@@ -100,16 +102,18 @@ version, and the full default-configuration table (the defaults listed in
 
 ## 2. Startup modes
 
-The combination of filename and flags selects one of five modes. `trix`
+The combination of filename and flags selects the startup mode. `trix`
 resolves them as follows:
 
 | Invocation | Mode | Behavior |
 | --- | --- | --- |
 | `trix script.trx` | **Script file** | Run the file, then exit. |
+| `trix -e 'EXPR'` | **Eval** | Run the inline source `EXPR`, then exit (see [section 2.6](#26-inline-source--e----eval)). |
 | `trix` (no filename), or `trix -i` | **Interactive REPL** | Read-eval-print loop on the terminal. |
 | `trix --stdin` | **Standard input** | Read a whole program from stdin (for piped one-liners). |
 | `trix -l image.img` | **Image resume** | Resume a snapshot image (see [section 7](#7-snapshot-images-from-the-cli)). |
 | `trix -i script.trx` | **File then REPL** | Run the file, then drop into the REPL with that state loaded. |
+| `trix -e 'EXPR' -i` | **Eval then REPL** | Run the inline source, then drop into the REPL with that state loaded. |
 
 `--stdin` is mutually exclusive with both `-i` and a filename; combining them
 is a usage error:
@@ -227,6 +231,47 @@ hello
 Trix> quit
 ```
 
+### 2.6 Inline source (`-e` / `--eval`)
+
+`-e EXPR` (or `--eval EXPR`) runs `EXPR` as inline Trix source instead of
+reading a file -- the equivalent of `perl -e` or `python -c`. No filename is
+consumed: every token after `EXPR` becomes the script's args (surfaced by
+`command-line-args`).
+
+```console
+$ trix -e '2 3 add ='
+5
+$ trix -e 'command-line-args ==' alpha beta
+[(alpha)#lr (beta)#lr]
+```
+
+`-e` may be given only once (a second `-e` is a usage error rather than a
+silent join) and is mutually exclusive with a filename, `--stdin`, and
+`-l`/`--image`. Combined with `-i` it runs the inline source and then drops
+into the REPL with the resulting state (the **Eval then REPL** mode above).
+
+### 2.7 Check-only (`-c` / `--check`)
+
+`-c` (or `--check`) scans a program for **lexical and structural** errors --
+unbalanced `{}` / `[]`, unterminated strings, malformed numbers -- *without
+executing it*, like the lexical half of `perl -c`. It exits `0` if the source
+scans cleanly, or with the scanner's error code (e.g. `/syntax-error` = 39)
+otherwise. It works on a script file, `--stdin`, or `-e` source:
+
+```console
+$ trix -c good.trx          ; echo $?
+0
+$ trix -c -e '{ 1 2 add'    ; echo $?    # unbalanced brace
+Trix syntax-error 'scanner': ... unexpected end of input
+39
+```
+
+Because nothing runs, `-c` does not recurse into `require`d files (those names
+are never executed) -- it validates the top-level source only. It cannot be
+combined with `-l`/`--image`, `-i`, or `--resident`, and needs a source to
+check (a bare `-c` is a usage error). Note: scan-time immediate constructs
+(`${...}`) still evaluate, since that is part of scanning.
+
 ---
 
 ## 3. Option reference
@@ -245,6 +290,8 @@ prints the live defaults for your build.
 | `-v`, `--version` | -- | Print version + build info and exit 0. |
 | `--about` | -- | Print extended version/build/config info and exit 0. |
 | `--error-codes` | -- | Print every `Error` name with its process exit code (one `code`-TAB-`name` line per entry) and exit 0. The codes are the runtime source of truth for the exit-code contract ([trix-reference.md "Process exit codes"](trix-reference.md#316-error-handling)). |
+| `-e`, `--eval` | EXPR | Run `EXPR` as inline source instead of a file ([section 2.6](#26-inline-source--e----eval)). May be given once; no filename is consumed. |
+| `-c`, `--check` | -- | Scan a script for lexical/structural errors without executing it ([section 2.7](#27-check-only--c----check)). Exit 0 if clean. |
 | `-i`, `--stdedit`, `--interactive` | -- | Force the interactive REPL (default when no filename). |
 | `--stdin` | -- | Read the program from standard input. |
 | `-l`, `--image` | -- | Treat the filename as a snapshot image, not a script. |
@@ -292,6 +339,7 @@ unparseable value is a usage error (exit 1).
 | `--quantum` | N | 0 (unlimited) | 0 .. 1000000000 |
 | `--max-ops` | N | 0 (unlimited) | 0 .. 2^64-1 |
 | `--sleep-budget` | N (ms) | 0 (unlimited) | 0 .. 2^64-1 |
+| `--timeout` | MS | 0 (unlimited) | 0 .. 2^64-1 |
 | `--module-path` | PATH | (none) | colon-separated dirs (see [section 4](#4-module-search-path-and---module-path)) |
 
 Notes on the less obvious knobs:
@@ -353,6 +401,22 @@ Notes on the less obvious knobs:
   (actor receive with no timeout, `read-key-byte`'s infinite wait) are
   not wall-clock sleeps and are unaffected. The fuzz harness sets both
   knobs.
+- **`--timeout`** is a real-time deadline: the VM raises `/time-limit`
+  (exit 59) once that many milliseconds of wall-clock have elapsed since
+  the run started. Unlike `--max-ops` (deterministic op count) it bounds
+  actual elapsed time, which is what CI hang-protection usually wants:
+
+  ```console
+  $ trix --timeout=1000 spin.trx
+  Trix time-limit '@loop': wall-clock timeout reached (1000 ms)
+  $ echo "exit=$?"
+  exit=59
+  ```
+
+  Like `--max-ops`, the check only fires *while ops execute* -- a run
+  blocked in a syscall or parked idle does not trip it (use
+  `--sleep-budget` to bound parks). The two are complementary: pair
+  `--max-ops` for determinism with `--timeout` for a real-time backstop.
 
 ---
 
@@ -563,6 +627,7 @@ Here `/undefined` maps to exit code 41. A few commonly-seen codes:
 | 41   | `/undefined`          | executable name not bound in any dict   |
 | 46   | `/vm-full`            | VM heap exhausted                       |
 | 54   | `/execution-limit`    | `--max-ops` cap reached                 |
+| 59   | `/time-limit`         | `--timeout` wall-clock deadline reached |
 
 Codes 0..124 are reserved for Trix errors; 125 is an uncaught C++ exception;
 126/127 are POSIX-reserved; 128+N means "killed by signal N". A

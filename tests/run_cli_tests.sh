@@ -196,9 +196,14 @@ run_case eq-flags-accept 0 exact 'cli-ok' - -- -q --eq-string=64 --eq-array=32 -
 run_case misc-flags-accept 0 exact 'cli-ok' - -- -q --stream-count=8 --save-depth=8 --module-path=/tmp --quantum=100 "$CLI/ok.trx"
 run_case quantum-above-max-clamps 0 grep 'trix: --quantum: 2000000000 exceeds maximum 1000000000
 cli-ok' - -- -q --quantum=2000000000 "$CLI/ok.trx"
-# the Error enum doubles as the exit code: ExecutionLimit = 53
+# the Error enum doubles as the exit code (resolved symbolically here)
 run_case max-ops-limit execution-limit none '' - -- -q --max-ops=50 "$CLI/loop.trx"
 run_case max-ops-unlimited 0 exact '1001' - -- -q --max-ops=0 "$CLI/loop.trx"
+# --timeout: wall-clock deadline.  An infinite loop trips /time-limit; a quick
+# script finishes well within a generous deadline; 0 means unlimited.
+run_case timeout-trips time-limit none '' - -- -q --timeout=100 -e '{ } loop'
+run_case timeout-generous 0 exact 'cli-ok' - -- -q --timeout=10000 "$CLI/ok.trx"
+run_case timeout-zero-unlimited 0 exact 'cli-ok' - -- -q --timeout=0 "$CLI/ok.trx"
 # sleep-budget: the cumulative park grant caps a ~28h sleep to ~0.1s; a
 # regression here surfaces as the runner's CASE_TIMEOUT killing the case
 run_case sleep-budget-bounds 0 exact 'sleep-ok' - -- -q --sleep-budget=100 "$CLI/sleep-huge.trx"
@@ -215,11 +220,44 @@ repl2' '(repl2) = quit' -- -q -i "$CLI/ok.trx"
 run_case stdin-mode 0 exact 'stdin-ok' '(stdin-ok) =' -- -q --stdin
 run_case argv-tail-not-parsed 0 grep '[(--help)#lr (-x)#lr (extra)#lr]' - -- -q "$CLI/echo-args.trx" --help -x extra
 
+#--- -e/--eval inline source ---#
+run_case eval-basic 0 exact '5' - -- -q -e '2 3 add ='
+run_case eval-long 0 exact 'eval-ok' - -- -q --eval '(eval-ok) ='
+run_case eval-empty 0 none '' - -- -q -e ''
+# tokens after EXPR are the script's argv tail (no filename is consumed)
+run_case eval-args 0 exact '[(alpha)#lr (beta)#lr]' - -- -q -e 'command-line-args ==' alpha beta
+# -e then -i: inline source runs, then the REPL takes over
+run_case eval-then-repl 0 grep 'eval-ok
+repl2' '(repl2) = quit' -- -q -e '(eval-ok) =' -i
+
+#--- -c/--check scan-only (never executes) ---#
+run_case check-clean-file 0 none '' - -- -q -c "$CLI/ok.trx"
+# loop.trx prints 1001 when run; under -c it must stay silent (not executed)
+run_case check-no-execute 0 none '' - -- -q -c "$CLI/loop.trx"
+run_case check-eval-clean 0 none '' - -- -q -c -e '2 3 add ='
+# composites ([ ], << >>, {{ }}) build via the operand stack while scanning, so
+# check mode must keep that machinery working (not just discard tokens)
+run_case check-composites 0 none '' - -- -q -c -e '[ 1 [ 2 3 ] 4 ] << /a 1 >> {{ /s }} =='
+# many unconsumed top-level values (300 literals, 128-deep stack) must not
+# overflow under -c: the drain between top-level tokens keeps the stack bounded
+CHECK_MANY="$(yes '1' | head -300 | tr '\n' ' ')"
+run_case check-no-opstack-overflow 0 none '' - -- -q --operand-depth=128 -c -e "$CHECK_MANY"
+# unbalanced brace (EOF inside proc) and a stray close brace both fail to scan
+run_case check-syntax-error-file syntax-error none '' - -- -q -c "$CLI/bad-syntax.trx"
+run_case check-stray-brace syntax-error none '' - -- -q -c -e '1 2 } add'
+
 #--- mode mutual exclusions (usage errors, exit 1) ---#
 run_case stdin-excludes-i 1 exact 'trix: --stdin and -i/--stdedit are mutually exclusive' 'quit' -- --stdin -i
 run_case stdin-excludes-file 1 exact 'trix: --stdin and filename are mutually exclusive' - -- --stdin "$CLI/ok.trx"
 run_case image-requires-file 1 exact 'trix: -l/--image requires an image filename' - -- -l
 run_case image-excludes-i 1 exact 'trix: --image and -i/--stdedit are mutually exclusive' - -- -l -i "$CLI/ok.trx"
+run_case eval-twice 1 exact 'trix: -e/--eval may be given only once' - -- -e '1' -e '2'
+run_case eval-excludes-image 1 exact 'trix: -e/--eval and -l/--image are mutually exclusive' - -- -e '1' -l
+run_case eval-excludes-stdin 1 exact 'trix: -e/--eval and --stdin are mutually exclusive' - -- -e '1' --stdin
+run_case check-excludes-image 1 exact 'trix: -c/--check cannot be combined with -l/--image' - -- -c -l "$CLI/ok.trx"
+run_case check-excludes-i 1 exact 'trix: -c/--check cannot be combined with -i/--stdedit' - -- -c -i "$CLI/ok.trx"
+run_case check-requires-source 1 exact 'trix: -c/--check requires a script file, --stdin, or -e/--eval' - -- -c
+run_case check-excludes-resident 1 exact 'trix: -c/--check and --resident are mutually exclusive' - -- -c --resident "$CLI/ok.trx"
 
 #--- startup failures exit non-zero (Error enum = exit code) ---#
 run_case missing-script file-open-error grep 'Trix could not open startup file' - -- "$WORK_DIR/no_such.trx"

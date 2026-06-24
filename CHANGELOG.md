@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`-e` / `--eval EXPR` runs inline source.** Executes `EXPR` as a Trix program
+  instead of reading a file (the `perl -e` / `python -c` equivalent). No filename
+  is consumed: tokens after `EXPR` become the script's args (`command-line-args`).
+  May be given once; mutually exclusive with a filename, `--stdin`, and
+  `-l`/`--image`. Combined with `-i` it runs the source then drops into the REPL.
+- **`-c` / `--check` validates without executing.** Scans a script file, `--stdin`,
+  or `-e` source for lexical/structural errors (unbalanced `{}`/`[]`, unterminated
+  strings, malformed numbers) and exits `0` if clean or with the scanner's error
+  code otherwise — the lexical half of `perl -c`. Nothing runs, so it does not
+  recurse into `require`d files. Cannot combine with `-l`, `-i`, or `--resident`.
+- **`--timeout=MS` wall-clock deadline.** Raises the new `/time-limit` error
+  (exit 59) once `MS` milliseconds of wall-clock elapse during a run — a real-time
+  companion to `--max-ops` (which bounds op count). Like `--max-ops`, it only fires
+  while ops execute, not while parked/blocked (use `--sleep-budget` for parks).
 - **Named declared locals in the `|...|` preamble.** A `/`-prefixed name is a
   declared frame local — `{ |a b /t /acc| ... }` takes `a`, `b` as parameters
   (popped) and declares `t`, `acc` as locals. Declared locals are *not* bound at

@@ -252,7 +252,8 @@ bool m_debug_active{false};
 std::unordered_map<vm_offset_t, std::vector<int32_t>> m_debug_proc_lines{};
 #endif
 bool m_sandbox{false};
-bool m_quiet{false};  // suppress all diagnostic stderr output (banners, backtraces, error messages)
+bool m_check_only{false};  // -c/--check: drive the scanner over the source without executing tokens
+bool m_quiet{false};       // suppress all diagnostic stderr output (banners, backtraces, error messages)
 // Set TRIX_BT_VERBOSE=1 (env var) to opt format_backtrace into uncapped
 // output: all operands shown (not just top 8), preview rendered for every
 // composite operand (not just the first found), uncapped preview lengths.
@@ -436,6 +437,15 @@ uint64_t m_max_ops{0};  // 0 = unlimited; halt with limit-check when reached
 // grants degrade to immediate wakes.  Not part of save/restore.
 uint64_t m_sleep_budget_ms{0};   // 0 = unlimited; mirror of Config::m_sleep_budget_ms
 uint64_t m_sleep_granted_ms{0};  // ms granted so far against the budget
+
+// --timeout: wall-clock deadline.  m_timeout_ms is the mirror of
+// Config::m_timeout_ms (0 = unlimited).  When non-zero, interpreter() stamps
+// m_deadline at run start and dispatch_loop's periodic IRQ check raises
+// Error::TimeLimit once steady_clock passes it.  Like m_max_ops, the check
+// only ticks while ops execute -- a run blocked in a syscall or parked idle
+// does not trip it.  Not part of save/restore.
+uint64_t m_timeout_ms{0};
+std::chrono::steady_clock::time_point m_deadline{};
 
 // Script-side argv: snapshot of Config::m_script_argv/argc captured at init.
 // Pointers reference the original process argv (lifetime = process); not

@@ -650,6 +650,7 @@ and `try-catch` handlers. Every error code is both throwable and catchable.
 `/assert-failed` -- Assertion failed.
 `/unsupported` -- Operation not supported in the current context.
 `/execution-limit` -- Per-process or per-actor instruction budget exhausted (when a quantum/budget is set).
+`/time-limit` -- Wall-clock deadline (`--timeout`) reached while executing (only fires while ops run, not while parked).
 
 ### Snapshot Errors
 

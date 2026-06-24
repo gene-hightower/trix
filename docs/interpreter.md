@@ -902,23 +902,23 @@ a descriptor row.
 
 ### 13.1 Error Codes
 
-Trix defines 58 error codes covering every category of failure:
+Trix defines 59 error codes covering every category of failure:
 
-| Category               | Errors | Examples                                                           |
-| ---------------------- | ------ | ------------------------------------------------------------------ |
-| Stack overflow         | 4      | `OpStackOverflow`, `ExecStackOverflow`, `DictStackOverflow`        |
-| Stack underflow        | 2      | `OpStackUnderflow`, `DictStackUnderflow`                           |
-| Type & range           | 4      | `TypeCheck`, `RangeCheck`, `IndexCheck`, `UndefinedCase`           |
-| Access                 | 3      | `ReadOnly`, `InvalidAccess`, `InvalidStreamAccess`                 |
-| Numeric                | 5      | `DivByZero`, `NumericalOverflow`, `NumericalNaN`, `NumericalINF`   |
-| Name                   | 2      | `Undefined`, `InvalidName`                                         |
-| I/O & filesystem       | 8      | `FileOpenError`, `FilenameNotFound`, `IOReadError`, `IOWriteError` |
-| Scanner                | 8      | `SyntaxError`, `LimitCheck`, `ScanMatchFail`, `UnmatchedMark`      |
-| VM & snapshot          | 4      | `VMFull`, `SnapShotError`, `InvalidImageFile`, `InvalidRestore`    |
-| Control flow & effects | 6      | `InvalidExit`, `InvalidThrow`, `AboveBarrier`, `EffectNotHandled`  |
-| Contracts & assertions | 6      | `Fail`, `Require`, `Ensure`, `Match`, `Protocol`, `AssertFailed`   |
-| Limits & misc          | 4      | `DictFull`, `ExecutionLimit`, `Unsupported`, `InvalidFormatString` |
-| Internal & user        | 2      | `InternalError`, `UserError`                                       |
+| Category | Errors | Examples |
+| --- | --- | --- |
+| Stack overflow | 4 | `OpStackOverflow`, `ExecStackOverflow`, `DictStackOverflow` |
+| Stack underflow | 2 | `OpStackUnderflow`, `DictStackUnderflow` |
+| Type & range | 4 | `TypeCheck`, `RangeCheck`, `IndexCheck`, `UndefinedCase` |
+| Access | 3 | `ReadOnly`, `InvalidAccess`, `InvalidStreamAccess` |
+| Numeric | 5 | `DivByZero`, `NumericalOverflow`, `NumericalNaN`, `NumericalINF` |
+| Name | 2 | `Undefined`, `InvalidName` |
+| I/O & filesystem | 8 | `FileOpenError`, `FilenameNotFound`, `IOReadError`, `IOWriteError` |
+| Scanner | 8 | `SyntaxError`, `LimitCheck`, `ScanMatchFail`, `UnmatchedMark` |
+| VM & snapshot | 4 | `VMFull`, `SnapShotError`, `InvalidImageFile`, `InvalidRestore` |
+| Control flow & effects | 6 | `InvalidExit`, `InvalidThrow`, `AboveBarrier`, `EffectNotHandled` |
+| Contracts & assertions | 6 | `Fail`, `Require`, `Ensure`, `Match`, `Protocol`, `AssertFailed` |
+| Limits & misc | 5 | `DictFull`, `ExecutionLimit`, `TimeLimit`, `Unsupported`, `InvalidFormatString` |
+| Internal & user | 2 | `InternalError`, `UserError` |
 
 Each error code maps to a Name object (`/type-check`, `/div-by-zero`,
 etc.) that can be used as a `try-catch` handler key.

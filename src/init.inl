@@ -176,6 +176,7 @@ void init_and_interpret(Config config) {
     }
 
     const char *filename = config.m_filename;
+    const char *eval_source = config.m_eval_source;
     const StartupMode mode = config.m_mode;
     const bool resident = config.m_resident;
     const stream_enable_t stream_enable = config.m_stream_enable;
@@ -225,6 +226,7 @@ void init_and_interpret(Config config) {
     m_debug_active = (m_debug.m_mode != DebugState::Mode::Off);
 #endif
     m_sandbox = config.m_sandbox;
+    m_check_only = config.m_check_only;
     m_quiet = config.m_quiet;
     m_script_argc = config.m_script_argc;
     m_script_argv = config.m_script_argv;
@@ -250,6 +252,7 @@ void init_and_interpret(Config config) {
             trx->m_useroperators = useroperators;
             trx->m_max_ops = config.m_max_ops;
             trx->m_sleep_budget_ms = config.m_sleep_budget_ms;
+            trx->m_timeout_ms = config.m_timeout_ms;
 
             if (mode == StartupMode::ImageFile) {
                 // Restore VM state from a snap-shot image and resume execution.
@@ -641,7 +644,7 @@ void init_and_interpret(Config config) {
                 }
 
                 // standard Streams and stream pool
-                Stream::init(trx, stream_enable, stream_count, stream_buffer_size, filename, mode, resident);
+                Stream::init(trx, stream_enable, stream_count, stream_buffer_size, filename, eval_source, mode, resident);
 
                 // create and populate standard Dicts
                 Dict::init(trx, Dict::InitConfig{userdict_maxlength, useroperators});
@@ -742,7 +745,8 @@ void init_and_interpret(Config config) {
 
                 // print startup banner for interactive modes
                 if (!config.m_quiet && !config.m_no_banner &&
-                    ((mode == StartupMode::Interactive) || (mode == StartupMode::FileAndInteractive))) {
+                    ((mode == StartupMode::Interactive) || (mode == StartupMode::FileAndInteractive) ||
+                     (mode == StartupMode::EvalAndInteractive))) {
                     auto vm_size = static_cast<uint64_t>(m_vm_limit - m_vm_base);
                     constexpr uint64_t G = 1024ULL * 1024 * 1024;
                     constexpr uint64_t M = 1024ULL * 1024;

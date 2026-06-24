@@ -2285,6 +2285,7 @@ the failure context.
 /scan-type-fail  /scan-type-mismatch
 /require  /ensure  /execution-limit  /unhandled-capture
 /effect-not-handled  /protocol  /match  /above-barrier  /user-error
+/time-limit
 ```
 
 **User-defined error names:** any Name may be passed to `throw` or `throw-with`
@@ -2301,7 +2302,7 @@ its process exit status reflects how the run ended:
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Clean exit -- script ran to completion, or `quit` was invoked |
-| `1`..`58` | Uncaught error reached `default-handler`; the value is the underlying `Error` enum (see below) |
+| `1`..`59` | Uncaught error reached `default-handler`; the value is the underlying `Error` enum (see below) |
 | `11` (`/io-read-error`) | `EndOfStream` exception escaped initialization or the interpreter loop |
 | `125` | Uncaught C++ host exception (`std::exception` or unknown) |
 | `128+N` | Killed by signal `N` (standard Unix shell convention; not set by Trix) |
@@ -2315,7 +2316,8 @@ loud rather than silently overflowing into the shell-reserved codes.
 The numeric value is the position of the error in the `Error` enum in
 `src/types.inl` (declaration order, not the doc list above).  Common ones:
 `/assert-failed` = 1, `/div-by-zero` = 5, `/io-read-error` = 11, `/type-check`
-= 40, `/undefined` = 41, `/user-error` = 58, `/invalid-name` = 19.  User-defined
+= 40, `/undefined` = 41, `/user-error` = 58, `/time-limit` = 59, `/invalid-name`
+= 19.  User-defined
 names thrown via `throw-with` map to `/user-error` (58) regardless of the name.
 
 Programs that want a custom mapping install their own proc into

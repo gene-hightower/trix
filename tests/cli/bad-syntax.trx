@@ -1,0 +1,6 @@
+% bad-syntax.trx -- deliberately unbalanced brace for the --check syntax-error
+% case in run_cli_tests.sh.  The scanner hits EOF inside the procedure body and
+% raises /syntax-error (exit 39) before anything runs; -c reports it without
+% executing the (otherwise valid) lines above.
+/x 1 def
+{ x 2 add

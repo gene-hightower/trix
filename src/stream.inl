@@ -187,6 +187,7 @@ public:
                      stream_count_t stream_count,
                      stream_buffer_size_t stream_buffer_size,
                      const char *startup_filename,
+                     const char *eval_source,
                      StartupMode mode,
                      bool resident) {
         // create the memory pool of Stream and i/o buffers
@@ -383,6 +384,31 @@ public:
             return false;
         };
 
+        // Helper: open the -e/--eval inline source as a memory stream and push
+        // [@Run, exec-stream] above the Quit floor.  The source bytes are copied
+        // into VM so the stream can borrow them for the process lifetime (mirrors
+        // the inspect-boot memory stream below).  Returns true on success.
+        auto push_eval_source = [&]() -> bool {
+            auto ok = false;
+            if (eval_source != nullptr) {
+                auto length = std::strlen(eval_source);
+                auto [bytes, _] = trx->vm_alloc<vm_t>(static_cast<vm_size_t>(length) + 1);
+                std::copy_n(reinterpret_cast<const vm_t *>(eval_source), length, bytes);
+                bytes[length] = '\0';
+                auto result = Stream::open_memory(trx, bytes, length, /*owns_data=*/false);
+                if (result.success) {
+                    *++trx->m_exec_ptr = Object::make_control_operator(SystemName::atRun);
+                    *++trx->m_exec_ptr =
+                            Object::make_stream(result.offset, result.sid, Object::ExecutableAttrib, Object::ReadOnlyAccess);
+                    ok = true;
+                } else {
+                    trx->diag_println("Trix could not open the -e/--eval source stream");
+                    trx->m_exit_code = +Error::LimitCheck;
+                }
+            }
+            return ok;
+        };
+
         // Helper: synthesize a Trix boot string that loads lib/debugger.trx,
         // installs the chosen variant of the debugger, and runs the user
         // script.  Allocates the source bytes in VM, opens them as a
@@ -487,6 +513,11 @@ public:
         if (mode == StartupMode::ScriptFile) {
             // Mode 1: run file, exit
             push_startup_file();
+        } else if (mode == StartupMode::Eval) {
+            // Mode: execute the -e/--eval inline source, then exit via the Quit
+            // floor.  push_eval_source records m_exit_code on failure; an empty
+            // -e '' opens an empty stream that scans straight to EOF (exit 0).
+            push_eval_source();
         }
 #ifdef TRIX_DEBUGGER
         else if (mode == StartupMode::InspectFile) {
@@ -524,6 +555,17 @@ public:
             if (trx->m_stdedit != nullptr) {
                 push_repl_stream(trx->m_stdedit, STDEDIT_SID);
                 push_startup_file();
+            } else {
+                trx->diag_println("Trix stdedit is not available (disabled via --stream-io)");
+                trx->m_exit_code = +Error::InvalidStreamAccess;
+            }
+        } else if (mode == StartupMode::EvalAndInteractive) {
+            // Run the -e/--eval inline source, then drop to REPL.  stdedit at
+            // bottom (runs after), eval source on top (runs first) -- mirrors
+            // FileAndInteractive.
+            if (trx->m_stdedit != nullptr) {
+                push_repl_stream(trx->m_stdedit, STDEDIT_SID);
+                push_eval_source();
             } else {
                 trx->diag_println("Trix stdedit is not available (disabled via --stream-io)");
                 trx->m_exit_code = +Error::InvalidStreamAccess;

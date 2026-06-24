@@ -156,6 +156,7 @@ exit codes" at the bottom.
 | Error | When | Typical raisers | Recovery |
 | --- | --- | --- | --- |
 | `/execution-limit` | Per-process or per-actor instruction budget exhausted (when enabled) | Long-running tight loops in budgeted contexts | Re-architect to yield (`coroutine`) or raise the budget |
+| `/time-limit` | Wall-clock deadline (`--timeout`) reached while executing | Long-running or non-terminating scripts under a `--timeout` budget | Raise/clear the deadline; only fires while ops run, not while parked |
 | `/unsupported` | Op recognised but not supported in this combination | `{ ... }#pw` (packed proc + writable), some HandleKind-specific gaps | Choose the supported variant (`{ ... }#aw` for a writable proc body) |
 
 ## Internal / catch-all
@@ -275,8 +276,8 @@ esac
 ```
 
 The exact mapping is the enum order in `src/types.inl::Error`.  Codes
-0..124 are reserved for Trix errors (NoError = 0 through UserError =
-58); 125 is reserved for an uncaught C++ exception; 126/127 are
+0..124 are reserved for Trix errors (NoError = 0 through TimeLimit =
+59); 125 is reserved for an uncaught C++ exception; 126/127 are
 POSIX-reserved shell codes; 128+N is "killed by signal N".
 
 ---

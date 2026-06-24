@@ -301,10 +301,12 @@ static constexpr vm_size_t DefaultVmSize{1024 * 1024};
 
 enum struct StartupMode {
     ScriptFile,          // interpret filename as a Trix source file
+    Eval,                // execute an inline source string supplied via -e/--eval (no filename)
     ImageFile,           // restore VM state from a snap-shot image written by the snap-shot operator
     StdIn,               // read from stdin (no readline, no prompt; for piped input)
     Interactive,         // readline REPL via stdedit (default when no filename)
     FileAndInteractive,  // run script file, then drop to readline REPL
+    EvalAndInteractive,  // run the -e/--eval inline source, then drop to readline REPL
     InspectFile,         // load lib/debugger.trx, install the debugger UI, then run script (--inspect).
                          // Enum value is always present (keeps switches/comparisons stable), but the
                          // --inspect flags that select it are gated out of non-debugger builds, so it
@@ -313,6 +315,9 @@ enum struct StartupMode {
 
 struct Config {
     const char *m_filename = nullptr;
+    // -e/--eval: inline source string to execute instead of a file (StartupMode::Eval).
+    // Points at process-lifetime storage (a parse_args static buffer); nullptr otherwise.
+    const char *m_eval_source = nullptr;
     StartupMode m_mode = StartupMode::ScriptFile;
     stream_enable_t m_stream_enable = DefaultStreamEnable;
     stream_count_t m_stream_count = DefaultStreamCount;
@@ -338,15 +343,17 @@ struct Config {
 #ifdef TRIX_DEBUGGER
     bool m_debug = false;
 #endif
-    bool m_quiet = false;      // suppress startup banner AND all diagnostic stderr (backtraces, error messages, internal warnings)
-    bool m_no_banner = false;  // suppress ONLY the interactive startup banner; diagnostics unaffected
-    bool m_sandbox = false;    // disable filesystem, system, and raw memory operators
-    bool m_resident = false;   // skip the exec-stack Quit floor: when startup work drains, park on
-                               // the IRQ wait and serve invoke()/raise_interrupt() work items
-                               // instead of exiting (stopped by a delivered quit or ExitIRQ)
+    bool m_quiet = false;       // suppress startup banner AND all diagnostic stderr (backtraces, error messages, internal warnings)
+    bool m_no_banner = false;   // suppress ONLY the interactive startup banner; diagnostics unaffected
+    bool m_sandbox = false;     // disable filesystem, system, and raw memory operators
+    bool m_check_only = false;  // -c/--check: scan the source for lexical/structural errors, do not execute
+    bool m_resident = false;    // skip the exec-stack Quit floor: when startup work drains, park on
+                                // the IRQ wait and serve invoke()/raise_interrupt() work items
+                                // instead of exiting (stopped by a delivered quit or ExitIRQ)
     uint32_t m_coroutine_quantum = DefaultCoroutineQuantum;  // default quantum for new coroutines
     uint64_t m_max_ops = 0;                                  // max operations before halt (0 = unlimited)
     uint64_t m_sleep_budget_ms{0};                           // cumulative sleep/timeout grant, ms (0 = unlimited)
+    uint64_t m_timeout_ms{0};                                // --timeout: wall-clock deadline, ms (0 = unlimited)
     uint64_t m_seed{0};                                      // --seed: PCG32 seed for a fresh run (used only when m_seed_set)
     bool m_seed_set = false;                                 // whether --seed was given; thaw/-l restore saved RNG state regardless
 
@@ -471,8 +478,9 @@ enum struct Error : Error_t {
     EffectNotHandled,
     AboveBarrier,
     UserError,
+    TimeLimit,
 };
-static constexpr auto ErrorCount{+Error::UserError + 1};
+static constexpr auto ErrorCount{+Error::TimeLimit + 1};
 // The Error enum doubles as the process exit code on uncaught error: the
 // runtime exits with status `+error`.  Reserve 125+ for shell/POSIX-defined
 // codes (125 = uncaught C++ exception, 126/127 = shell-reserved, 128+N =
@@ -664,6 +672,9 @@ static_assert(ErrorCount <= 125,
 
     case Error::UserError:
         return "user-error"sv;
+
+    case Error::TimeLimit:
+        return "time-limit"sv;
 
     default:
         assert(false && "error_sv: unknown Error");

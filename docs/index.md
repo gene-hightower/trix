@@ -166,8 +166,8 @@ that sets Trix apart from Lua and other embeddable scripting VMs.
 ## Tooling
 
 - [**Running Trix**](cli.md) -- command-line reference: every flag,
-  the five startup modes, module search path, `--sandbox`, the
-  snapshot workflow, exit codes
+  the startup modes, `-e`/`--eval`, `-c`/`--check`, module search path,
+  `--sandbox`, `--timeout`, the snapshot workflow, exit codes
 - [**Interactive Debugger**](debugger.md) -- `./trix --inspect FILE`
   five-pane TUI: step, breakpoints (plain / conditional / one-shot),
   watches, sandboxed expression eval, frame navigation, stack

@@ -68,6 +68,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
         OptQuantum,
         OptMaxOps,
         OptSleepBudget,
+        OptTimeout,
         OptModulePath,
         OptErrorCodes,
 #ifdef TRIX_DEBUGGER
@@ -88,6 +89,8 @@ static ParseResult parse_args(int argc, char *argv[]) {
             {           "stdedit",       no_argument, nullptr,                 'i'},
             {       "interactive",       no_argument, nullptr,                 'i'},
             {             "image",       no_argument, nullptr,                 'l'},
+            {              "eval", required_argument, nullptr,                 'e'},
+            {             "check",       no_argument, nullptr,                 'c'},
             {             "stdin",       no_argument, nullptr,            OptStdIn},
             {             "quiet",       no_argument, nullptr,                 'q'},
             {         "no-banner",       no_argument, nullptr,         OptNoBanner},
@@ -115,6 +118,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
             {           "quantum", required_argument, nullptr,          OptQuantum},
             {           "max-ops", required_argument, nullptr,           OptMaxOps},
             {      "sleep-budget", required_argument, nullptr,      OptSleepBudget},
+            {           "timeout", required_argument, nullptr,          OptTimeout},
             {       "module-path", required_argument, nullptr,       OptModulePath},
             {              "seed", required_argument, nullptr,             OptSeed},
 #ifdef TRIX_DEBUGGER
@@ -373,6 +377,10 @@ static ParseResult parse_args(int argc, char *argv[]) {
 #ifdef TRIX_DEBUGGER
                      "  -d, --debug              Enable interactive debugger\n"
 #endif
+                     "  -e, --eval EXPR          Execute EXPR as inline source instead of a file\n"
+                     "                           (tokens after EXPR become the script's args)\n"
+                     "  -c, --check              Scan a script for lexical/structural errors\n"
+                     "                           without executing it; exit 0 if it is clean\n"
                      "  -i, --stdedit            Interactive REPL (default when no filename)\n"
                      "      --stdin              Read from standard input (for piped commands)\n"
                      "  -l, --image              Load snap-shot image instead of script\n"
@@ -416,6 +424,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "      --quantum=N          Default coroutine quantum (0 = unlimited) [{}] (0..{})\n"
                      "      --max-ops=N          Execution-limit cap (0 = unlimited) [0] (0..{})\n"
                      "      --sleep-budget=N     Cumulative sleep/timeout grant, ms (0 = unlimited) [0] (0..{})\n"
+                     "      --timeout=MS         Wall-clock deadline, ms (0 = unlimited) [0] (0..{})\n"
                      "      --module-path=PATH   Colon-separated search path for require/require-module.\n"
                      "                             Binary-relative `lib/` is searched last.",
                      format_size(DefaultVmSize, vm_def),
@@ -467,6 +476,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      DefaultCoroutineQuantum,
                      1'000'000'000u,
                      std::numeric_limits<uint64_t>::max(),
+                     std::numeric_limits<uint64_t>::max(),
                      std::numeric_limits<uint64_t>::max());
     };
 
@@ -507,6 +517,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
     optind = 1;  // reset getopt state for re-entrant safety
     int opt;
     auto interactive_requested = false;
+    auto eval_requested = false;
     // Leading "+" disables option permutation: getopt stops at the first
     // non-option argument (the script filename), leaving any following
     // tokens in argv for command-line-args to surface to the script.
@@ -516,9 +527,9 @@ static ParseResult parse_args(int argc, char *argv[]) {
     while ((opt = getopt_long(argc,
                               argv,
 #ifdef TRIX_DEBUGGER
-                              "+hvdilq"
+                              "+hvdilqce:"
 #else
-                              "+hvilq"
+                              "+hvilqce:"
 #endif
                               ,
                               long_options,
@@ -556,6 +567,24 @@ static ParseResult parse_args(int argc, char *argv[]) {
 
         case 'l':
             cfg.m_mode = StartupMode::ImageFile;
+            break;
+
+        case 'e':
+            // -e/--eval: borrow the inline source straight from argv (optarg is
+            // process-lifetime storage, like --module-path); no allocation.  A
+            // second -e is rejected rather than silently dropped or joined.
+            if (eval_requested) {
+                std::println(stderr, "trix: -e/--eval may be given only once");
+                result.should_exit = true;
+                result.exit_code = 1;
+            } else {
+                cfg.m_eval_source = optarg;
+                eval_requested = true;
+            }
+            break;
+
+        case 'c':
+            cfg.m_check_only = true;
             break;
 
         case 'q':
@@ -718,6 +747,10 @@ static ParseResult parse_args(int argc, char *argv[]) {
             cfg.m_sleep_budget_ms = parse_clamped("sleep-budget", optarg, 0, std::numeric_limits<uint64_t>::max());
             break;
 
+        case OptTimeout:
+            cfg.m_timeout_ms = parse_clamped("timeout", optarg, 0, std::numeric_limits<uint64_t>::max());
+            break;
+
         case OptModulePath:
             cfg.m_module_path = optarg;
             break;
@@ -762,22 +795,46 @@ static ParseResult parse_args(int argc, char *argv[]) {
         }
     }
 
-    // Remaining non-option argument is the filename.
+    // Remaining non-option arguments.  In -e/--eval mode there is no script
+    // filename, so every remaining token is part of the script's argv tail.
+    // Otherwise the first remaining token is the filename and the rest are the
+    // argv tail, surfaced via the command-line-args operator (parse_args does
+    // NOT interpret them -- the .trx script does).
     if (optind < argc) {
-        cfg.m_filename = argv[optind];
+        if (eval_requested) {
+            cfg.m_script_argv = &argv[optind];
+            cfg.m_script_argc = argc - optind;
+        } else {
+            cfg.m_filename = argv[optind];
 
-        // Anything after the filename becomes the script's argv tail,
-        // surfaced via the command-line-args operator.  parse_args does NOT
-        // try to interpret these flags -- the .trx script does.
-        if ((optind + 1) < argc) {
-            cfg.m_script_argv = &argv[optind + 1];
-            cfg.m_script_argc = argc - (optind + 1);
+            if ((optind + 1) < argc) {
+                cfg.m_script_argv = &argv[optind + 1];
+                cfg.m_script_argc = argc - (optind + 1);
+            }
         }
     }
 
     // Resolve startup mode from flags and filename.
+    // -e/--eval has the highest precedence among source selectors: it runs the
+    // inline source and consumes no filename.  Mutually exclusive with --stdin
+    // and --image; -i/--stdedit appends a REPL after the inline source runs.
+    if (eval_requested) {
+        if (cfg.m_mode == StartupMode::ImageFile) {
+            std::println(stderr, "trix: -e/--eval and -l/--image are mutually exclusive");
+            result.should_exit = true;
+            result.exit_code = 1;
+        } else if (cfg.m_mode == StartupMode::StdIn) {
+            std::println(stderr, "trix: -e/--eval and --stdin are mutually exclusive");
+            result.should_exit = true;
+            result.exit_code = 1;
+        } else if (interactive_requested) {
+            cfg.m_mode = StartupMode::EvalAndInteractive;
+        } else {
+            cfg.m_mode = StartupMode::Eval;
+        }
+    }
     // --stdin is mutually exclusive with -i and with a filename.
-    if (cfg.m_mode == StartupMode::StdIn) {
+    else if (cfg.m_mode == StartupMode::StdIn) {
         if (interactive_requested) {
             std::println(stderr, "trix: --stdin and -i/--stdedit are mutually exclusive");
             result.should_exit = true;
@@ -829,6 +886,30 @@ static ParseResult parse_args(int argc, char *argv[]) {
             cfg.m_mode = StartupMode::Interactive;
         }
         // else: filename without -i -> ScriptFile (default)
+    }
+
+    // -c/--check validation (orthogonal to source selection).  Check mode scans
+    // a script file, --stdin, or -e/--eval source without executing it; it has
+    // nothing to do with a loaded image, a live REPL, or a resident instance.
+    if (cfg.m_check_only && !result.should_exit) {
+        if (cfg.m_mode == StartupMode::ImageFile) {
+            std::println(stderr, "trix: -c/--check cannot be combined with -l/--image");
+            result.should_exit = true;
+            result.exit_code = 1;
+        } else if (cfg.m_resident) {
+            std::println(stderr, "trix: -c/--check and --resident are mutually exclusive");
+            result.should_exit = true;
+            result.exit_code = 1;
+        } else if (interactive_requested) {
+            std::println(stderr, "trix: -c/--check cannot be combined with -i/--stdedit");
+            result.should_exit = true;
+            result.exit_code = 1;
+        } else if (cfg.m_mode == StartupMode::Interactive) {
+            // No source selected (would have defaulted to the REPL).
+            std::println(stderr, "trix: -c/--check requires a script file, --stdin, or -e/--eval");
+            result.should_exit = true;
+            result.exit_code = 1;
+        }
     }
 
     return result;

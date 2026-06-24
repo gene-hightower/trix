@@ -358,17 +358,21 @@ cmake --build build
 trix                              # interactive REPL (no filename)
 trix script.trx                   # run a script, then exit
 trix script.trx a b c             # pass args (script reads them via command-line-args)
+trix -e '2 3 add ='               # run inline source (prints 5), then exit
 echo "1 2 add =" | trix --stdin   # run a program piped on stdin
+trix -c script.trx                # scan for syntax errors without running it
 trix --image snap.trix            # thaw and resume a saved VM snapshot
 trix --version                    # print version and feature flags
 trix --help                       # full flag list
 ```
 
-Common flags: `-i` / `--stdedit` (force the REPL), `-q` / `--quiet`
-(suppress diagnostics), `--sandbox` (disable filesystem / system / raw-memory
-ops), `--module-path DIR:DIR` (extra `require` search dirs), and the VM-tuning
+Common flags: `-e` / `--eval EXPR` (run inline source), `-c` / `--check`
+(scan for syntax errors without executing), `-i` / `--stdedit` (force the
+REPL), `-q` / `--quiet` (suppress diagnostics), `--sandbox` (disable
+filesystem / system / raw-memory ops), `--timeout MS` (wall-clock deadline),
+`--module-path DIR:DIR` (extra `require` search dirs), and the VM-tuning
 knobs (`--vm-size`, `--operand-depth`, ...).  See
-[docs/cli.md](docs/cli.md) for every flag, the five startup modes, the module
+[docs/cli.md](docs/cli.md) for every flag, the startup modes, the module
 search order, and the exit-code mapping.
 
 ## Embedding in C++
