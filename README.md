@@ -446,7 +446,7 @@ user-operator and interrupt APIs, and the complete Config table.
 
 | Metric               | Value                                                           |
 | -------------------- | --------------------------------------------------------------- |
-| Source               | ~87,500 lines C++23 (69 .inl files)                             |
+| Source               | ~87,400 lines C++23 (69 .inl files)                             |
 | Operators            | 838                                                             |
 | Test assertions      | 20,700+ across 263 test files                                   |
 | Fuzz testing         | libFuzzer harness (full interpreter)                            |
