@@ -61,60 +61,66 @@ static void replace_ulong_with_weekday(Trix *trx, integer_t idx) {
     *trx->m_op_ptr = name_obj;
 }
 
+// Shared body for the integer-valued instant accessors: verify a ULong instant
+// on the stack top, split it into calendar parts (UTC, or local-zone when
+// `local`), and replace it with the selected CalendarParts field.
+static void instant_int_accessor(Trix *trx, bool local, integer_t CalendarParts::*field) {
+    trx->verify_operands(VerifyULong);
+    auto value = trx->m_op_ptr->ulong_value(trx);
+    auto parts = local ? trx->split_instant_local(value) : trx->split_instant_utc(value);
+    replace_ulong_with_integer(trx, parts.*field);
+}
+
+// Shared body for the weekday instant accessors: same split, weekday Name out.
+static void instant_weekday_accessor(Trix *trx, bool local) {
+    trx->verify_operands(VerifyULong);
+    auto value = trx->m_op_ptr->ulong_value(trx);
+    auto parts = local ? trx->split_instant_local(value) : trx->split_instant_utc(value);
+    replace_ulong_with_weekday(trx, parts.weekday);
+}
+
 //===--- UTC accessors ---===//
 
 // instant-year: ulong -- int
 // Returns the UTC calendar year (e.g. 2026).
 // throws: type-check, opstack-underflow
 static void instant_year_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.year);
+    instant_int_accessor(trx, false, &CalendarParts::year);
 }
 
 // instant-month: ulong -- int
 // Returns the UTC calendar month, 1 (January) through 12 (December).
 // throws: type-check, opstack-underflow
 static void instant_month_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.month);
+    instant_int_accessor(trx, false, &CalendarParts::month);
 }
 
 // instant-day: ulong -- int
 // Returns the UTC day-of-month, 1..31.
 // throws: type-check, opstack-underflow
 static void instant_day_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.day);
+    instant_int_accessor(trx, false, &CalendarParts::day);
 }
 
 // instant-hour: ulong -- int
 // Returns the UTC hour, 0..23.
 // throws: type-check, opstack-underflow
 static void instant_hour_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.hour);
+    instant_int_accessor(trx, false, &CalendarParts::hour);
 }
 
 // instant-minute: ulong -- int
 // Returns the UTC minute, 0..59.
 // throws: type-check, opstack-underflow
 static void instant_minute_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.minute);
+    instant_int_accessor(trx, false, &CalendarParts::minute);
 }
 
 // instant-second: ulong -- int
 // Returns the UTC second-of-minute, 0..59.
 // throws: type-check, opstack-underflow
 static void instant_second_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.second);
+    instant_int_accessor(trx, false, &CalendarParts::second);
 }
 
 // instant-millisecond: ulong -- int
@@ -123,18 +129,14 @@ static void instant_second_op(Trix *trx) {
 // `-local` variant is provided.
 // throws: type-check, opstack-underflow
 static void instant_millisecond_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.millisecond);
+    instant_int_accessor(trx, false, &CalendarParts::millisecond);
 }
 
 // instant-weekday: ulong -- name
 // Returns the UTC weekday as a literal Name: /sunday..saturday.
 // throws: type-check, opstack-underflow, vm-full
 static void instant_weekday_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_utc(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_weekday(trx, parts.weekday);
+    instant_weekday_accessor(trx, false);
 }
 
 //===--- Local-zone accessors ---===//
@@ -143,36 +145,28 @@ static void instant_weekday_op(Trix *trx) {
 // Returns the local-zone calendar year.
 // throws: type-check, opstack-underflow, unsupported
 static void instant_year_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.year);
+    instant_int_accessor(trx, true, &CalendarParts::year);
 }
 
 // instant-month-local: ulong -- int
 // Returns the local-zone calendar month, 1..12.
 // throws: type-check, opstack-underflow, unsupported
 static void instant_month_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.month);
+    instant_int_accessor(trx, true, &CalendarParts::month);
 }
 
 // instant-day-local: ulong -- int
 // Returns the local-zone day-of-month, 1..31.
 // throws: type-check, opstack-underflow, unsupported
 static void instant_day_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.day);
+    instant_int_accessor(trx, true, &CalendarParts::day);
 }
 
 // instant-hour-local: ulong -- int
 // Returns the local-zone hour, 0..23.
 // throws: type-check, opstack-underflow, unsupported
 static void instant_hour_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.hour);
+    instant_int_accessor(trx, true, &CalendarParts::hour);
 }
 
 // instant-minute-local: ulong -- int
@@ -180,18 +174,14 @@ static void instant_hour_local_op(Trix *trx) {
 // with a non-whole-hour offset (e.g. India, Newfoundland).
 // throws: type-check, opstack-underflow, unsupported
 static void instant_minute_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.minute);
+    instant_int_accessor(trx, true, &CalendarParts::minute);
 }
 
 // instant-second-local: ulong -- int
 // Returns the local-zone second-of-minute, 0..59.
 // throws: type-check, opstack-underflow, unsupported
 static void instant_second_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_integer(trx, parts.second);
+    instant_int_accessor(trx, true, &CalendarParts::second);
 }
 
 // instant-weekday-local: ulong -- name
@@ -199,9 +189,7 @@ static void instant_second_local_op(Trix *trx) {
 // weekday near midnight when the zone offset crosses a day boundary.
 // throws: type-check, opstack-underflow, unsupported, vm-full
 static void instant_weekday_local_op(Trix *trx) {
-    trx->verify_operands(VerifyULong);
-    auto parts = trx->split_instant_local(trx->m_op_ptr->ulong_value(trx));
-    replace_ulong_with_weekday(trx, parts.weekday);
+    instant_weekday_accessor(trx, true);
 }
 
 //===--- Tier 2: udate constructor + accessors ---===//
