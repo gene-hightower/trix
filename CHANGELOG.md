@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.img` files.
 
 ### Changed
+- **`examples/amazing.trx`: first-order helper procedures now declare stack effects.** 32 cell/grid accessors, index-math, and pure-transform procs carry a `|… -- …|` effect and are scan-time verified (output byte-identical); the iterative algorithm and PNG-encoding procs stay unannotated.
 - **`#e` early binding no longer freezes a frame-local name that shadows a
   built-in operator.** A `|...|` parameter or declared local whose name collides
   with an operator (e.g. `sum`, `count`, `max`) used to be frozen to the

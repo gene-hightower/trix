@@ -60,7 +60,7 @@
 %   RFC 1950 / zlib adler32_combine.  ULong intermediates so s1a*len_b
 %   (up to ~4.3B for max scanline-len * max s1) doesn't overflow.
 %   Used only by the streaming IDAT backend (-write-idat-streaming).
-/-adler32-combine {|adler-a adler-b len-b|#+10
+/-adler32-combine {|adler-a adler-b len-b -- adler|#+10
     /BASE 65521ul local-def
     /s1a adler-a 16#FFFF#u and /ulong-type cast local-def
     /s2a adler-a 16 shift-right /ulong-type cast local-def
@@ -397,13 +397,13 @@
 /-chunked-i { /integer-type cast } def
 
 % (a i -- v) read element at logical index i
-/chunked-get {|a i|#+1
+/chunked-get {|a i -- v|#+1
     /ii i -chunked-i local-def
     a 1 get  ii CHUNK div  get   ii CHUNK mod  get
 } def
 
 % (a i v --) write value v at logical index i
-/chunked-put {|a i v|#+1
+/chunked-put {|a i v -- |#+1
     /ii i -chunked-i local-def
     a 1 get  ii CHUNK div  get   ii CHUNK mod  v  put
 } def
@@ -411,7 +411,7 @@
 % (a i v --) write value v at logical index i using put-persist (journaled).
 %   Use this for the millions-of-writes hot loops (kruskal uf, BFS dist
 %   field, wilson walk arrays) that would otherwise fill the save journal.
-/chunked-put-persist {|a i v|#+1
+/chunked-put-persist {|a i v -- |#+1
     /ii i -chunked-i local-def
     a 1 get  ii CHUNK div  get   ii CHUNK mod  v  put-persist
 } def
@@ -453,19 +453,19 @@
 /grid-h       { 1 get } def
 /grid-cells   { 2 get } def
 
-/cell-at  {|g x y|  g grid-cells  y get  x  get  } def
-/set-cell {|g x y v|  g grid-cells  y get  x  v  put  } def
+/cell-at  {|g x y -- byte|  g grid-cells  y get  x  get  } def
+/set-cell {|g x y v -- |  g grid-cells  y get  x  v  put  } def
 
 % (g x y) cell-visited? -- bool
-/cell-visited? {|g x y|  g x y cell-at VISITED and 0b ne  } def
+/cell-visited? {|g x y -- bool|  g x y cell-at VISITED and 0b ne  } def
 
-/mark-visited {|g x y|
+/mark-visited {|g x y -- |
     g x y  g x y cell-at VISITED or  set-cell
 } def
 
 % (g x y dir) carve-wall -- (knocks down wall on this side of (x,y) AND
 %   the opposite side of the neighbor cell)
-/carve-wall {|g x y d|#+8
+/carve-wall {|g x y d -- |#+8
     /info     DIRS d get        local-def
     /dx       info 0 get        local-def
     /dy       info 1 get        local-def
@@ -483,7 +483,7 @@
 %   connectivity graph) and marks B WEAVE-UNDER for the renderer.
 %   Caller is responsible for verifying weave-eligibility (B already
 %   visited with a perpendicular passage, C in-bounds and unvisited).
-/carve-bridge {|g x y d|#+10
+/carve-bridge {|g x y d -- |#+10
     /info     DIRS d get        local-def
     /dx       info 0 get        local-def
     /dy       info 1 get        local-def
@@ -559,16 +559,16 @@
 % ============================================================================
 
 % Pop a random uint in [0, n) as Integer.
-/rand-bound-int {|n|  n /uinteger-type cast rand-bounded-uinteger /integer-type cast  } def
+/rand-bound-int {|n -- int|  n /uinteger-type cast rand-bounded-uinteger /integer-type cast  } def
 
-/-swap-arr {|arr i j|#+1
+/-swap-arr {|arr i j -- |#+1
     /tmp arr i get local-def
     arr i  arr j get  put
     arr j  tmp        put
 } def
 
 % -- 4-element shuffle returning a fresh Trix array of [0..3] in random order.
-/shuffled-4-dirs {||#+2
+/shuffled-4-dirs {| -- arr|#+2
     /arr 4 array local-def
     arr 0 0 put   arr 1 1 put   arr 2 2 put   arr 3 3 put
     arr 3   4 rand-bound-int  -swap-arr
@@ -863,7 +863,7 @@
 %  iterates over six directions and resolves neighbor offsets with
 %  hex-neighbor-offset (which forks on row parity).
 
-/hex-shuffled-6-dirs {||#+2
+/hex-shuffled-6-dirs {| -- arr|#+2
     /arr 6 array local-def
     arr 0 0 put  arr 1 1 put  arr 2 2 put
     arr 3 3 put  arr 4 4 put  arr 5 5 put
@@ -1048,14 +1048,14 @@
     [ rings sectors rows ]
 } def
 
-/theta-cell-at        {|g r s|    g grid-cells  r get  s  get  } def
-/theta-set-cell       {|g r s v|  g grid-cells  r get  s  v  put  } def
-/theta-cell-visited?  {|g r s|  g r s theta-cell-at VISITED and 0b ne  } def
-/theta-mark-visited   {|g r s|
+/theta-cell-at        {|g r s -- byte|    g grid-cells  r get  s  get  } def
+/theta-set-cell       {|g r s v -- |  g grid-cells  r get  s  v  put  } def
+/theta-cell-visited?  {|g r s -- bool|  g r s theta-cell-at VISITED and 0b ne  } def
+/theta-mark-visited   {|g r s -- |
     g r s   g r s theta-cell-at VISITED or   theta-set-cell
 } def
 
-/theta-carve-wall {|g r s d|#+10
+/theta-carve-wall {|g r s d -- |#+10
     /info     THETA-DIRS d get      local-def
     /dr       info 0 get             local-def
     /ds       info 1 get             local-def
@@ -1249,7 +1249,7 @@
 } def
 
 % (col row) triangle-up? -- bool
-/triangle-up? {|tcol trow|  tcol trow add 2 mod 0 eq  } def
+/triangle-up? {|tcol trow -- bool|  tcol trow add 2 mod 0 eq  } def
 
 % (g col row d) triangle-carve-wall --
 /triangle-carve-wall {|g col row d|#+10
@@ -1269,7 +1269,7 @@
 %  Section 7C-tri: Recursive backtracker on triangle grid
 % ============================================================================
 
-/triangle-shuffled-3-dirs {||#+2
+/triangle-shuffled-3-dirs {| -- arr|#+2
     /arr 3 array local-def
     arr 0 0 put  arr 1 1 put  arr 2 2 put
     arr 2  3 rand-bound-int  -swap-arr
@@ -1485,27 +1485,27 @@
 % ----- 2-byte cell accessors ------------------------------------------------
 
 % (g x y) upsilon-cell-walls -- byte (low byte: wall mask)
-/upsilon-cell-walls {|g x y|  g grid-cells y get  x 2 mul         get  } def
+/upsilon-cell-walls {|g x y -- byte|  g grid-cells y get  x 2 mul         get  } def
 
 % (g x y) upsilon-cell-flags -- byte (high byte: VISITED / IN-SOLN)
-/upsilon-cell-flags {|g x y|  g grid-cells y get  x 2 mul 1 add   get  } def
+/upsilon-cell-flags {|g x y -- byte|  g grid-cells y get  x 2 mul 1 add   get  } def
 
 % (g x y v) upsilon-set-walls --
-/upsilon-set-walls {|g x y v|  g grid-cells y get  x 2 mul        v put  } def
+/upsilon-set-walls {|g x y v -- |  g grid-cells y get  x 2 mul        v put  } def
 
 % (g x y v) upsilon-set-flags --
-/upsilon-set-flags {|g x y v|  g grid-cells y get  x 2 mul 1 add  v put  } def
+/upsilon-set-flags {|g x y v -- |  g grid-cells y get  x 2 mul 1 add  v put  } def
 
 % (g x y) upsilon-cell-visited? -- bool
-/upsilon-cell-visited? {|g x y|  g x y upsilon-cell-flags VISITED and 0b ne  } def
+/upsilon-cell-visited? {|g x y -- bool|  g x y upsilon-cell-flags VISITED and 0b ne  } def
 
 % (g x y) upsilon-mark-visited --
-/upsilon-mark-visited {|g x y|
+/upsilon-mark-visited {|g x y -- |
     g x y  g x y upsilon-cell-flags VISITED or  upsilon-set-flags
 } def
 
 % (col row) upsilon-octagon? -- bool
-/upsilon-octagon? {|ucol urow|  ucol urow add 2 mod 0 eq  } def
+/upsilon-octagon? {|ucol urow -- bool|  ucol urow add 2 mod 0 eq  } def
 
 % (w h) upsilon-make-grid -- [w h rows] where each row is 2*w bytes
 %   (\xFF, \x00) repeated w times -- walls byte 0xFF (all walls
@@ -1549,7 +1549,7 @@
 %  loop limit is read off the array length so the same code path
 %  handles both cases.
 
-/upsilon-shuffled-8-dirs {||#+2
+/upsilon-shuffled-8-dirs {| -- arr|#+2
     /arr 8 array local-def
     arr 0 0 put  arr 1 1 put  arr 2 2 put  arr 3 3 put
     arr 4 4 put  arr 5 5 put  arr 6 6 put  arr 7 7 put
@@ -1564,7 +1564,7 @@
 } def
 
 % (col row) -- shuffled-dirs : 8 entries on octagons, 4 on squares.
-/upsilon-shuffled-dirs-for {|ucol urow|
+/upsilon-shuffled-dirs-for {|ucol urow -- arr|
     ucol urow upsilon-octagon?
     { upsilon-shuffled-8-dirs }
     { shuffled-4-dirs }
@@ -2735,7 +2735,7 @@
 /rainbow-stops 32 def
 
 % (a b t) -lerp-byte -- byte    (a, b are Byte; t is Real in [0, 1])
-/-lerp-byte {|a b t|#+1
+/-lerp-byte {|a b t -- byte|#+1
     /v  a /real-type cast  b /real-type cast  t  lerp  round /integer-type cast local-def
     v 0 max 255 min /byte-type cast
 } def
@@ -4946,7 +4946,7 @@ EXAMPLES
 } def
 
 % (g algo sx sy) dispatch-algo --
-/dispatch-algo {|g algo sx sy|#+1
+/dispatch-algo {|g algo sx sy -- r|#+1
     algo (backtrack)     eq { g sx sy recursive-backtracker } {
     algo (kruskal)       eq { g kruskal } {
     algo (wilson)        eq { g sx sy wilson } {
