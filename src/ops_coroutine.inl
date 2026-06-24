@@ -1513,6 +1513,55 @@ void coroutine_kill_all() {
     }
 }
 
+// Initialize the bookkeeping fields shared by every freshly-spawned (non-main)
+// CoroutineContext -- status/flags/scheduler-metadata that are identical for
+// coroutine-launch, actor-spawn, and pipeline stages.  Single source of truth so
+// the ~27-field list cannot drift between the spawn sites.  Does NOT touch the
+// stack-pointer block, the scratch arena, the registry link (m_next), or the
+// scanner stream: those depend on the freshly-allocated stack block and the
+// rooting/insertion strategy, which differ per spawn site, so the caller sets
+// them after coroutine_alloc_stacks.  The main coroutine (#0) inits separately in
+// init.inl -- it carries genuinely different values (Running/BASE/id 0/unlimited
+// quantum/self-circular m_next) and is allocated once from fresh zeroed VM, never
+// recycled.
+void coroutine_init_spawned_fields(CoroutineContext *ctx, vm_offset_t ctx_offset) {
+    ctx->m_status = CoroutineContext::Ready;
+    ctx->m_has_return = false;
+    ctx->m_activation_sl = m_curr_save_level;
+    ctx->m_trap_exit = false;
+    ctx->m_flags = 0;
+    ctx->m_context_offset = ctx_offset;
+    ctx->m_wake_time_ns = 0;
+    ctx->m_suspend_remaining_ns = 0;
+    ctx->m_ready_next = nulloffset;
+    ctx->m_ready_prev = nulloffset;
+    ctx->m_timer_next = nulloffset;
+    ctx->m_id = m_next_coroutine_id++;
+    ctx->m_quantum = m_default_coroutine_quantum;
+    ctx->m_ops_remaining = m_default_coroutine_quantum;
+    ctx->m_priority = CoroutineContext::PriorityNormal;
+    ctx->m_blocked_sender_next = nulloffset;
+    ctx->m_last_run_time_ns = 0;
+    ctx->m_joiner = nulloffset;
+    ctx->m_return_value = Object::make_null();
+    ctx->m_debug_name = nulloffset;
+    ctx->m_mailbox = nulloffset;
+    ctx->m_monitors = nulloffset;
+    ctx->m_monitoring = nulloffset;
+    ctx->m_binding_table = nulloffset;
+    ctx->m_exit_reason = wellknown_name(WellKnownName::Normal);
+    ctx->m_last_joined_exit_reason = wellknown_name(WellKnownName::NoError);
+    // New coroutines start with global-alloc disabled regardless of the spawner's
+    // flag.  Per-coroutine isolation: ${...} only affects its lexical body, and a
+    // recycled context keeps the dead coroutine's bytes (gvm_alloc does not run
+    // in-class member initializers), so it must be set explicitly.
+    ctx->m_curr_alloc_global = false;
+    // Only read for FlagWasActor contexts, which always recapture it at mailbox
+    // recycle; zeroing here keeps a fresh non-actor context (possibly recycled
+    // from a dead actor) from carrying a stale capacity.
+    ctx->m_last_mailbox_capacity = 0;
+}
+
 // Bump the live-coroutine count and fire the 0 -> 1 gate transition on
 // the first spawn.  Every site that spawns a coroutine (launch, actor-
 // spawn, pipeline stage, supervisor child) must go through this helper
@@ -1581,39 +1630,9 @@ static std::pair<CoroutineContext *, vm_offset_t> coroutine_launch_common(Trix *
                        DefaultCoroutineOperandDepth);
         }
 
-        // Allocate CoroutineContext
+        // Allocate CoroutineContext and init its shared bookkeeping fields.
         auto [ctx, ctx_offset] = trx->coroutine_alloc_context();
-        ctx->m_status = CoroutineContext::Ready;
-        ctx->m_has_return = false;
-        ctx->m_activation_sl = trx->m_curr_save_level;
-        ctx->m_trap_exit = false;
-        ctx->m_flags = 0;
-        ctx->m_context_offset = ctx_offset;
-        ctx->m_wake_time_ns = 0;
-        ctx->m_suspend_remaining_ns = 0;
-        ctx->m_ready_next = nulloffset;
-        ctx->m_ready_prev = nulloffset;
-        ctx->m_timer_next = nulloffset;
-        ctx->m_id = trx->m_next_coroutine_id++;
-        ctx->m_quantum = trx->m_default_coroutine_quantum;
-        ctx->m_ops_remaining = trx->m_default_coroutine_quantum;
-        ctx->m_priority = CoroutineContext::PriorityNormal;
-        ctx->m_blocked_sender_next = nulloffset;
-        ctx->m_last_run_time_ns = 0;
-        ctx->m_joiner = nulloffset;
-        ctx->m_return_value = Object::make_null();
-        ctx->m_debug_name = nulloffset;
-        ctx->m_mailbox = nulloffset;
-        ctx->m_monitors = nulloffset;
-        ctx->m_monitoring = nulloffset;
-        ctx->m_binding_table = nulloffset;
-        ctx->m_exit_reason = trx->wellknown_name(WellKnownName::Normal);
-        ctx->m_last_joined_exit_reason = trx->wellknown_name(WellKnownName::NoError);
-        // New coroutines start with global-alloc disabled regardless of the
-        // launching coroutine's flag.  Per-coroutine isolation: ${...} only
-        // affects its lexical body; a coroutine spawned inside ${...} is a
-        // fresh execution context and doesn't inherit the spawner's flag.
-        ctx->m_curr_alloc_global = false;
+        trx->coroutine_init_spawned_fields(ctx, ctx_offset);
 
         // Root the context in the scheduler registry BEFORE allocating stacks:
         // coroutine_alloc_stacks can fire vm_global_gc, and an unlinked context is

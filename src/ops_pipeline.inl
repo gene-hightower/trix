@@ -1850,40 +1850,7 @@ static std::pair<Object, vm_offset_t> pipe_alloc_stage_aux(Trix *trx, int32_t co
 
 static PipeCoroutineSetup pipe_alloc_stage_context(Trix *trx) {
     auto [ctx, ctx_offset] = trx->coroutine_alloc_context();
-
-    ctx->m_status = CoroutineContext::Ready;
-    ctx->m_has_return = false;
-    ctx->m_activation_sl = trx->m_curr_save_level;
-    ctx->m_trap_exit = false;
-    ctx->m_flags = 0;
-    ctx->m_context_offset = ctx_offset;
-    ctx->m_wake_time_ns = 0;
-    ctx->m_suspend_remaining_ns = 0;
-    ctx->m_ready_next = nulloffset;
-    ctx->m_ready_prev = nulloffset;
-    ctx->m_timer_next = nulloffset;
-    ctx->m_id = trx->m_next_coroutine_id++;
-    ctx->m_quantum = trx->m_default_coroutine_quantum;
-    ctx->m_ops_remaining = trx->m_default_coroutine_quantum;
-    ctx->m_priority = CoroutineContext::PriorityNormal;
-    ctx->m_blocked_sender_next = nulloffset;
-    ctx->m_last_run_time_ns = 0;
-    ctx->m_joiner = nulloffset;
-    ctx->m_return_value = Object::make_null();
-    ctx->m_mailbox = nulloffset;
-    ctx->m_monitors = nulloffset;
-    ctx->m_monitoring = nulloffset;
-    ctx->m_binding_table = nulloffset;
-    ctx->m_exit_reason = trx->wellknown_name(WellKnownName::Normal);
-    // Recycled contexts keep the dead coroutine's bytes (in-class member
-    // initializers do not run on gvm_alloc storage), so these must be set
-    // explicitly like coroutine_launch_common does -- the GC walker reads
-    // m_last_joined_exit_reason for every registry context, and a stale
-    // m_curr_alloc_global would leak into the stage's allocations.
-    ctx->m_last_joined_exit_reason = trx->wellknown_name(WellKnownName::NoError);
-    ctx->m_curr_alloc_global = false;
-    ctx->m_last_mailbox_capacity = 0;
-    ctx->m_debug_name = nulloffset;
+    trx->coroutine_init_spawned_fields(ctx, ctx_offset);
 
     // Root the context across coroutine_alloc_stacks: it can fire vm_global_gc,
     // and the context is not yet linked into the registry nor rooted by the
