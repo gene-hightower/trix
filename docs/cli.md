@@ -272,6 +272,33 @@ combined with `-l`/`--image`, `-i`, or `--resident`, and needs a source to
 check (a bare `-c` is a usage error). Note: scan-time immediate constructs
 (`${...}`) still evaluate, since that is part of scanning.
 
+### 2.8 Stack-effect checking (`--no-stack-check`)
+
+When a procedure declares a stack effect by extending its `|...|` preamble with
+a `-- outputs` tail, the scanner verifies -- at scan time, with zero run-time
+cost -- that the body actually leaves the declared number of values and consumes
+no more than its declared inputs:
+
+```trix ignore
+{ |price qty -- total| price qty mul }      % ( 2 -- 1 ): scans fine
+{ |x -- y| x dup }                          % ( 1 -- 1 ) declared, body leaves 2 -> /stack-effect
+```
+
+The second proc fails to scan with `/stack-effect` (exit `60`).  The check is
+*best-effort and sound*: it reports only violations it can prove and silently
+accepts anything it cannot fully analyze (variadic operators, user-defined
+procs, dynamic name lookup), so it never rejects a correct program.  It
+understands straight-line bodies plus the `if`, `if-else`, and `repeat`
+combinators (their branches must be stack-neutral / agree).
+
+A bare `|...|` preamble with no `--` is unchecked, exactly as before, so the
+feature is opt-in per procedure.  Pass `--no-stack-check` to disable the check
+process-wide (it then ignores the `-- outputs` tail entirely):
+
+```console
+$ trix --no-stack-check buggy-effect.trx     # scans without the stack-effect gate
+```
+
 ---
 
 ## 3. Option reference
@@ -292,6 +319,7 @@ prints the live defaults for your build.
 | `--error-codes` | -- | Print every `Error` name with its process exit code (one `code`-TAB-`name` line per entry) and exit 0. The codes are the runtime source of truth for the exit-code contract ([trix-reference.md "Process exit codes"](trix-reference.md#316-error-handling)). |
 | `-e`, `--eval` | EXPR | Run `EXPR` as inline source instead of a file ([section 2.6](#26-inline-source--e----eval)). May be given once; no filename is consumed. |
 | `-c`, `--check` | -- | Scan a script for lexical/structural errors without executing it ([section 2.7](#27-check-only--c----check)). Exit 0 if clean. |
+| `--no-stack-check` | -- | Disable the scan-time `\|params -- outputs\|` stack-effect check ([section 2.8](#28-stack-effect-checking---no-stack-check)). |
 | `-i`, `--stdedit`, `--interactive` | -- | Force the interactive REPL (default when no filename). |
 | `--stdin` | -- | Read the program from standard input. |
 | `-l`, `--image` | -- | Treat the filename as a snapshot image, not a script. |
@@ -619,15 +647,16 @@ exit=41
 
 Here `/undefined` maps to exit code 41. A few commonly-seen codes:
 
-| Code | Error                 | Typical cause                           |
-| ---- | --------------------- | --------------------------------------- |
-| 0    | `/no-error`           | clean completion                        |
-| 10   | `/filename-not-found` | `require` / file open of a missing file |
-| 39   | `/syntax-error`       | unbalanced `{ }`, bad token             |
-| 41   | `/undefined`          | executable name not bound in any dict   |
-| 46   | `/vm-full`            | VM heap exhausted                       |
-| 54   | `/execution-limit`    | `--max-ops` cap reached                 |
-| 59   | `/time-limit`         | `--timeout` wall-clock deadline reached |
+| Code | Error | Typical cause |  |  |
+| --- | --- | --- | --- | --- |
+| 0 | `/no-error` | clean completion |  |  |
+| 10 | `/filename-not-found` | `require` / file open of a missing file |  |  |
+| 39 | `/syntax-error` | unbalanced `{ }`, bad token |  |  |
+| 41 | `/undefined` | executable name not bound in any dict |  |  |
+| 46 | `/vm-full` | VM heap exhausted |  |  |
+| 54 | `/execution-limit` | `--max-ops` cap reached |  |  |
+| 59 | `/time-limit` | `--timeout` wall-clock deadline reached |  |  |
+| 60 | `/stack-effect` | ` | params -- outputs | ` declaration violated at scan time |
 
 Codes 0..124 are reserved for Trix errors; 125 is an uncaught C++ exception;
 126/127 are POSIX-reserved; 128+N means "killed by signal N". A

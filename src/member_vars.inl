@@ -253,6 +253,7 @@ std::unordered_map<vm_offset_t, std::vector<int32_t>> m_debug_proc_lines{};
 #endif
 bool m_sandbox{false};
 bool m_check_only{false};  // -c/--check: drive the scanner over the source without executing tokens
+bool m_stack_check{true};  // scan-time |...| -- out stack-effect checking on (--no-stack-check turns it off)
 bool m_quiet{false};       // suppress all diagnostic stderr output (banners, backtraces, error messages)
 // Set TRIX_BT_VERBOSE=1 (env var) to opt format_backtrace into uncapped
 // output: all operands shown (not just top 8), preview rendered for every

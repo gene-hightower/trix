@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scan-time stack-effect checking.** A procedure may declare its stack effect by
+  extending the `|...|` preamble with a `-- outputs` tail —
+  `{ |price qty -- total| price qty mul }` is `( 2 -- 1 )`. At scan time (zero
+  run-time cost) the body is abstractly interpreted and verified to leave the
+  declared number of values and consume no more than its declared inputs; a
+  mismatch raises the new `/stack-effect` error (exit 60) before the program runs.
+  The check is sound and best-effort: it reports only provable violations and
+  silently accepts anything it cannot fully analyze (variadic operators,
+  user-defined procs, dynamic lookup), understanding straight-line bodies plus the
+  `if` / `if-else` / `repeat` combinators. A bare `|...|` with no `--` is unchecked
+  (opt-in per procedure); `--no-stack-check` disables the gate process-wide. The
+  arity table (`src/op_effects.inl`) is generated from `dispatch.inl` + the
+  reference docs by `tools/gen_op_effects.py` and pinned by its `--check` CI gate.
 - **`-e` / `--eval EXPR` runs inline source.** Executes `EXPR` as a Trix program
   instead of reading a file (the `perl -e` / `python -c` equivalent). No filename
   is consumed: tokens after `EXPR` become the script's args (`command-line-args`).

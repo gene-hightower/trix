@@ -246,6 +246,71 @@ run_case check-no-opstack-overflow 0 none '' - -- -q --operand-depth=128 -c -e "
 run_case check-syntax-error-file syntax-error none '' - -- -q -c "$CLI/bad-syntax.trx"
 run_case check-stray-brace syntax-error none '' - -- -q -c -e '1 2 } add'
 
+#--- scan-time stack-effect check ( |params -- outputs| ) ---#
+# a body matching its declared effect scans cleanly (the proc is scanned then dropped)
+run_case stack-effect-ok 0 exact '99' - -- -q -e '{ |a b -- s| a b add } pop 99 ='
+# ...and runs correctly when invoked
+run_case stack-effect-ok-run 0 exact '12' - -- -q -e '/f { |a b -- p| a b mul } def 3 4 f ='
+# zero-input declaration ( -- r ) is allowed (minimal scratch frame)
+run_case stack-effect-zero-in 0 exact '42' - -- -q -e '/g { | -- r| 42 } def g ='
+# a |...| with no `--` is unchecked, exactly as before
+run_case stack-effect-no-decl 0 exact '7' - -- -q -e '/h { |a b| a b add } def 3 4 h ='
+# body leaves the wrong number of outputs -> /stack-effect (exit 60), at scan time
+run_case stack-effect-mismatch stack-effect none '' - -- -q -e '{ |x -- y| x dup } pop'
+# body consumes below its declared inputs -> /stack-effect
+run_case stack-effect-underflow stack-effect none '' - -- -q -e '{ |x -- y| x add } pop'
+# a bare if whose branch is not stack-neutral -> /stack-effect
+run_case stack-effect-if-imbalance stack-effect none '' - -- -q -e '{ |flag -- r| flag { 1 } if } pop'
+# if-else branches that disagree on net effect -> /stack-effect
+run_case stack-effect-ifelse-mismatch stack-effect none '' - -- -q -e '{ |flag -- r| flag { 1 } { 2 3 } if-else } pop'
+# --no-stack-check disables the gate: the mismatch scans without error
+run_case stack-effect-disabled 0 none '' - -- -q --no-stack-check -e '{ |x -- y| x dup } pop'
+# duplicate `--` separator is a syntax error
+run_case stack-effect-dup-separator syntax-error none '' - -- -q -e '{ |a -- -- b| a } pop'
+# a `/`-prefixed output name is a syntax error
+run_case stack-effect-slash-output syntax-error none '' - -- -q -e '{ |a -- /b| a } pop'
+
+#--- stack-effect: more happy cases (varied valid shapes) ---#
+# zero outputs: body must consume back to net 0
+run_case stack-effect-zero-out 0 exact 'ok' - -- -q -e '{ |a b -- | a b add pop } pop (ok) ='
+# multiple outputs ( 1 -- 2 )
+run_case stack-effect-multi-out 0 exact '2' - -- -q -e '{ |a -- x y| a a } pop 2 ='
+# count-based: a type-converting op (string -> number) keeps arity ( 1 -- 1 )
+run_case stack-effect-conversion 0 exact '23' - -- -q -e '/cv { | -- r| 1 (22) to-number add } def cv ='
+# correct if (stack-neutral branch)
+run_case stack-effect-if-ok 0 exact '1' - -- -q -e '{ |f -- | f { } if } pop 1 ='
+# correct if-else (branches agree on net), exercised at run time
+run_case stack-effect-ifelse-ok 0 exact '10' - -- -q -e '/pick { |f -- r| f { 10 } { 20 } if-else } def true pick ='
+# correct repeat (stack-neutral body), exercised at run time
+run_case stack-effect-repeat-ok 0 exact '5' - -- -q -e '{ |n -- s| 0 n { 1 add } repeat } 5 exch exec ='
+# declared local (/t) combined with a declared effect (local-def is `/name value --`)
+run_case stack-effect-local-decl 0 exact '14' - -- -q -e '/k { |a /t -- r| /t a 2 mul local-def t } def 7 k ='
+# capacity suffix combined with a declared effect
+run_case stack-effect-capacity 0 exact '14' - -- -q -e '/k2 { |a -- r|#4 a 2 mul } def 7 k2 ='
+# `when` (single-arm match) is unanalyzable -> bails (accepted), runs fine
+run_case stack-effect-when-bails 0 exact 'big' - -- -q -e '/w { |v -- r| v { dup 3 gt } { pop (big) } when } def 5 w ='
+# calling a user proc is unanalyzable -> bails (accepted), runs fine
+run_case stack-effect-userproc-bails 0 exact '6' - -- -q -e '/g { |a b -- c| a b add } def /h { |x -- y| x x g } def 3 h ='
+
+#--- stack-effect: more sad cases ---#
+# body leaves fewer than declared outputs
+run_case stack-effect-too-few-out stack-effect none '' - -- -q -e '{ |a b -- x y z| a b add } pop'
+# repeat whose body is not stack-neutral
+run_case stack-effect-repeat-imbalance stack-effect none '' - -- -q -e '{ |n -- r| n { 1 } repeat } pop'
+# zero-output declaration but body leaves a value
+run_case stack-effect-zero-out-violated stack-effect none '' - -- -q -e '{ |a -- | a } pop'
+
+#--- stack-effect: stress (must never crash or false-positive; run under ASan) ---#
+# abstract stack deeper than the cap -> bail (accept), not crash, not false error
+SE_OVERFLOW="{ |a -- r| $(yes '1' | head -70 | tr '\n' ' ')}"
+run_case stack-effect-overflow-bails 0 none '' - -- -q -e "$SE_OVERFLOW pop"
+# deeply nested proc literal inside a declared-effect proc -> recursion stays bounded
+SE_DEEP="{ |x -- r| $(printf '{%.0s' $(seq 1 60))$(printf '}%.0s' $(seq 1 60)) pop x }"
+run_case stack-effect-deep-nest 0 none '' - -- -q -e "$SE_DEEP pop"
+# many params/outputs (30) just under the cap -> fully analyzed and balanced
+SE_NAMES="$(seq 1 30 | sed 's/^/p/' | tr '\n' ' ')"
+run_case stack-effect-many-params 0 none '' - -- -q -e "{ |${SE_NAMES}-- ${SE_NAMES}| ${SE_NAMES}} pop"
+
 #--- mode mutual exclusions (usage errors, exit 1) ---#
 run_case stdin-excludes-i 1 exact 'trix: --stdin and -i/--stdedit are mutually exclusive' 'quit' -- --stdin -i
 run_case stdin-excludes-file 1 exact 'trix: --stdin and filename are mutually exclusive' - -- --stdin "$CLI/ok.trx"

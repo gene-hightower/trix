@@ -191,6 +191,7 @@ namespace trix_details {
         // Foundation
 #include "src/pcg32.inl"
 #include "src/enums.inl"
+#include "src/op_effects.inl"
 #include "src/op_descriptor.inl"
 #include "src/scanner_tables.inl"
 #include "src/hash.inl"
@@ -204,6 +205,7 @@ namespace trix_details {
 #include "src/binding_table.inl"
 #include "src/number.inl"
 #include "src/dict.inl"
+#include "src/scanner_stackeffect.inl"
 #include "src/stream.inl"
 #include "src/save.inl"
 #include "src/snapshot.inl"

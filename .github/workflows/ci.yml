@@ -80,6 +80,9 @@ jobs:
       - name: Verify error codes in docs match the Error enum
         run: ./tests/check_error_codes.py
 
+      - name: Verify the operator stack-effect arity table is in sync
+        run: ./tools/gen_op_effects.py --check
+
       - name: Verify per-operator throws docs match the source annotations
         run: ./tests/check_operator_throws.py
 

@@ -1,0 +1,11 @@
+% |params -- outputs| stack-effect declaration (scan-time checker).
+% A mix of valid shapes to seed corpus exploration of the scanner's `--`
+% handling and the abstract interpreter in scanner_stackeffect.inl.
+{ |a b -- s| a b add } 2 4 rot exec =
+/sq { |x -- y| x x mul } def 7 sq =
+{ | -- r| 42 } exec =
+{ |a b -- | a b add pop } 10 20 rot exec
+/pick { |f -- r| f { 10 } { 20 } if-else } def true pick =
+{ |n -- s| 0 n { 1 add } repeat } 5 exch exec =
+/k { |a /t -- r| /t a 2 mul local-def t } def 7 k =
+{ |a -- x y| a a } 9 exch exec add =

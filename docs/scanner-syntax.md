@@ -1030,6 +1030,18 @@ with no suffix, `||#0`, or `||#+0` is a `SyntaxError`.
 disables the suffix (the `#…` becomes regular body content). This is the shared
 "lexical suffixes are contiguous" rule from § 2.1.
 
+**Stack-effect declaration `|params -- outputs|`:** the preamble may end with a `--`
+separator followed by *output names*, declaring the procedure's stack effect. The
+parameters before `--` are the inputs (popped, bound as usual); the bare names after
+`--` are counted as the output arity but are **not** bound — they document intent and
+drive the scan-time stack-effect check (`trix-reference.md` § 3.15). For example
+`{ |price qty -- total| price qty mul }` declares `( 2 -- 1 )`. The check runs at scan
+time and raises `/stack-effect` (exit 60) if the body cannot leave exactly the declared
+number of outputs; it is best-effort (it bails on anything it cannot prove) and is
+disabled process-wide by `--no-stack-check`. A zero-input form `| -- r|` is allowed
+(a minimal scratch frame is created). Output names must be bare (a `/`-prefixed output,
+or a second `--`, is a `SyntaxError`).
+
 **Error conditions:**
 - Missing closing `|` → `SyntaxError`
 - Empty binding without capacity suffix (`{ || body }`, `{ ||#0 body }`, `{ ||#+0 body }`) → `SyntaxError`
@@ -2038,9 +2050,15 @@ dict_suffix     = '#' [storage_class] [access_mode] ;
 
 proc_literal    = '{' [locals_preamble] { token } '}' [proc_suffix] ;
 
-locals_preamble = '|' [ name_body { WS name_body } ] '|' [ locals_capacity ] ;
+locals_preamble = '|' [ params ] [ '--' { WS out_name } ] '|' [ locals_capacity ] ;
                   (* either >= 1 name, or empty '||' followed by a non-zero capacity
-                     suffix; bare '||', '||#0', and '||#+0' are SyntaxError *)
+                     suffix; bare '||', '||#0', and '||#+0' are SyntaxError.
+                     The optional '-- out...' tail declares the stack-effect output
+                     arity (out_names are counted, not bound); a single '--' only,
+                     bare out_names (no '/'), and at most one '--' *)
+
+params          = name_body { WS name_body } ;
+out_name        = name_body ;
 
 locals_capacity = '#' [ '+' ] decimal_digits ;
                   (* '#N' absolute: total = N (must be >= K)

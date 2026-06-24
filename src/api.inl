@@ -69,6 +69,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
         OptMaxOps,
         OptSleepBudget,
         OptTimeout,
+        OptNoStackCheck,
         OptModulePath,
         OptErrorCodes,
 #ifdef TRIX_DEBUGGER
@@ -119,6 +120,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
             {           "max-ops", required_argument, nullptr,           OptMaxOps},
             {      "sleep-budget", required_argument, nullptr,      OptSleepBudget},
             {           "timeout", required_argument, nullptr,          OptTimeout},
+            {    "no-stack-check",       no_argument, nullptr,     OptNoStackCheck},
             {       "module-path", required_argument, nullptr,       OptModulePath},
             {              "seed", required_argument, nullptr,             OptSeed},
 #ifdef TRIX_DEBUGGER
@@ -425,6 +427,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "      --max-ops=N          Execution-limit cap (0 = unlimited) [0] (0..{})\n"
                      "      --sleep-budget=N     Cumulative sleep/timeout grant, ms (0 = unlimited) [0] (0..{})\n"
                      "      --timeout=MS         Wall-clock deadline, ms (0 = unlimited) [0] (0..{})\n"
+                     "      --no-stack-check     Disable scan-time |params -- outputs| stack-effect checking\n"
                      "      --module-path=PATH   Colon-separated search path for require/require-module.\n"
                      "                             Binary-relative `lib/` is searched last.",
                      format_size(DefaultVmSize, vm_def),
@@ -749,6 +752,10 @@ static ParseResult parse_args(int argc, char *argv[]) {
 
         case OptTimeout:
             cfg.m_timeout_ms = parse_clamped("timeout", optarg, 0, std::numeric_limits<uint64_t>::max());
+            break;
+
+        case OptNoStackCheck:
+            cfg.m_stack_check = false;
             break;
 
         case OptModulePath:

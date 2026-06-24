@@ -227,6 +227,7 @@ void init_and_interpret(Config config) {
 #endif
     m_sandbox = config.m_sandbox;
     m_check_only = config.m_check_only;
+    m_stack_check = config.m_stack_check;
     m_quiet = config.m_quiet;
     m_script_argc = config.m_script_argc;
     m_script_argv = config.m_script_argv;

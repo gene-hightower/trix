@@ -347,6 +347,7 @@ struct Config {
     bool m_no_banner = false;   // suppress ONLY the interactive startup banner; diagnostics unaffected
     bool m_sandbox = false;     // disable filesystem, system, and raw memory operators
     bool m_check_only = false;  // -c/--check: scan the source for lexical/structural errors, do not execute
+    bool m_stack_check = true;  // --no-stack-check sets false: skip the scan-time |...| -- out stack-effect check
     bool m_resident = false;    // skip the exec-stack Quit floor: when startup work drains, park on
                                 // the IRQ wait and serve invoke()/raise_interrupt() work items
                                 // instead of exiting (stopped by a delivered quit or ExitIRQ)
@@ -479,8 +480,9 @@ enum struct Error : Error_t {
     AboveBarrier,
     UserError,
     TimeLimit,
+    StackEffect,
 };
-static constexpr auto ErrorCount{+Error::TimeLimit + 1};
+static constexpr auto ErrorCount{+Error::StackEffect + 1};
 // The Error enum doubles as the process exit code on uncaught error: the
 // runtime exits with status `+error`.  Reserve 125+ for shell/POSIX-defined
 // codes (125 = uncaught C++ exception, 126/127 = shell-reserved, 128+N =
@@ -675,6 +677,9 @@ static_assert(ErrorCount <= 125,
 
     case Error::TimeLimit:
         return "time-limit"sv;
+
+    case Error::StackEffect:
+        return "stack-effect"sv;
 
     default:
         assert(false && "error_sv: unknown Error");

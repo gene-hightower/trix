@@ -1575,20 +1575,39 @@ struct StringScanResult {
 // The empty-header form { ||#N ... } (P=0, M=0, N>=1) declares a no-args frame dict of
 // capacity N for /foo def scratch use; { | /t /acc| ... } (P=0, M>0) is the named-scratch
 // form.
-// On success returns an Integer carrying P+M (the total declared name count) when a
+// On success status carries an Integer with P+M (the total declared name count) when a
 // preamble was scanned (>=0), or Integer(-1) when no preamble was present.
 // Scratch stack receives /p1../pP /loc1../locM followed by THREE integers P, M, N (N on
 // top) for the begin-locals opcode: it binds the P params to popped values and discards
 // the M loc names.  When the #N suffix is absent, N is emitted equal to P+M.
-// On error calls cleanup and returns an error-string Object (or throws via trx->error).
+// On error calls cleanup and returns an error-string status (or throws via trx->error).
+//
+// An optional `-- out1 out2 ...` stack-effect tail (bare names, counted not bound) may
+// follow the params/locals: out_count carries its arity and has_declared_effect records
+// that a `--` was seen, for the scan-time stack-effect checker (scanner_stackeffect.inl).
+struct LocalBindingScan {
+    Object status;
+    length_t out_count{0};
+    bool has_declared_effect{false};
+    // Convenience: an error-string / sentinel status carries no declared effect, so the
+    // many error returns and the no-preamble return read as a plain `return <status>;`.
+    LocalBindingScan(Object scanned_status) : status{scanned_status} {}
+    LocalBindingScan(Object scanned_status, length_t outputs, bool declared) :
+            status{scanned_status},
+            out_count{outputs},
+            has_declared_effect{declared} {}
+};
 template<typename CleanupFn>
-[[nodiscard]] Object scan_local_bindings(Trix *trx, ProcScanState *state, save_level_t curr_save_level, CleanupFn &&cleanup) {
+[[nodiscard]] LocalBindingScan
+scan_local_bindings(Trix *trx, ProcScanState *state, save_level_t curr_save_level, CleanupFn &&cleanup) {
     auto saved_rptr = m_rptr_offset;
     auto saved_line = m_line_number;
     auto saved_pos = m_line_pos;
     auto locals_count = length_t{0};  // total declared frame names = param_count + loc_count
     auto param_count = length_t{0};   // bare names: popped from the operand stack
     auto loc_count = length_t{0};     // /-prefixed names: declared, not popped (A")
+    auto out_count = length_t{0};     // `-- out` names: counted for the stack-effect check, not bound
+    auto seen_separator = false;      // a `--` token switched the scan into output-name counting
     auto seen_loc = false;            // ordered rule: no bare param after a /local
     // Skip whitespace and line/block comments so a stack-effect comment
     // between `{` and `|locals|` doesn't hide the pipe-header, and so
@@ -1643,6 +1662,24 @@ template<typename CleanupFn>
                 } else if (name_len > MaxNameLength) {
                     cleanup();
                     return Object::make_error_string(trx, "local variable name length exceeds maximum");
+                } else if ((!is_loc) && (name_sv == "--")) {
+                    // stack-effect separator: bare names after it are output names, counted
+                    // for the declared effect (scanner_stackeffect.inl) but never bound.
+                    if (seen_separator) {
+                        cleanup();
+                        return Object::make_error_string(trx, "duplicate '--' stack-effect separator in local variable binding");
+                    } else {
+                        seen_separator = true;
+                    }
+                } else if (seen_separator) {
+                    // an output name following '--': count it, do not intern or bind it
+                    if (is_loc) {
+                        cleanup();
+                        return Object::make_error_string(
+                                trx, "output name after '--' must not be '/'-prefixed in the stack-effect declaration");
+                    } else {
+                        ++out_count;
+                    }
                 } else if (!is_loc && seen_loc) {
                     // ordered rule: all params must precede any /local
                     cleanup();
@@ -1742,14 +1779,20 @@ template<typename CleanupFn>
             saw_capacity_suffix = true;
         }
         if (locals_count == 0) {
-            if (!saw_capacity_suffix) {
+            if ((!saw_capacity_suffix) && seen_separator) {
+                // `| -- out |`: a stack-effect declaration on a zero-parameter proc.  There
+                // are no frame names to bind, but begin-locals requires N >= 1, so request a
+                // minimal scratch frame (the body still runs under the written |...| scope).
+                capacity = length_t{1};
+            } else if (!saw_capacity_suffix) {
                 cleanup();
                 return Object::make_error_string(
                         trx, "empty local variable binding: use '||#N' or '||#+N' (N >= 1) for a no-args scratch frame dict");
-            }
-            if (capacity == 0) {
+            } else if (capacity == 0) {
                 cleanup();
                 return Object::make_error_string(trx, "zero-capacity locals frame: use '||#N' or '||#+N' with N >= 1");
+            } else {
+                // explicit non-zero capacity suffix given -- use it as-is
             }
         }
         // push P, M, N onto scratch stack: param count, declared-local count, capacity
@@ -1771,7 +1814,7 @@ template<typename CleanupFn>
             *state->ptr++ = n_obj;
             trx->m_op_ptr = (state->ptr - 1);
         }
-        return Object::make_integer(static_cast<integer_t>(locals_count));
+        return LocalBindingScan{Object::make_integer(static_cast<integer_t>(locals_count)), out_count, seen_separator};
     } else {
         // not a locals preamble -- rewind only if the buffer was
         // not refilled during the whitespace skip / peekc above.
@@ -2099,6 +2142,8 @@ template<typename CleanupFn>
                                                  bool old_overflowed,
                                                  length_t locals_count,
                                                  bool has_locals_preamble,
+                                                 bool has_declared_effect,
+                                                 length_t declared_out_count,
                                                  ProcSuffix suffix,
                                                  ProcScanState *state,
                                                  CleanupFn &&cleanup
@@ -2153,6 +2198,34 @@ template<typename CleanupFn>
                 }
             }
 #endif
+            // Scan-time stack-effect check for a `|params -- outputs|` declaration.  The inner
+            // packed body sits at base[preamble_count]; the popped-param count P is base[locals_count].
+            if (has_declared_effect && trx->m_stack_check) {
+                auto preamble_count = static_cast<length_t>(locals_count + 3);
+                auto param_count = static_cast<length_t>(base[locals_count].integer_value());
+                auto verdict = trx->check_stack_effect(trx, base[preamble_count], declared_out_count);
+                if (verdict.result != Trix::StackEffectResult::Ok) {
+                    cleanup();
+                    if (verdict.result == Trix::StackEffectResult::Mismatch) {
+                        trx->error(Error::StackEffect,
+                                   "procedure declares stack effect ( {} -- {} ) but its body leaves {} value(s)",
+                                   param_count,
+                                   declared_out_count,
+                                   verdict.net);
+                    } else if (verdict.result == Trix::StackEffectResult::Underflow) {
+                        trx->error(Error::StackEffect,
+                                   "procedure declares {} input(s) but its body consumes {} more value(s) from the stack",
+                                   param_count,
+                                   verdict.underflow);
+                    } else {
+                        trx->error(Error::StackEffect,
+                                   "procedure with declared stack effect ( {} -- {} ) has an if/if-else/repeat branch "
+                                   "that is not stack-neutral",
+                                   param_count,
+                                   declared_out_count);
+                    }
+                }
+            }
         }
 
         // Check for nested }#= before state restoration: a nested }#= proc body element
@@ -2373,7 +2446,7 @@ scan_scope_block(Trix *trx, int proc_nesting, ProcScanState *state, SystemName o
     // preamble, distinguished here via has_locals_preamble so finalize runs.
     auto locals_count = length_t{0};
     auto has_locals_preamble = false;
-    auto locals_count_obj = scan_local_bindings(trx, state, curr_save_level, cleanup);
+    auto [locals_count_obj, declared_out_count, has_declared_effect] = scan_local_bindings(trx, state, curr_save_level, cleanup);
     if (locals_count_obj.is_integer()) {
         auto k = locals_count_obj.integer_value();
         if (k >= 0) {
@@ -2488,6 +2561,8 @@ scan_scope_block(Trix *trx, int proc_nesting, ProcScanState *state, SystemName o
                                                old_overflowed,
                                                locals_count,
                                                has_locals_preamble,
+                                               has_declared_effect,
+                                               declared_out_count,
                                                suffix,
                                                state,
                                                cleanup

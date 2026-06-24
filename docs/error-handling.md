@@ -652,6 +652,8 @@ and `try-catch` handlers. Every error code is both throwable and catchable.
 `/execution-limit` -- Per-process or per-actor instruction budget exhausted (when a quantum/budget is set).
 `/time-limit` -- Wall-clock deadline (`--timeout`) reached while executing (only fires while ops run, not while parked).
 
+`/stack-effect` -- A `|params -- outputs|` procedure's body does not match its declared stack effect (raised at scan time; disable with `--no-stack-check`).
+
 ### Snapshot Errors
 
 `/invalid-image-file` -- Snapshot file is corrupt or incompatible.
