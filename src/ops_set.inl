@@ -337,32 +337,9 @@ static void set_union_op(Trix *trx) {
     auto [result, offset] = create_result_set(trx, capacity, Object::DictMode::ReadWriteDynamic);
     trx->gc_root_push_oneoff(Object::make_set(offset));
 
-    // add all from set1
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set1->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else {
-            result->set_put(trx, key.make_clone(trx));
-            entry_offset = next;
-            bucket_idx = idx;
-        }
-    }
-    // add all from set2 (duplicates are no-ops -- set_put frees the clone)
-    entry_offset = nulloffset;
-    bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set2->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else {
-            result->set_put(trx, key.make_clone(trx));
-            entry_offset = next;
-            bucket_idx = idx;
-        }
-    }
+    // add all from set1, then set2 (duplicates are no-ops -- set_put frees the clone)
+    set1->set_for_each(trx, [&](Object elem) { result->set_put(trx, elem.make_clone(trx)); });
+    set2->set_for_each(trx, [&](Object elem) { result->set_put(trx, elem.make_clone(trx)); });
     trx->gc_root_pop_oneoff();
 
     --trx->m_op_ptr;
@@ -387,18 +364,11 @@ static void set_intersection_op(Trix *trx) {
     trx->gc_root_push_oneoff(Object::make_set(offset));
 
     // iterate set1, add only those also in set2
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set1->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (set2->set_member(trx, key)) {
-            result->set_put(trx, key.make_clone(trx));
+    set1->set_for_each(trx, [&](Object elem) {
+        if (set2->set_member(trx, elem)) {
+            result->set_put(trx, elem.make_clone(trx));
         }
-        entry_offset = next;
-        bucket_idx = idx;
-    }
+    });
     trx->gc_root_pop_oneoff();
 
     --trx->m_op_ptr;
@@ -422,18 +392,11 @@ static void set_difference_op(Trix *trx) {
     trx->gc_root_push_oneoff(Object::make_set(offset));
 
     // iterate set1, add only those NOT in set2
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set1->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (!set2->set_member(trx, key)) {
-            result->set_put(trx, key.make_clone(trx));
+    set1->set_for_each(trx, [&](Object elem) {
+        if (!set2->set_member(trx, elem)) {
+            result->set_put(trx, elem.make_clone(trx));
         }
-        entry_offset = next;
-        bucket_idx = idx;
-    }
+    });
     trx->gc_root_pop_oneoff();
 
     --trx->m_op_ptr;
@@ -451,21 +414,7 @@ static void set_subset_pred_op(Trix *trx) {
     auto set1 = set1_ptr->set_value(trx);
     auto set2 = set2_ptr->set_value(trx);
 
-    auto is_subset = true;
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set1->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (!set2->set_member(trx, key)) {
-            is_subset = false;
-            break;
-        } else {
-            entry_offset = next;
-            bucket_idx = idx;
-        }
-    }
+    auto is_subset = set1->set_all_of(trx, [&](Object elem) { return set2->set_member(trx, elem); });
 
     --trx->m_op_ptr;
     *trx->m_op_ptr = Object::make_boolean(is_subset);
@@ -488,33 +437,17 @@ static void set_symmetric_difference_op(Trix *trx) {
     auto [result, offset] = create_result_set(trx, capacity, Object::DictMode::ReadWriteDynamic);
     trx->gc_root_push_oneoff(Object::make_set(offset));
 
-    // iterate set1, add elements NOT in set2
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set1->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (!set2->set_member(trx, key)) {
-            result->set_put(trx, key.make_clone(trx));
+    // add elements of set1 not in set2, then elements of set2 not in set1
+    set1->set_for_each(trx, [&](Object elem) {
+        if (!set2->set_member(trx, elem)) {
+            result->set_put(trx, elem.make_clone(trx));
         }
-        entry_offset = next;
-        bucket_idx = idx;
-    }
-
-    // iterate set2, add elements NOT in set1
-    entry_offset = nulloffset;
-    bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set2->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (!set1->set_member(trx, key)) {
-            result->set_put(trx, key.make_clone(trx));
+    });
+    set2->set_for_each(trx, [&](Object elem) {
+        if (!set1->set_member(trx, elem)) {
+            result->set_put(trx, elem.make_clone(trx));
         }
-        entry_offset = next;
-        bucket_idx = idx;
-    }
+    });
     trx->gc_root_pop_oneoff();
 
     --trx->m_op_ptr;
@@ -541,21 +474,7 @@ static void set_disjoint_pred_op(Trix *trx) {
         test = set1;
     }
 
-    auto is_disjoint = true;
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = iterate->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else if (test->set_member(trx, key)) {
-            is_disjoint = false;
-            break;
-        } else {
-            entry_offset = next;
-            bucket_idx = idx;
-        }
-    }
+    auto is_disjoint = iterate->set_all_of(trx, [&](Object elem) { return !test->set_member(trx, elem); });
 
     --trx->m_op_ptr;
     *trx->m_op_ptr = Object::make_boolean(is_disjoint);
@@ -581,18 +500,7 @@ static void set_members_op(Trix *trx) {
     auto result_obj = Object::make_array(array_offset, count);
     trx->gc_root_push_oneoff(result_obj);
     auto i = length_t{0};
-    auto entry_offset = nulloffset;
-    integer_t bucket_idx = -1;
-    while (true) {
-        auto [next, idx, key] = set->set_next(trx, entry_offset, bucket_idx);
-        if (next == nulloffset) {
-            break;
-        } else {
-            array_ptr[i++] = key.make_clone(trx);
-            entry_offset = next;
-            bucket_idx = idx;
-        }
-    }
+    set->set_for_each(trx, [&](Object elem) { array_ptr[i++] = elem.make_clone(trx); });
     trx->gc_root_pop_oneoff();
 
     *set_ptr = result_obj;

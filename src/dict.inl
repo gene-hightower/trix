@@ -2265,6 +2265,42 @@ public:
         }
     }
 
+    // Iterate all set elements, calling fn(element) for each.  Set counterpart to
+    // for_each: a set stores SetEntry { m_next, m_key } (key only, no value), so
+    // there is no unset-local marker to skip.
+    template<typename Fn>
+    void set_for_each(Trix *trx, Fn fn) const {
+        assert(is_set_data());
+
+        for (dict_bucket_count_t i = 0; i < m_bucket_count; ++i) {
+            auto offset = m_buckets[i];
+            while (offset != nulloffset) {
+                auto entry = trx->offset_to_ptr<SetEntry>(offset);
+                fn(entry->m_key);
+                offset = entry->m_next;
+            }
+        }
+    }
+
+    // Return true iff pred(element) holds for every set element, short-circuiting
+    // on the first false (like std::ranges::all_of).  Empty set -> true.
+    template<typename Pred>
+    [[nodiscard]] bool set_all_of(Trix *trx, Pred pred) const {
+        assert(is_set_data());
+
+        for (dict_bucket_count_t i = 0; i < m_bucket_count; ++i) {
+            auto offset = m_buckets[i];
+            while (offset != nulloffset) {
+                auto entry = trx->offset_to_ptr<SetEntry>(offset);
+                if (!pred(entry->m_key)) {
+                    return false;
+                }
+                offset = entry->m_next;
+            }
+        }
+        return true;
+    }
+
     void copy_dict(Trix *trx, const Dict *src) {
         auto remaining = static_cast<length_t>(m_maxlength - m_length);
         if (src->m_length > remaining) {
