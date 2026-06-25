@@ -479,7 +479,7 @@
 /bag-refills 0 def                                 % # of times emit-piece refilled (for save)
 
 % Module-scope state is updated via `store` (writes to the first dict on
-% the dict stack containing the name -- userdict, where these were
+% the dict stack containing the name -- localdict, where these were
 % def'd).  Plain `def` would land in the proc's |...| frame and not
 % propagate.
 
@@ -1186,7 +1186,7 @@ flash-screen-cell 0 null put
     ai-weights /well   get
 ] def
 
-/native-kernels-available userdict /field-copy-fast known? def
+/native-kernels-available localdict /field-copy-fast known? def
 
 /use-native-kernels false def                      % set after parse-tetrix-args (see resolve block)
 
@@ -1194,7 +1194,7 @@ flash-screen-cell 0 null put
 % scope after parse-tetrix-args returns and after the original
 % score-board / field-copy-into definitions exist (~line 1330).
 % Done at top level (not inside a proc) so /use-native-kernels def
-% lands in userdict, not a discarded locals frame.
+% lands in localdict, not a discarded locals frame.
 
 % --- pure board features --------------------------------------------
 
@@ -2458,7 +2458,7 @@ if-else
 
 % When native kernels are active, rebind the three Trix-level reference
 % ops to dispatch through the C ops.  *-orig captures the original proc
-% via scan-time \\ lookup (resolved against userdict at this point in
+% via scan-time \\ lookup (resolved against localdict at this point in
 % the source, where the originals are already defined).  Rebinding
 % leaves every existing call site unchanged -- simulate-into still calls
 % score-board, oracle-recurse still calls score-board-into, and so on;

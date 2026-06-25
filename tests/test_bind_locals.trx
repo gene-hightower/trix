@@ -99,9 +99,9 @@ rt-fails 0 16#0#b put
 /s2d { 1 [/x] bind-locals } def
 { s2d } try /unsupported eq                     (s2: no-header proc -> unsupported)            rt-ok clear
 
-% userdict begin -> top is a non-frame dict.
-{ userdict begin 1 [/x] bind-locals end } try /unsupported eq
-(s2: begin userdict + bind-locals -> unsupported)                                              rt-ok clear
+% localdict begin -> top is a non-frame dict.
+{ localdict begin 1 [/x] bind-locals end } try /unsupported eq
+(s2: begin localdict + bind-locals -> unsupported)                                              rt-ok clear
 
 % Insufficient stack values below the names-array.
 /s2e { |x|#5 1 [/a /b /c] bind-locals } def

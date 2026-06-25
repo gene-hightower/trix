@@ -321,7 +321,7 @@ clear
 2 get 3 eq (array-store-elem-2) rt-ok clear
 sv restore
 
-% clear-dictstack: reset dict stack to systemdict + userdict
+% clear-dictstack: reset dict stack to systemdict + localdict
 /sv save def
 3 dict begin
 count-dictstack 4 eq (clear-dictstack-before) rt-ok clear

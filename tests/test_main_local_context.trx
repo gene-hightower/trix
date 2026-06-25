@@ -53,7 +53,7 @@ vm-global-gc 0 eq                            (2: gc on empty global heap reclaim
 % --------------------------------------------------------------------
 % Even with main local, main's binding cache + mailbox + etc. must be
 % reachable by the GC walker.  Test: define a global Tagged value on
-% userdict (which lives in main's dict stack), run GC, retrieve it.
+% localdict (which lives in main's dict stack), run GC, retrieve it.
 % The Tagged + its payload Name + contents must survive.
 %
 % Pre-intern the tag name at BASE so it doesn't get globally-interned
@@ -73,7 +73,7 @@ tagged-val tag-value 42 eq                   (3: tag-value survives GC) rt-ok
 % SECTION 4: scratch lifecycle when section 3's globals get cleaned up
 % --------------------------------------------------------------------
 
-userdict /tagged-val undef
+localdict /tagged-val undef
 vm-global-gc pop
 vm-global-info /by-kind get /gcscratch get /count get 0 eq
                                              (4: scratch freed when last user block released) rt-ok

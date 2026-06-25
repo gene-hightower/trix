@@ -6,9 +6,9 @@
 10 { { pop 42 } capture } delimit add
 { { null exch abort-exec } capture } delimit
 { 0 42 abort-exec } try
-userdict /k null put
-{ { userdict exch /k exch put 42 } capture pop } delimit pop
-{ 0 userdict /k get abort-exec } try
-{ 7 userdict /k get exec } try
+localdict /k null put
+{ { localdict exch /k exch put 42 } capture pop } delimit pop
+{ 0 localdict /k get abort-exec } try
+{ 7 localdict /k get exec } try
 10 { { |x| 99 /x load abort-exec } capture 5 add } delimit add
 10 { 99 { exch abort-exec } curry capture 5 add } delimit add

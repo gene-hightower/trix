@@ -9,7 +9,7 @@
 % the fix verified by expecting each coroutine to see its OWN value.
 %
 % Every section uses `8 dict begin ... end` so each actor has a local
-% dict for its `def`s (without it, def writes to the shared userdict,
+% dict for its `def`s (without it, def writes to the shared localdict,
 % which would be a sharing collision independent of the cache bug).
 % Results come back via each actor's op-stack top, which coroutine-join
 % surfaces on main's stack.
@@ -224,17 +224,17 @@ anchor 7 eq
 % ====================================================================
 % SECTION 7: undef in multi-coroutine mode (binding_remove_all_coroutines)
 % ====================================================================
-% Two actors both cache a userdict-level binding via lookup.  One actor
-% then undefs the name from userdict.  The other actor's cache entry
+% Two actors both cache a localdict-level binding via lookup.  One actor
+% then undefs the name from localdict.  The other actor's cache entry
 % must be invalidated (not return a stale pointer into the nulled
 % DictEntry slot).  This is the ONLY path through binding_remove_all_
 % coroutines and was untested until now.
 %
 % Sequence (deterministic via explicit yields):
-%   1. Main defs /sec7-key in userdict pre-spawn.
+%   1. Main defs /sec7-key in localdict pre-spawn.
 %   2. Actor A reads /sec7-key twice (populates A's cache), yields.
 %   3. Actor B reads /sec7-key (populates B's cache), undefs
-%      /sec7-key from userdict -- must invalidate A's entry too.
+%      /sec7-key from localdict -- must invalidate A's entry too.
 %   4. A wakes, reads /sec7-key -- must get /undefined error.
 %   5. B checks its own final state.
 
@@ -254,7 +254,7 @@ mark {
     8 dict begin
     0 coroutine-sleep         % let A populate its cache first
     sec7-key pop              % populate B's cache
-    userdict /sec7-key undef  % triggers binding_remove_all_coroutines
+    localdict /sec7-key undef  % triggers binding_remove_all_coroutines
     /sec7-key where not       % B's own cache also cleared
     end
 } actor-spawn /sec7-b exch def
@@ -352,7 +352,7 @@ sec9-main-canary 11 eq
             8 dict begin
             /w-local 314 def
             w-local pop                            % populate cache
-            userdict /sec10-result w-local put     % write result into main's userdict
+            localdict /sec10-result w-local put     % write result into main's localdict
             actor-recv pop                         % block so we can observe
             end
         }  /restart /transient >>

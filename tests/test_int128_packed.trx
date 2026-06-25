@@ -164,7 +164,7 @@ make-list exec length 3 eq
 /bias 100q def
 /add-bias { bias add } def
 5q add-bias exec 105q deep-eq
-    (curry: proc uses packed Int128 constant from userdict) rt-ok clear
+    (curry: proc uses packed Int128 constant from localdict) rt-ok clear
 
 % ====================================================================
 % SECTION 6: save/restore preserves packed 128-bit

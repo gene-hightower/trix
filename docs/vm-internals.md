@@ -875,7 +875,7 @@ the dict stack:
 
 The path is parsed by `dict_path_search()`:
 
-1. Identify the root dict by the first segment (systemdict, userdict,
+1. Identify the root dict by the first segment (systemdict, localdict,
    errordict, handlersdict, modules, or any dict entry in systemdict).
 2. Walk each intermediate segment, looking up the next dict.
 3. Return the final value.
@@ -1388,7 +1388,7 @@ The `Config` struct controls VM sizing at construction time:
 | `m_execution_depth` | depth | DefaultExecutionDepth | Exec stack limit |
 | `m_error_depth` | depth | DefaultErrorDepth | Error stack limit |
 | `m_operand_depth` | depth | DefaultOperandDepth | Operand stack limit |
-| `m_userdict_maxlength` | length | 512 | User dictionary capacity |
+| `m_localdict_maxlength` | length | 512 | User dictionary capacity |
 | `m_useroperators` | `const Operator *` | nullptr | User operator dispatch table |
 | `m_debug` | bool | false | Enable interactive debugger |
 

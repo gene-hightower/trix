@@ -593,7 +593,7 @@ Format: //:rootdict:segment:...:leaf
     or: \\:rootdict:segment:...:leaf
 ```
 
-Root dicts: `systemdict`, `userdict`, `errordict`, `handlersdict`, `modules`,
+Root dicts: `systemdict`, `localdict`, `errordict`, `handlersdict`, `modules`,
 or any dict-valued entry of `systemdict` (e.g. `numbers`, `pipeline`,
 `records`, `protocoldict`).  The special root `:status:key` performs on-demand
 VM introspection without traversing a dict, so the `//:status:vm-used` example

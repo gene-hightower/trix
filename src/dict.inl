@@ -56,7 +56,7 @@
 //
 // ACCESS MODES
 //   ReadOnly:          immutable (systemdict, numbersdict, etc.)
-//   ReadWriteFixed:    mutable, fixed capacity (userdict, handlersdict)
+//   ReadWriteFixed:    mutable, fixed capacity (localdict, handlersdict)
 //   ReadWriteDynamic:  mutable, grows by doubling when full (vm_alloc)
 //
 // HEAP LAYOUT
@@ -126,7 +126,7 @@
 // DICT STACK
 //   The dictionary stack (m_dict_base..m_dict_ptr) holds the active
 //   dictionaries for name lookup.  Bottom-to-top: systemdict (built-in
-//   operators), protocoldict (protocol dispatch procs), userdict (user
+//   operators), protocoldict (protocol dispatch procs), localdict (user
 //   definitions).  Additional dicts are pushed by
 //   `begin`/`end`, module scope, try-catch handlers, etc.  Name lookup
 //   walks from top to bottom, returning the first match.
@@ -134,7 +134,7 @@
 // BUILT-IN DICTIONARIES (created by Dict::init)
 //   systemdict:   all 829 operators + system streams/variables (ReadOnly)
 //   protocoldict: protocol dispatch procs (ReadWriteDynamic; def-protocol fills)
-//   userdict:     user definitions (ReadWriteFixed, configurable capacity)
+//   localdict:     user definitions (ReadWriteFixed, configurable capacity)
 //   errordict:    error state: /command, /error-name, /error-message,
 //                 /error-data, /handlersdict, /ostack, /dstack, /estack (ReadOnly)
 //   handlersdict: error handlers keyed by error name (ReadWriteFixed)
@@ -143,7 +143,7 @@
 class Dict {
 public:
     struct InitConfig {
-        length_t m_userdict_maxlength;
+        length_t m_localdict_maxlength;
         const Operator *m_useroperators;
     };
 
@@ -391,7 +391,7 @@ private:
     }
 public:
     static void init_systemdict(Trix *trx) {
-        auto dict_count = 20;      // systemdict, protocoldict, userdict, errordict, numbers + 15 convenience dicts
+        auto dict_count = 20;      // systemdict, protocoldict, localdict, errordict, numbers + 15 convenience dicts
         auto var_count = 9;        // false, true, null, inf, nan, inf#r, nan#r, inf#d, nan#d
         auto stdstream_count = 4;  // stdin, stdedit, stdout, stderr
         auto entry_count = static_cast<length_t>(SYSTEMNAME_STD_OP_COUNT + dict_count + var_count + stdstream_count);
@@ -881,16 +881,16 @@ public:
         init_chrono_dict(trx, systemdict);
     }
 
-    static void init_userdict(Trix *trx, InitConfig cfg) {
-        auto [userdict, userdict_offset] = create_dict(trx, cfg.m_userdict_maxlength);
-        trx->m_systemdict->put(trx, SystemName::UserDict, Object::make_dict(userdict_offset));
-        trx->m_userdict = userdict;
+    static void init_localdict(Trix *trx, InitConfig cfg) {
+        auto [localdict, localdict_offset] = create_dict(trx, cfg.m_localdict_maxlength);
+        trx->m_systemdict->put(trx, SystemName::LocalDict, Object::make_dict(localdict_offset));
+        trx->m_localdict = localdict;
 
         // user-defined Operators
         if (cfg.m_useroperators != nullptr) {
             operator_index_t index = -1;
             for (auto ptr = cfg.m_useroperators; ptr->m_func != nullptr; ++ptr, --index) {
-                userdict->put(trx, Name::make(trx, ptr->m_sv), Object::make_user_operator(index));
+                localdict->put(trx, Name::make(trx, ptr->m_sv), Object::make_user_operator(index));
             }
         }
         trx->m_useroperators = cfg.m_useroperators;
@@ -957,23 +957,23 @@ public:
     static void init(Trix *trx, InitConfig cfg) {
         init_systemdict(trx);
         init_protocoldict(trx);
-        init_userdict(trx, cfg);
+        init_localdict(trx, cfg);
         init_errordict(trx);
 
-        // Dict stack (bottom to top): systemdict, protocoldict, userdict
-        // def-protocol binds dispatch procs in protocoldict; user def goes to userdict.
+        // Dict stack (bottom to top): systemdict, protocoldict, localdict
+        // def-protocol binds dispatch procs in protocoldict; user def goes to localdict.
         *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_systemdict));    // bottom
         *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_protocoldict));  // middle
-        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_userdict));      // top
+        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));      // top
 
         // set name binding for all three permanent dicts
         trx->m_systemdict->set_name_bindings(trx);
         trx->m_protocoldict->set_name_bindings(trx);
-        trx->m_userdict->set_name_bindings(trx);
+        trx->m_localdict->set_name_bindings(trx);
     }
 
     static void init_protocoldict(Trix *trx) {
-        // Protocol dispatch procs live here, isolated from userdict.
+        // Protocol dispatch procs live here, isolated from localdict.
         // Starts empty; def-protocol populates it at runtime.
         auto [protocoldict, protocoldict_offset] =
                 create_dict(trx, DefaultInternalDictCapacity, Object::DictMode::ReadWriteDynamic);
@@ -1644,7 +1644,7 @@ public:
 
     // Walks the dict stack from top to bottom and returns the first dict
     // whose Dict::IsFrame bit is NOT set.  At BASE the bottom dict is
-    // userdict (non-frame), so the walk always terminates with a valid
+    // localdict (non-frame), so the walk always terminates with a valid
     // result.  Used by def / store-fallback / current-dict / import to
     // skip past |...| locals frames so their writes land in the
     // surrounding module scope.  Counterpart `local-def` requires the
@@ -1655,7 +1655,7 @@ public:
                 return dict_obj_ptr;
             }
         }
-        // PermanentDictCount guarantees userdict is non-frame at the bottom.
+        // PermanentDictCount guarantees localdict is non-frame at the bottom.
         // Returning nullptr here would indicate VM corruption.
         assert(false);
         std::unreachable();
@@ -2465,7 +2465,7 @@ public:
     // m_binding directly.
     // Multi-coroutine: walk every live coroutine's table and drop any entry
     // whose value_offset falls in this dict's allocated range.  Conservative
-    // on coroutine scope since the popped dict (e.g. userdict) may have
+    // on coroutine scope since the popped dict (e.g. localdict) may have
     // been reachable from peer actor stacks.
     void clear_name_bindings(Trix *trx) {
         if (trx->m_live_coroutine_count == 0) {

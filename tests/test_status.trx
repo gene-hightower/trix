@@ -166,11 +166,11 @@ restore clear
 % SECTION 9: Dictionary keys
 % ====================================================================
 
-//:status:userdict-length type /integer-type eq (st: userdict-length is integer) rt-ok clear
-//:status:userdict-maxlength type /integer-type eq (st: userdict-maxlength is integer) rt-ok clear
-//:status:userdict-length 0 gt                  (st: userdict-length > 0) rt-ok clear
-//:status:userdict-length //:status:userdict-maxlength le
-                                                (st: userdict-length <= maxlength) rt-ok clear
+//:status:localdict-length type /integer-type eq (st: localdict-length is integer) rt-ok clear
+//:status:localdict-maxlength type /integer-type eq (st: localdict-maxlength is integer) rt-ok clear
+//:status:localdict-length 0 gt                  (st: localdict-length > 0) rt-ok clear
+//:status:localdict-length //:status:localdict-maxlength le
+                                                (st: localdict-length <= maxlength) rt-ok clear
 
 % ====================================================================
 % SECTION 10: Configuration keys
@@ -633,15 +633,15 @@ clear
 clear
 
 % --- Dict stack probing ---
-% Default state: dict-stack 0 = userdict, 1 = protocoldict, 2 = systemdict
-/dict-stack 0 stack-probe //userdict eq                (st: dict-stack 0 is userdict) rt-ok clear
+% Default state: dict-stack 0 = localdict, 1 = protocoldict, 2 = systemdict
+/dict-stack 0 stack-probe //localdict eq                (st: dict-stack 0 is localdict) rt-ok clear
 /dict-stack 1 stack-probe //:systemdict:protocoldict eq (st: dict-stack 1 is protocoldict) rt-ok clear
 /dict-stack 2 stack-probe //systemdict eq              (st: dict-stack 2 is systemdict) rt-ok clear
 
 % After begin: new dict on top
 << >> begin
-/dict-stack 0 stack-probe //userdict ne                (st: dict-stack 0 after begin is new dict) rt-ok
-/dict-stack 1 stack-probe //userdict eq                (st: dict-stack 1 after begin is userdict) rt-ok
+/dict-stack 0 stack-probe //localdict ne                (st: dict-stack 0 after begin is new dict) rt-ok
+/dict-stack 1 stack-probe //localdict eq                (st: dict-stack 1 after begin is localdict) rt-ok
 end clear
 
 % dict-stack out-of-range

@@ -127,9 +127,9 @@ read-all (42hello1-2) eq (fprint-fmt: readback matches) rt-ok clear
 //:systemdict:numbers:real-type:pi 3.14159 0.001
 3 1 roll sub abs ge                (dict-path: systemdict pi) rt-ok clear
 
-% userdict path: define and retrieve
+% localdict path: define and retrieve
 /test-dict-path-val 42 def
-//:userdict:test-dict-path-val 42 eq  (dict-path: userdict value) rt-ok clear
+//:localdict:test-dict-path-val 42 eq  (dict-path: localdict value) rt-ok clear
 
 % status path
 //:status:vm-used type /integer-type eq  (dict-path: status vm-used) rt-ok clear

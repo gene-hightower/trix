@@ -157,7 +157,7 @@ using stack_depth_t = length_t;
 static constexpr stack_depth_t MinDictionaryDepth{16};
 static constexpr stack_depth_t MaxDictionaryDepth{256};
 static constexpr stack_depth_t DefaultDictionaryDepth{64};  // vm usage: dictionary_depth * sizeof(Object)
-static constexpr stack_depth_t PermanentDictCount{3};       // systemdict, protocoldict, userdict
+static constexpr stack_depth_t PermanentDictCount{3};       // systemdict, protocoldict, localdict
 
 static constexpr stack_depth_t MinExecutionDepth{128};
 static constexpr stack_depth_t MaxExecutionDepth{8192};
@@ -188,10 +188,10 @@ static constexpr stack_depth_t DefaultOperandDepth{1024};  // vm usage: operand_
 // buffers that hold those clones).  80 covers that 66 with headroom, under the prior 128.
 static constexpr stack_depth_t MaxGcRootDepth{80};
 
-static constexpr length_t MinUserDictMaxLength{256};
-static constexpr length_t MaxUserDictMaxLength{50000};
-// vm usage: 12 bytes + (vm_offset_t * bucket_count) + (2 * (sizeof(DictEntry) * userdict_maxlength))
-static constexpr length_t DefaultUserDictMaxLength{512};
+static constexpr length_t MinLocalDictMaxLength{256};
+static constexpr length_t MaxLocalDictMaxLength{50000};
+// vm usage: 12 bytes + (vm_offset_t * bucket_count) + (2 * (sizeof(DictEntry) * localdict_maxlength))
+static constexpr length_t DefaultLocalDictMaxLength{512};
 static constexpr length_t MaxDictPoolSize{16};  // support maxlength 1..16 (locals + try-catch handlers)
 
 using name_index_t = uint16_t;
@@ -335,7 +335,7 @@ struct Config {
     stack_depth_t m_error_depth = DefaultErrorDepth;
     stack_depth_t m_operand_depth = DefaultOperandDepth;
     stack_depth_t m_scratch_depth = DefaultCoroutineScratchDepth;  // per-coroutine scratch arena
-    length_t m_userdict_maxlength = DefaultUserDictMaxLength;
+    length_t m_localdict_maxlength = DefaultLocalDictMaxLength;
     const Operator *m_useroperators = nullptr;
     // -d / --debug: arm the step-in debugger at startup.  Debugger-only --
     // set in api.inl (gated) and read only by the TRIX_DBG-gated DebugState

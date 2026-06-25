@@ -753,7 +753,7 @@ if (!vm.raise_error(Trix::Error::LimitCheck)) {
 
 ### Handling Interrupts in Scripts
 
-Scripts define one handler proc per level in userdict -- `l0-interrupt`,
+Scripts define one handler proc per level in localdict -- `l0-interrupt`,
 `l1-interrupt`, `l2-interrupt` (stack effect `--`; the level is implied by
 the name, no operand is passed):
 
@@ -1056,7 +1056,7 @@ line via `parse_args` (see [Command-Line Argument Parsing](#command-line-argumen
 | `m_error_depth` | 64 | `--error-depth` | Error stack depth |
 | `m_save_count` | 64 | `--save-depth` | Maximum save/restore nesting |
 | `m_scratch_depth` | 128 | `--scratch-depth` | Per-coroutine scratch arena depth |
-| `m_userdict_maxlength` | 512 | `--userdict-size` | User dict capacity |
+| `m_localdict_maxlength` | 512 | `--localdict-size` | User dict capacity |
 | `m_useroperators` | nullptr | *(C++ only)* | Custom C++ operator table |
 | `m_name_bucket_count` | auto (0) | `--name-buckets` | Name table hash buckets; 0 = auto-scale with VM size (resolves to 2053 at the default 1 MB) |
 | `m_eqstring_length` | 128 | `--eq-string` | Equality comparison string buffer |

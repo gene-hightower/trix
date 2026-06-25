@@ -72,7 +72,7 @@
 } def
 
 % --- Module state -----------------------------------------------------------
-% All in userdict.  Lazy-init: install-debugger overwrites, uninstall-debugger
+% All in localdict.  Lazy-init: install-debugger overwrites, uninstall-debugger
 % wipes back to defaults.
 
 /_dbg-source-lines [] def
@@ -282,7 +282,7 @@
 % snap max-items per-item-width -- "preview"
 %
 % NOTE: working variables use `local-def`, not `def`.  Plain `def`
-% skips frame dicts and writes to userdict (per the pre-1.0 semantic
+% skips frame dicts and writes to localdict (per the pre-1.0 semantic
 % change); a working var whose name collides with a systemdict op
 % (`/count`, `/start`, `/drop`, etc.) would then shadow the operator
 % for ALL subsequent callers.  `|args|#+N` expands the frame to hold
@@ -402,7 +402,7 @@
 % drained -- (mutates _dbg-output-lines / _dbg-output-partial / _dbg-output-truncated)
 %
 % Working vars use `local-def` so they stay in the proc's frame dict
-% instead of leaking into userdict (and potentially shadowing systemdict
+% instead of leaking into localdict (and potentially shadowing systemdict
 % ops like /drop).
 /_dbg-drain-into-lines {|drained|#+7
     drained length 0 gt
@@ -1271,7 +1271,7 @@
 } def
 
 % Non-journaled save-token slot.  def-persist'd by _dbg-cmd-eval so it
-% survives the wrapping restore (the binding cell lives in userdict,
+% survives the wrapping restore (the binding cell lives in localdict,
 % below every save barrier we create).
 /_dbg-cmd-save-token 0 def
 
@@ -1285,7 +1285,7 @@
 % non-rollback state.
 %
 % Working vars use `local-def` to stay in the proc's frame dict.  Plain
-% `def` would write to userdict; /status, /count, /start, /n in
+% `def` would write to localdict; /status, /count, /start, /n in
 % particular all collide with systemdict ops and would shadow them for
 % every subsequent caller -- not just within this proc.  /violation /
 % /before / /i are not systemdict names today but still treated as
@@ -1332,7 +1332,7 @@
         }
         if-else
         % Stack now has the result on top + the save token in the
-        % userdict slot.  Push the token, pop it via restore; the
+        % localdict slot.  Push the token, pop it via restore; the
         % result remains on top as our return value.
         _dbg-cmd-save-token restore
     }
@@ -1650,7 +1650,7 @@
 
         % Refresh watch results before the first redraw of this halt.
         % Each watch eval is save/restore-bracketed; the operand stack
-        % and userdict are unchanged afterwards.
+        % and localdict are unchanged afterwards.
         _dbg-eval-watches
 
         _dbg-redraw

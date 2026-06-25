@@ -557,7 +557,7 @@ Return null   // not found -> /undefined error
 
 The inner comparison is offset equality (4 bytes), not string comparison.
 The outer loop iterates over 3-5 dicts in typical usage (systemdict +
-protocoldict + userdict + 0-2 frame dicts). Each dict lookup is O(m) where m is the
+protocoldict + localdict + 0-2 frame dicts). Each dict lookup is O(m) where m is the
 average chain length (~1.0 for well-sized tables).
 
 **On hit, the cache is populated.** Subsequent lookups for the same name
@@ -583,7 +583,7 @@ without relying on the dict stack:
 
 1. **Root dispatch:** The first segment identifies the root dict:
    - `:systemdict:` -> systemdict
-   - `:userdict:` -> userdict
+   - `:localdict:` -> localdict
    - `:errordict:` -> errordict
    - `:handlersdict:` -> handlersdict
    - `:status:` -> VM introspection (computed on demand)

@@ -29,7 +29,7 @@ lay /byte-size get 24 eq (layout: byte-size 24) rt-ok clear
 /mem-list lay /members get def
 mem-list length 4 eq (layout: 4 members) rt-ok clear
 
-% member-by-name accessor (mem-list is a free var resolved up to userdict)
+% member-by-name accessor (mem-list is a free var resolved up to localdict)
 /member-by {
     |nm|#+3
     /found null local-def

@@ -334,7 +334,7 @@ command-line-args { /arg exch def
 %
 %  Each iteration is wrapped in `save`/`restore` so the per-mask
 %  candidate-set allocations don't pile up.  The carry-over scalars
-%  (best-mask, best-size, best-fee) live in userdict and are written
+%  (best-mask, best-size, best-fee) live in localdict and are written
 %  via `def-persist` so they survive each iteration's `restore`.
 %
 %  N=11 yields 2048 subsets; N=12 (--extra-roster) yields 4096.  Both
@@ -343,7 +343,7 @@ command-line-args { /arg exch def
 %  or antipathy filters added, prunes show up in the count.
 % ----------------------------------------------------------------------
 
-% Userdict-backed carry-over slots for the optimal solver.  Pre-defined
+% Localdict-backed carry-over slots for the optimal solver.  Pre-defined
 % so def-persist has a binding to overwrite (def-persist requires the
 % name to already exist; it bypasses the save journal but doesn't
 % create new bindings).
@@ -376,7 +376,7 @@ command-line-args { /arg exch def
 % scalars) and returns true iff the candidate beats the best-so-far.
 /optimal-cover-core { |required better?|#+8
     % Reset carry-over slots before the loop.  These are top-level
-    % userdict bindings, written via `def` (skips frames).  Inside the
+    % localdict bindings, written via `def` (skips frames).  Inside the
     % save/restore loop below we switch to `def-persist` so updates
     % survive each iteration's rollback.
     /opt-best-mask -1     def

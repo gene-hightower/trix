@@ -675,7 +675,7 @@ memory 16#50 font-hi put-interval
 % save/load, unknown opcode, out-of-range access, call-stack edge),
 % 2 = key-wait (FX0A with no key down, PC rewound -- sleep a tick).
 
-/native-cpu-available userdict /chip8-step-fast known? def
+/native-cpu-available localdict /chip8-step-fast known? def
 /cpu-kernel-pref /native def        % --cpu-kernel=native|trix
 /use-native-cpu false def           % resolved after parse-args
 /cpu-state 9 array def              % [PC I DT ST SP keys hi dirty bell]
@@ -1082,7 +1082,7 @@ memory 16#50 font-hi put-interval
 % bytes, all 16 V registers, all 8192 framebuffer bytes, and all 16 call
 % stack slots.
 %
-% `current-setup` is a userdict proc slot: procs stored in dicts run on
+% `current-setup` is a localdict proc slot: procs stored in dicts run on
 % bare-name lookup, so each scenario stores its setup there and the two
 % run drivers invoke it by name.
 

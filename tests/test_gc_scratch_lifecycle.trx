@@ -47,7 +47,7 @@ vm-global-info /by-kind get /dict get /count get
 % --------------------------------------------------------------------
 % SECTION 3: scratch survives GC sweep
 % --------------------------------------------------------------------
-% While g-dict is rooted via userdict, GC keeps it alive AND keeps
+% While g-dict is rooted via localdict, GC keeps it alive AND keeps
 % scratch alive (the kind-skip in gc_sweep_unmarked).
 
 vm-global-gc pop
@@ -59,11 +59,11 @@ vm-global-info /by-kind get /dict get /count get
 % --------------------------------------------------------------------
 % SECTION 4: lifecycle round-trip -- free all user globals, scratch frees too
 % --------------------------------------------------------------------
-% Drop the userdict reference to g-dict.  Without a root, the next GC
+% Drop the localdict reference to g-dict.  Without a root, the next GC
 % pass sweeps it.  When it's freed, m_gvm_user_block_count drops to 0,
 % which triggers the scratch to be freed too.
 
-userdict /g-dict undef
+localdict /g-dict undef
 vm-global-gc pop                               % sweep g-dict; scratch auto-freed on count==0
 vm-global-info /by-kind get /gcscratch get /count get
 0 eq                                          (4: gcscratch freed when last user block released) rt-ok

@@ -269,36 +269,36 @@ exec
 % matching locals dicts are saved inside the continuation and restored
 % on resume so the resumed body sees the same locals scope.
 %
-% Tests `put` results into userdict directly (instead of `def` which
+% Tests `put` results into localdict directly (instead of `def` which
 % would write into the top-of-stack locals dict and exceed its fixed
 % capacity).
 
-userdict /flag 0 put
-userdict /result 0 put
-userdict /k null put
+localdict /flag 0 put
+localdict /result 0 put
+localdict /k null put
 
 % capture inside |x| runs without /invalid-access
 {
     99 {
         |x|
-        { pop userdict /flag 1 put } capture
+        { pop localdict /flag 1 put } capture
     } exec
 } delimit
 flag 1 eq (locals: capture inside |x| runs cleanly) rt-ok
-userdict /flag 0 put
+localdict /flag 0 put
 clear
 
 % resumed body sees x bound from the locals frame that was captured
 {
     99 {
         |x|
-        { userdict /k 3 2 roll put null } capture pop
-        userdict /result x put
+        { localdict /k 3 2 roll put null } capture pop
+        localdict /result x put
     } exec
 } delimit
 0 /k load exec
 result 99 eq (locals: resumed body sees captured x) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % 3-deep |locals| nest all restored in outermost-first order on resume
@@ -309,15 +309,15 @@ clear
             |b|
             {
                 |c|
-                { userdict /k 3 2 roll put null } capture pop
-                userdict /result a b c add add put
+                { localdict /k 3 2 roll put null } capture pop
+                localdict /result a b c add add put
             } exec
         } exec
     } exec
 } delimit
 0 /k load exec
 result 6 eq (locals: 3-deep |a|/|b|/|c| all restored on resume) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % nested delimit inside |locals|: inner delimit's own barrier delimits
@@ -327,18 +327,18 @@ clear
 {
     7 {
         |x|
-        { { pop userdict /result x put } capture } delimit
+        { { pop localdict /result x put } capture } delimit
     } exec
 } delimit
 result 7 eq (locals: nested delimit's capture stays below |x|) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % K invoked after handler returns: resumed body sees x
 {
     42 {
         |x|
-        { userdict /k 3 2 roll put null } capture pop
+        { localdict /k 3 2 roll put null } capture pop
         x
     } exec
 } delimit
@@ -350,14 +350,14 @@ clear
 {
     5 {
         |x|
-        { userdict /k 3 2 roll put null } capture pop
-        userdict /result x put
+        { localdict /k 3 2 roll put null } capture pop
+        localdict /result x put
     } exec
 } delimit
 0 /k load exec       % first resume ok
 { 0 /k load exec } try
 /invalid-access eq (locals: second resume is spent) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % try-catch inside locals, inside captured segment (error-stack companion
@@ -365,13 +365,13 @@ clear
 {
     10 {
         |x|
-        { userdict /k 3 2 roll put null } capture pop
-        { userdict /result x put } try pop
+        { localdict /k 3 2 roll put null } capture pop
+        { localdict /result x put } try pop
     } exec
 } delimit
 0 /k load exec
 result 10 eq (locals: try-catch inside locals+captured segment) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % ====================================================================
@@ -399,9 +399,9 @@ clear
 % trim, the handler's top IS K (not the ambient 300), and K is the
 % sole item on op.  `dup is-continuation` keeps K intact for the
 % capture's delimit-return.
-userdict /handler-top-is-k false put
+localdict /handler-top-is-k false put
 {
-    100 200 300 { dup is-continuation userdict exch /handler-top-is-k exch put } capture
+    100 200 300 { dup is-continuation localdict exch /handler-top-is-k exch put } capture
 } delimit
 pop                   % discard K (delimit's result)
 handler-top-is-k true eq (op-slice: handler sees K on top of clean op) rt-ok
@@ -477,16 +477,16 @@ add 52 eq (abort-exec: receiver returns normally, handler result yielded) rt-ok 
 /type-check eq
 (abort-exec: type-check caught non-Continuation) rt-ok clear
 
-% Stale-scope detection: store K in userdict; let the handler return
+% Stale-scope detection: store K in localdict; let the handler return
 % normally so @handler-scope pops.  A subsequent abort-exec on the
 % stored K must raise /invalid-access rather than silently falling
 % back to splice.
-userdict /stale-k null put
+localdict /stale-k null put
 {
-    { userdict exch /stale-k exch put 42 } capture pop
+    { localdict exch /stale-k exch put 42 } capture pop
 } delimit pop
 
-{ 0 userdict /stale-k get abort-exec } try
+{ 0 localdict /stale-k get abort-exec } try
 /invalid-access eq
 (abort-exec: stale-scope rejected with /invalid-access) rt-ok clear
 
@@ -494,7 +494,7 @@ userdict /stale-k null put
 % requirement).  Captured segment was just the body tail after
 % `capture` -- `pop` -- so resuming with 7 below it pops 7 and
 % leaves op clean.  No error.
-{ 7 userdict /stale-k get exec } try
+{ 7 localdict /stale-k get exec } try
 /no-error eq
 (abort-exec: exec splice still works on stale K) rt-ok clear
 
@@ -520,15 +520,15 @@ count-dictstack before-abort-depth eq
 % mismatch); outer's @handler-scope is the trim target.  Result:
 % outer captured body (`5 add`) runs with resume; inner captured body
 % (`1 add`) is discarded.
-userdict /outer-k null put
+localdict /outer-k null put
 10
 {
     {
-        userdict exch /outer-k exch put   % save OUTER K
+        localdict exch /outer-k exch put   % save OUTER K
         % Inside outer handler: nested delimit+capture
         {
             {
-                99 userdict /outer-k get abort-exec
+                99 localdict /outer-k get abort-exec
             } capture
             1 add   % captured by inner but never runs (abort skipped inner)
         } delimit
@@ -656,24 +656,24 @@ count-dictstack depth0 eq
 
 % 10 sequential abort-exec invocations.  Each delimit installs a fresh
 % capture; the handler aborts with a resume value that the captured
-% tail folds into an accumulator via userdict.
-userdict /acc 0 put
+% tail folds into an accumulator via localdict.
+localdict /acc 0 put
 10 {
     {
         { null exch abort-exec } capture
         pop                                        % discard null resume
-        userdict /acc userdict /acc get 1 add put
+        localdict /acc localdict /acc get 1 add put
     } delimit
 } repeat
-userdict /acc get 10 eq (stress: 10 sequential abort-exec -- acc accumulates) rt-ok clear
+localdict /acc get 10 eq (stress: 10 sequential abort-exec -- acc accumulates) rt-ok clear
 
 % Deep-nested captures, abort-exec targets the OUTERMOST K.  Four
 % levels deep; inner three handlers' frames all discarded on abort.
-userdict /lvl1-k null put
+localdict /lvl1-k null put
 1
 {
     {
-        userdict exch /lvl1-k exch put
+        localdict exch /lvl1-k exch put
         2
         {
             {
@@ -686,7 +686,7 @@ userdict /lvl1-k null put
                         {
                             {
                                 pop   % discard inner K
-                                99 userdict /lvl1-k get abort-exec
+                                99 localdict /lvl1-k get abort-exec
                             } capture
                             add       % unreachable
                         } delimit
@@ -735,10 +735,10 @@ add 114 eq (fuzz: abort-exec inside curry-embedded handler) rt-ok clear
 % Interaction test: exec K then abort-exec on same K -- second call is
 % spent (execute_continuation's is_spent check fires before handler-
 % scope scan, so the error is /invalid-access "spent", not stale-scope).
-userdict /reuse-k null put
-{ { userdict exch /reuse-k exch put 42 } capture pop } delimit pop
-7 userdict /reuse-k get exec   % first use: splice with 7 as resume
-{ 8 userdict /reuse-k get abort-exec } try
+localdict /reuse-k null put
+{ { localdict exch /reuse-k exch put 42 } capture pop } delimit pop
+7 localdict /reuse-k get exec   % first use: splice with 7 as resume
+{ 8 localdict /reuse-k get abort-exec } try
 /invalid-access eq (fuzz: abort-exec on already-spent K rejected) rt-ok clear
 
 % =================================================================
@@ -800,7 +800,7 @@ save /dummy 1 def restore
 % ops_continuation.inl:324) is the belt to this put-site braces.
 %
 % Run inside { ... } exec + 8 dict begin/end so the helper names don't
-% consume userdict slots (test_all.trx chains ~60 files without per-
+% consume localdict slots (test_all.trx chains ~60 files without per-
 % file save/restore isolation at this point in the suite).
 
 { 8 dict begin

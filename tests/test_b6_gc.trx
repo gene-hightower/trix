@@ -54,7 +54,7 @@ exch restore
 exec
 105 eq (closure-capture: global closure survives save/restore + local clobber) rt-ok clear
 
-% GC survival: a global closure stored in userdict survives a full GC + execs
+% GC survival: a global closure stored in localdict survives a full GC + execs
 /v 7 def
 ${ { v 1 add } [ /v ] closure-capture } /clg exch def
 vm-global-gc pop

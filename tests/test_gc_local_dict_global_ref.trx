@@ -25,7 +25,7 @@
 %   * Allocate global Arrays (via `${ ... }`).
 %   * Store each Array into a LOCAL container (Dict, Tagged, or
 %     plain Array; no `${...}` wrap on the container itself).
-%   * Wire the local container up through userdict (global) so it's
+%   * Wire the local container up through localdict (global) so it's
 %     reachable from a Trix root.
 %   * Drop every other reference to the global Array.
 %   * GC.
@@ -71,7 +71,7 @@ rt-fails 0 16#0#b put
 } def
 
 % --------------------------------------------------------------------
-% SECTION 1: global Array reachable only through local Dict via userdict
+% SECTION 1: global Array reachable only through local Dict via localdict
 % --------------------------------------------------------------------
 
 /runs0 //:status:gc-runs def
@@ -84,8 +84,8 @@ ${ 50 array } /retain-payload exch def
 } for
 
 % Build a local Dict (no ${...} wrap; vm_alloc, sub-m_vm_global) and
-% stash the global Array in it.  /local-holder lives in userdict
-% (global), so the chain is: userdict -> local-holder (LOCAL) ->
+% stash the global Array in it.  /local-holder lives in localdict
+% (global), so the chain is: localdict -> local-holder (LOCAL) ->
 % retain-payload (GLOBAL).
 4 dict /local-holder exch def
 local-holder /payload retain-payload put-persist
@@ -124,7 +124,7 @@ payload 49 get 49 eq                          (1: payload[49] intact) rt-ok
 % --------------------------------------------------------------------
 % Two nested local Dicts; the inner one holds the global ref.  The
 % outer one references the inner.  Both are local; outer is rooted
-% in userdict.  Validates that gc_mark_object's local-Dict walk
+% in localdict.  Validates that gc_mark_object's local-Dict walk
 % recurses through nested local Dicts (the visited set prevents
 % double-walks but doesn't block the descent).
 
@@ -143,7 +143,7 @@ outer-d /child inner-d put-persist
 vm-global-gc /reclaimed2 exch def
 30 force-reuse
 
-% outer-d is in userdict (global).  Reach the global Array through
+% outer-d is in localdict (global).  Reach the global Array through
 % outer -> child (LOCAL Dict) -> /payload.
 outer-d /child get /payload get /payload exch def
 payload length 30 eq                          (2: nested-walked Array length intact) rt-ok
@@ -190,7 +190,7 @@ payload 15 get 215 eq                         (3: cyclic payload[15] intact) rt-
 % --------------------------------------------------------------------
 % A Tagged value created without `${...}` lands in local VM (its
 % 2-Object payload is vm_alloc'd).  When that Tagged carries a
-% global ref as its value field and is rooted via userdict, GC must
+% global ref as its value field and is rooted via localdict, GC must
 % walk the Tagged's payload to keep the global alive.  This is the
 % mini-scheme primitives-dict shape: each /primitive-tagged value
 % wraps a global proc body.

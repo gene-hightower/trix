@@ -162,7 +162,7 @@ count-dictstack  base-depth2 eq  (nested-end: dictstack back to base) rt-ok  cle
   count-dictstack 3 eq  (clear-dictstack: resets to permanent dicts) rt-ok
 clear
 
-% --- Error: end with only systemdict+userdict ---
+% --- Error: end with only systemdict+localdict ---
 { end } try  /dictstack-underflow eq  (end: underflow -> dictstack-underflow) rt-ok  clear
 
 % --- current-dict ---
@@ -528,7 +528,7 @@ clear
   dup max-length 5 eq  (maxlen-vs-len: max-length unchanged) rt-ok
 clear
 
-% --- begin/end with def shadows userdict ---
+% --- begin/end with def shadows localdict ---
 /shadow-var 100 def
 3 dict begin
   /shadow-var 200 def

@@ -34,7 +34,7 @@
 
 // throws: (none)
 static void interrupt_op(Trix *) {
-    // default systemdict interrupt operator, it is expected a program will override in userdict
+    // default systemdict interrupt operator, it is expected a program will override in localdict
 }
 
 // clear-object: any :- any
@@ -1238,10 +1238,10 @@ static void vm_heap_diff_op(Trix *trx) {
 
 [[nodiscard]] bool status_lookup_config(std::string_view key) {
     using namespace std::literals::string_view_literals;
-    if (key == "userdict-length"sv) {
-        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_userdict->length()));
-    } else if (key == "userdict-maxlength"sv) {
-        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_userdict->maxlength()));
+    if (key == "localdict-length"sv) {
+        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_localdict->length()));
+    } else if (key == "localdict-maxlength"sv) {
+        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_localdict->maxlength()));
     } else if (key == "eqstring-length"sv) {
         m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(root_object(RootObject::EqString).object_length()));
     } else if (key == "eqarray-length"sv) {
@@ -2482,7 +2482,7 @@ void format_backtrace_report() {
         *m_estack_ptr = save_stack(*m_estack_ptr, m_exec_base, m_exec_ptr);
 
         // Clear name bindings for all dicts above the three permanent dicts.
-        // dict_base[0] = systemdict, dict_base[1] = protocoldict, dict_base[2] = userdict.
+        // dict_base[0] = systemdict, dict_base[1] = protocoldict, dict_base[2] = localdict.
         auto dict_bottom = (m_dict_base + PermanentDictCount - 1);
         for (auto ptr = m_dict_ptr; ptr > dict_bottom; --ptr) {
             ptr->dict_value(trx)->clear_name_bindings(trx);

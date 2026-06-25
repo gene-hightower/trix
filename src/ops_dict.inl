@@ -200,10 +200,10 @@ static void begin_locals_op(Trix *trx) {
 }
 
 // cleardictstack: :- --
-// Pops all but systemdict and userdict from the dict stack.
+// Pops all but systemdict and localdict from the dict stack.
 // throws: (none)
 static void cleardictstack_op(Trix *trx) {
-    // do not pop systemdict, protocoldict, and userdict
+    // do not pop systemdict, protocoldict, and localdict
     auto dict_bottom = (trx->m_dict_base + PermanentDictCount - 1);
     for (auto ptr = trx->m_dict_ptr; ptr > dict_bottom; --ptr) {
         auto dict = ptr->dict_value(trx);
@@ -283,7 +283,7 @@ static void require_operator_to_override(Trix *trx, Object key_ptr) {
 // def: key any :- --
 // Defines key with value in the current dictionary, walking past any
 // |...| frame dicts on the dict stack to find the first non-frame
-// (typically userdict at module scope, or whatever was begin'd by the
+// (typically localdict at module scope, or whatever was begin'd by the
 // caller).  Use `local-def` to bind into the current frame.
 // throws: vm-full, dict-full, opstack-underflow, read-only, type-check, invalid-name
 static void def_op(Trix *trx) {

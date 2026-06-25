@@ -1109,7 +1109,7 @@ across the restart boundary.
    intensity calculations at the wrap point.
 
 5. **No child start arguments**: the `/start` proc receives no arguments.
-   Shared state must be passed via userdict or closures.
+   Shared state must be passed via localdict or closures.
 
 6. **Single-VM only**: no distributed supervision.  Monitors and links
    operate within a single Trix instance.

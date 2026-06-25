@@ -29,7 +29,7 @@
 rt-fails 0 16#0#b put
 /rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
-userdict /piece-collides-fast known? not {
+localdict /piece-collides-fast known? not {
     (test_b8_tetrix_safety: skipped (./trix has no tetrix user ops)) =
     quit
 } if

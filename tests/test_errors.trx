@@ -12,7 +12,7 @@
 rt-fails 0 16#0#b put
 /rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
-% helper: pop all extra dicts from dict stack, leaving only systemdict and userdict
+% helper: pop all extra dicts from dict stack, leaving only systemdict and localdict
 /cleanup-dictstack { count-dictstack 3 sub { end } repeat } def
 
 % ====================================================================

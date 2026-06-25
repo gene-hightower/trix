@@ -28,7 +28,7 @@ rt-fails 0 16#0#b put
 /rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
 % ===========================================================================
-% Through-container staleness: ref stashed in userdict, second creation
+% Through-container staleness: ref stashed in localdict, second creation
 % same kind, retrieve via dict lookup -- must error as stale.
 % ===========================================================================
 

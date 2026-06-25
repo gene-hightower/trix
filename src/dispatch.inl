@@ -133,7 +133,7 @@ struct SysOperatorRow {
             {     SystemName::ErrorDict,       "errordict"sv},
             {  SystemName::HandlersDict,    "handlersdict"sv},
             {    SystemName::SystemDict,      "systemdict"sv},
-            {      SystemName::UserDict,        "userdict"sv},
+            {      SystemName::LocalDict,        "localdict"sv},
             {  SystemName::Addr_Invalid,    "addr-invalid"sv},
             {  SystemName::Addr_NullPtr,       "addr-null"sv},
             { SystemName::Addr_ReadOnly,  "addr-read-only"sv},

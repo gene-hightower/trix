@@ -215,7 +215,7 @@ pop i128c deep-eq
 % SECTION 7: Coroutine yield / join with 128-bit values
 % ====================================================================
 
-% coroutine returns an Int128 value read from userdict (via def)
+% coroutine returns an Int128 value read from localdict (via def)
 [ { i128a } coroutine-launch coroutine-join
 pop i128a deep-eq
     (coroutine: returns Int128) rt-ok clear

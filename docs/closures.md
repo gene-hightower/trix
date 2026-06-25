@@ -319,7 +319,7 @@ save-handler           % prints: save completed\nsave-btn: fired
 Note: This captures count=0 at creation time.  The `store` inside the
 closure body finds `count` in the captured **ReadOnly** dict and raises
 `/read-only` (the closure crashes) — it does **not** fall through to
-userdict.  For mutable state, use a Cell (`cell` / `cell-set` /
+localdict.  For mutable state, use a Cell (`cell` / `cell-set` /
 `cell-get`) and capture the cell reference.
 
 ### 4.3 Configuration Injection
@@ -392,7 +392,7 @@ The dict built by `closure-capture` is set to ReadOnly after construction.
 
 **Why**: Captures are snapshots, not live references.  A ReadOnly dict
 prevents accidental mutation of captured bindings.  A `def` inside a
-closure body does **not** reach userdict: `def` targets the topmost
+closure body does **not** reach localdict: `def` targets the topmost
 non-frame dict, which while the closure runs is the captured ReadOnly
 dict, so it raises `/read-only`.  Mutate state through a captured Cell
 instead (see §4.2).
@@ -610,7 +610,7 @@ Capture cell references for watcher callbacks:
   `store` of an unbound name raise `/read-only`: the resolver picks the
   topmost non-frame dict, which during closure execution is the captured
   ReadOnly dict.  To mutate state, capture a Cell (see 4.2) rather than
-  relying on `def`/`store` falling through to userdict.
+  relying on `def`/`store` falling through to localdict.
 
 - **Dict stack depth.** Each closure invocation uses one dict stack slot.
   Deep nesting of closure calls can exhaust the dict stack (default depth

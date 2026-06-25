@@ -602,7 +602,7 @@ static constexpr const char *kTrixLongOptions[] = {
         "--image",        "--quiet",         "--no-banner",     "--sandbox",       "--resident",
         "--about",        "--vm-size",       "--operand-depth", "--exec-depth",    "--dict-depth",
         "--error-depth",  "--save-depth",    "--stream-count",  "--stream-buffer", "--stream-io",
-        "--name-buckets", "--userdict-size", "--eq-string",     "--eq-array",      "--eq-proc",
+        "--name-buckets", "--localdict-size", "--eq-string",     "--eq-array",      "--eq-proc",
         "--eq-dict",      "--quantum",       "--max-ops",       "--sleep-budget",  "--test-eqgen-preload",
         "--interactive",  "--scratch-depth", "--module-path",   "--inspect",       "--inspect-on-error",
         "--inspect-at",   "--no-color",

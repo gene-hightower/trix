@@ -3211,7 +3211,7 @@ public:
         } else {
             // Multi-coroutine: walk every live coroutine's table.  A Name
             // undef'd/out-of-scope for the caller may still be cached by peers
-            // sharing the same dict (userdict etc.); leaving stale entries in
+            // sharing the same dict (localdict etc.); leaving stale entries in
             // peer caches would return pointers into an empty DictEntry slot.
             trx->binding_remove_all_coroutines(m_name);
         }

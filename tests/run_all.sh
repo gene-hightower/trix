@@ -143,7 +143,7 @@ fi
 # (field-copy-fast, score-board-fast, etc.).  Under ./trix these aren't
 # registered; skip the test rather than self-quit so the sentinel check
 # doesn't flag it as a mid-file abort.
-probe=$(echo "userdict /field-copy-fast known? { (yes) = } { (no) = } if-else" | "$BIN" --stdin 2>/dev/null)
+probe=$(echo "localdict /field-copy-fast known? { (yes) = } { (no) = } if-else" | "$BIN" --stdin 2>/dev/null)
 if [ "$probe" != "yes" ]; then
     SKIP_REASON[test_tetrix_native.trx]="needs ./tetrix binary (./trix lacks tetrix user ops)"
     SKIP_REASON[test_b8_tetrix_safety.trx]="needs ./tetrix binary (./trix lacks tetrix user ops)"

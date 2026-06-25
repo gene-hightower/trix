@@ -161,7 +161,7 @@ A handler that wants to invoke K later writes:
 { /saved-k exch def <handler-side-stuff> }
 ```
 
-Stores K in a userdict variable.  Later code can `saved-k exec` to
+Stores K in a localdict variable.  Later code can `saved-k exec` to
 resume.  Important: K is **one-shot** -- the second `exec` raises
 `/invalid-access`.
 
@@ -292,7 +292,7 @@ launching coroutine sees it via `coroutine-join`'s abnormal-exit signal
 (`null false`) rather than as a propagated throw.
 
 This is the central reason effects ship as built-ins rather than a
-library: a userdict-backed handler stack would leak handlers across
+library: a localdict-backed handler stack would leak handlers across
 coroutines.  Per-coroutine isolation is automatic and free.
 
 ## 8. Interaction with Save/Restore

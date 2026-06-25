@@ -1,6 +1,6 @@
 % ====================================================================
 % Supervision Primitives Tests
-% Reuses a small set of global variables to avoid overflowing userdict.
+% Reuses a small set of global variables to avoid overflowing localdict.
 % ====================================================================
 
 % rt-ok counts failures in a restore-immune slot -- string byte writes

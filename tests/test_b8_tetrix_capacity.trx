@@ -17,7 +17,7 @@
 % Under ./trix (no tetrix ops) it prints a skip line and exits 0.
 % ============================================================================
 
-userdict /field-clear-rows-fast known? not {
+localdict /field-clear-rows-fast known? not {
     (test_b8_tetrix_capacity: skipped (./trix has no tetrix user ops)) =
     quit
 } if

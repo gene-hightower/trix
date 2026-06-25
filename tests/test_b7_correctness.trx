@@ -17,7 +17,7 @@
 %                          needs a near-full heap + leak sanitizer.
 %   actor:2-1              recv-match-timeout checked the deadline before scanning
 %                          the mailbox on wakeup; needs send/timeout race timing.
-%   coroutine:1-1          coroutine death cleared the SHARED userdict's binding
+%   coroutine:1-1          coroutine death cleared the SHARED localdict's binding
 %                          cache (off-by-one after protocoldict); output stays
 %                          correct, only the binding cache is tombstoned.
 %   supervision:1-1        one-for-all/rest-for-one resurrected already-stopped

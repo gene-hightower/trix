@@ -27,7 +27,7 @@ public:
 // a startup script or image.  Based on:
 //
 //   PostScript interpreter startup: allocate VM, create systemdict with all
-//   operators, create userdict, set up the dictionary stack, open the
+//   operators, create localdict, set up the dictionary stack, open the
 //   startup file, and begin the interpreter loop.
 //
 // --- Core concepts for maintainers ---
@@ -43,7 +43,7 @@ public:
 //   7. Initialize systemname/typename/errorname offset tables and the
 //      well-known name offset table (WellKnownName enum).
 //   8. Initialize streams (Stream::init: stdin, stdout, stderr, stdedit).
-//   9. Call Dict::init() to create systemdict, userdict, errordict,
+//   9. Call Dict::init() to create systemdict, localdict, errordict,
 //      handlersdict, numbersdict -- populating ~830 user-facing
 //      operators (829 user-facing / 987 total; see
 //      user_facing_operator_count()).
@@ -198,7 +198,7 @@ void init_and_interpret(Config config) {
     const stack_depth_t error_depth = config.m_error_depth;
     const stack_depth_t operand_depth = config.m_operand_depth;
     const stack_depth_t scratch_depth = config.m_scratch_depth;
-    const length_t userdict_maxlength = config.m_userdict_maxlength;
+    const length_t localdict_maxlength = config.m_localdict_maxlength;
     const Operator *useroperators = config.m_useroperators;
 
     assert((stream_count >= MinStreamCount) && (stream_count <= MaxStreamCount));
@@ -214,7 +214,7 @@ void init_and_interpret(Config config) {
     assert((error_depth >= MinErrorDepth) && (error_depth <= MaxErrorDepth));
     assert((operand_depth >= MinOperandDepth) && (operand_depth <= MaxOperandDepth));
     assert((scratch_depth >= MinCoroutineScratchDepth) && (scratch_depth <= MaxCoroutineScratchDepth));
-    assert((userdict_maxlength >= MinUserDictMaxLength) && (userdict_maxlength <= MaxUserDictMaxLength));
+    assert((localdict_maxlength >= MinLocalDictMaxLength) && (localdict_maxlength <= MaxLocalDictMaxLength));
 
     m_error_init_complete = false;
 // Interactive debugger init -- whole block folds out when Debugger is
@@ -581,8 +581,8 @@ void init_and_interpret(Config config) {
                             "name-avg-chain"sv,
                             "name-bucket-count"sv,
                             // dictionary
-                            "userdict-length"sv,
-                            "userdict-maxlength"sv,
+                            "localdict-length"sv,
+                            "localdict-maxlength"sv,
                             // configuration
                             "eqstring-length"sv,
                             "eqarray-length"sv,
@@ -657,7 +657,7 @@ void init_and_interpret(Config config) {
                 Stream::init(trx, stream_enable, stream_count, stream_buffer_size, filename, eval_source, mode, resident);
 
                 // create and populate standard Dicts
-                Dict::init(trx, Dict::InitConfig{userdict_maxlength, useroperators});
+                Dict::init(trx, Dict::InitConfig{localdict_maxlength, useroperators});
                 m_error_init_complete = true;
 
                 // gen-server ref counter

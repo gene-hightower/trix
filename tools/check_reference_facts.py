@@ -120,7 +120,7 @@ OK = [
     ("80 24 make-screen screen? =", "true"),
     # ---- VM/memory/persistence audit (gvm-heap-gc, name-lookup) ----
     # `protocoldict` is the 3rd PERMANENT dict on the lookup chain (systemdict +
-    # protocoldict + userdict) -- name-lookup.md 6 omitted it (said 2 permanent).
+    # protocoldict + localdict) -- name-lookup.md 6 omitted it (said 2 permanent).
     ("/protocoldict where =", "true"),
     # `vm-global-gc` exists and returns the byte count reclaimed by the sweep
     # (gvm-heap-gc.md showed it with no stack effect).

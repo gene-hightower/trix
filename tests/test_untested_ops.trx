@@ -51,7 +51,7 @@ ros2 5 set-member? (readonly-set-from-mark: contents) rt-ok clear
 
 % ====================================================================
 % SECTION 2: l2-interrupt -- default Level-2 interrupt handler is a
-% documented no-op (redefine in userdict to customize); direct call
+% documented no-op (redefine in localdict to customize); direct call
 % must leave the stack untouched.
 % ====================================================================
 

@@ -580,7 +580,7 @@ $\foo            % Executable name interned in GLOBAL VM (survives restore)
 
 The `:`-delimited path forms walk a chain of named dicts (each segment
 keyed by the dict's `/name`) starting at `systemdict` if the first
-segment matches a registered root, otherwise treated as a userdict
+segment matches a registered root, otherwise treated as a localdict
 key.  `//:` resolves the leaf and pushes it as a literal value;
 `\\:` resolves and applies the executable attribute, so the result
 fires immediately during execution rather than being captured.
@@ -1950,7 +1950,7 @@ bind-locals         v1 ... vN names-array -- % atomic batch bind into the curren
 Shorthand syntax in procs: `{ |a b c| body }` compiles to begin-locals call.
 
 `def` walks past any `|...|` frames on the dict stack and writes to the
-first non-frame dict (typically userdict at module scope).  This means
+first non-frame dict (typically localdict at module scope).  This means
 `/x 5 def` inside a `|...|` proc binds /x at module scope, NOT in the
 proc's frame -- the binding survives the proc returning.  Same rule for
 `store` (when its key is not already on the dict stack), `current-dict`,
@@ -2306,7 +2306,7 @@ errordict /handlersdict get
 /div-by-zero { (caught: ) print = pop pop pop pop pop } put
 ```
 
-(Defining `/default-handler` in `userdict` does NOT intercept: the
+(Defining `/default-handler` in `localdict` does NOT intercept: the
 `handlersdict` entries hold the operator object directly, so dict-stack
 shadowing never sees the lookup.)  A handler that returns normally ends
 the run cleanly -- the runtime prints the backtrace before invoking the
@@ -3232,14 +3232,14 @@ enable-interrupts       --
 clear-interrupts        --
 interrupts-enabled?      -- bool
 interrupts-pending      -- int
-l0-interrupt            --              % default Level-0 interrupt handler (no-op; redefine in userdict)
-l1-interrupt            --              % default Level-1 interrupt handler (no-op; redefine in userdict)
-l2-interrupt            --              % default Level-2 interrupt handler (no-op; redefine in userdict)
+l0-interrupt            --              % default Level-0 interrupt handler (no-op; redefine in localdict)
+l1-interrupt            --              % default Level-1 interrupt handler (no-op; redefine in localdict)
+l2-interrupt            --              % default Level-2 interrupt handler (no-op; redefine in localdict)
 ```
 
 `l0-interrupt`, `l1-interrupt`, `l2-interrupt` are looked up by name when the
 corresponding user-level IRQ fires.  The defaults installed in `systemdict`
-do nothing; programs that need interrupt handling redefine them in `userdict`
+do nothing; programs that need interrupt handling redefine them in `localdict`
 with `override` (a plain `def` of an operator name raises `/invalid-name` --
 see "Shadowing a built-in operator" above).
 
@@ -5913,7 +5913,7 @@ addr-invalid addr-null addr-read-only addr-read-write
 
 Top-level dicts (reachable via `//:systemdict:name` or `//name` if unambiguous):
 ```
-systemdict protocoldict userdict errordict numbers
+systemdict protocoldict localdict errordict numbers
 ```
 Nested dicts (reachable only via their parent path):
 ```
@@ -6088,7 +6088,7 @@ control operator has enough companion slots, all operator indices are in range.
 ### Dict Pool
 ```
 locals-pool-count    locals-overflow-count
-userdict-length      userdict-maxlength
+localdict-length      localdict-maxlength
 ```
 `locals-pool-count` counts recycled `|locals|#N` dicts in the indexed pool
 (maxlength 1..16).  `locals-overflow-count` counts those in the overflow

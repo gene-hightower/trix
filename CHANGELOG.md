@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING: the user dictionary `userdict` is renamed `localdict`.** The operator
+  `userdict`, the name-path prefix `:userdict:`, the status variable
+  `:status:userdict-maxlength`, and the CLI flag `--userdict-size` become
+  `localdict`, `:localdict:`, `:status:localdict-maxlength`, and `--localdict-size`
+  respectively. This is groundwork for a PostScript-style split in which a
+  forthcoming `globaldict` (global VM) sits alongside `localdict` (local VM); the
+  new name makes the local-VM role explicit. No snapshot-format change — the
+  snapshot's user-dict offset field was renamed in place.
+
 ## [0.11.0] - 2026-06-24
 
 ### Added

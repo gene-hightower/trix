@@ -63,7 +63,7 @@ rt-fails 0 16#0#b put
 % SECTION 3: Sad path -- local-def with no frame on top
 % ====================================================================
 
-% At top level, dict stack is [systemdict protocoldict userdict].
+% At top level, dict stack is [systemdict protocoldict localdict].
 % None are frames, so local-def must raise Unsupported.
 { /nope 1 local-def } try /unsupported eq       (s3: top-level local-def -> unsupported)      rt-ok clear
 
@@ -74,8 +74,8 @@ rt-fails 0 16#0#b put
 
 { s3a } try /unsupported eq                     (s3: no-header proc -> unsupported)           rt-ok clear
 
-% Inside `userdict begin ... end`: top is userdict (non-frame).
-{ userdict begin /still-nope 1 local-def end } try /unsupported eq
+% Inside `localdict begin ... end`: top is localdict (non-frame).
+{ localdict begin /still-nope 1 local-def end } try /unsupported eq
 (s3: begin user-dict + local-def -> unsupported)                                              rt-ok clear
 
 % ====================================================================
@@ -104,7 +104,7 @@ rt-fails 0 16#0#b put
   |x|#5
   /where-target 1 local-def
   /where-target where { current-dict ne } { false } if-else
-  % where returns the frame; current-dict returns userdict (non-frame).
+  % where returns the frame; current-dict returns localdict (non-frame).
 } def
 
 0 s4c true eq                                   (s4: where finds frame, current-dict skips it) rt-ok
@@ -149,15 +149,15 @@ rt-fails 0 16#0#b put
 % ====================================================================
 
 % Phase C: `def` walks past any |...| frames on the dict stack and
-% writes to the first non-frame (userdict at module scope).  No error,
+% writes to the first non-frame (localdict at module scope).  No error,
 % no silent frame mutation -- the binding lands in module scope.
 /s7a {
   |x|#5
-  /s7-leaked 42 def       % phase C: writes to userdict, not the frame
+  /s7-leaked 42 def       % phase C: writes to localdict, not the frame
 } def
 
 42 s7a
-s7-leaked 42 eq                                 (s7: def skips frame, writes to userdict)     rt-ok
+s7-leaked 42 eq                                 (s7: def skips frame, writes to localdict)     rt-ok
 
 % local-def is the way to bind into the frame.
 /s7b {
@@ -175,8 +175,8 @@ s7-leaked 42 eq                                 (s7: def skips frame, writes to 
 /s7c { |x|#5 end } def
 { 0 s7c } try /unsupported eq                   (s7: end on frame -> unsupported)             rt-ok clear
 
-% current-dict inside |...| returns userdict, not the frame.
-/s7d { |x|#5 current-dict userdict eq } def
+% current-dict inside |...| returns localdict, not the frame.
+/s7d { |x|#5 current-dict localdict eq } def
 0 s7d true eq                                   (s7: current-dict skips frame)                rt-ok
 
 % store on a name that exists in the frame updates the frame slot.
@@ -189,7 +189,7 @@ s7-leaked 42 eq                                 (s7: def skips frame, writes to 
 
 0 s7e 7 eq                                      (s7: store hits frame binding directly)       rt-ok
 
-% store on a name that does NOT exist anywhere falls back to userdict.
+% store on a name that does NOT exist anywhere falls back to localdict.
 { s7-leaked-store } try /undefined eq pop  % drain pre-existing if present
 /s7f { |x|#5 /s7-leaked-store 11 store } def
 42 s7f

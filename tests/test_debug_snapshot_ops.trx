@@ -58,7 +58,7 @@ inner snap1-len gt                              (exec-snap: deeper inside proc) 
 
 % --- SECTION 3: dict-stack-snapshot -----------------------------------
 
-% Top-level dict stack has at least systemdict + userdict.
+% Top-level dict stack has at least systemdict + localdict.
 dict-stack-snapshot
 dup length 2 ge                                 (dict-snap: top-level >= 2) expect
 % All entries are Dicts.

@@ -375,7 +375,7 @@
     ok-units 27 ne { /verify-failed throw } if
 } def
 
-% Userdict-backed carry-over slots.  Pre-defined at save level 0 so
+% Localdict-backed carry-over slots.  Pre-defined at save level 0 so
 % the def-persist writes inside the per-puzzle save bracket have a
 % binding to overwrite (def-persist bypasses the save journal but
 % does not create new bindings).

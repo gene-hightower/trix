@@ -55,7 +55,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
         OptStreamBuffer,
         OptStreamIO,
         OptNameBuckets,
-        OptUserdictSize,
+        OptLocaldictSize,
         OptEqString,
         OptEqArray,
         OptEqProc,
@@ -110,7 +110,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
             {     "stream-buffer", required_argument, nullptr,     OptStreamBuffer},
             {         "stream-io", required_argument, nullptr,         OptStreamIO},
             {      "name-buckets", required_argument, nullptr,      OptNameBuckets},
-            {     "userdict-size", required_argument, nullptr,     OptUserdictSize},
+            {     "localdict-size", required_argument, nullptr,     OptLocaldictSize},
             {         "eq-string", required_argument, nullptr,         OptEqString},
             {          "eq-array", required_argument, nullptr,          OptEqArray},
             {           "eq-proc", required_argument, nullptr,           OptEqProc},
@@ -326,7 +326,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "  Stream count:     {}\n"
                      "  Stream buffer:    {}\n"
                      "  Name buckets:     {}\n"
-                     "  Userdict size:    {}\n"
+                     "  Localdict size:    {}\n"
                      "  Eq string:        {}\n"
                      "  Eq array:         {}\n"
                      "  Eq proc:          {}\n"
@@ -342,7 +342,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      DefaultStreamCount,
                      format_size(DefaultStreamBufferSize, sb_buf),
                      DefaultNameBucketCount,
-                     DefaultUserDictMaxLength,
+                     DefaultLocalDictMaxLength,
                      DefaultEqStringLength,
                      DefaultEqArrayLength,
                      DefaultEqProcLength,
@@ -417,7 +417,7 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "      --stream-io=MODE     Stream I/O: none, all, or comma-separated\n"
                      "                             stdin,stdout,stderr,stdedit [all]\n"
                      "      --name-buckets=N     Name hash buckets [auto: {} at default VM size]\n"
-                     "      --userdict-size=N    Userdict capacity [{}] ({}..{})\n"
+                     "      --localdict-size=N    Localdict capacity [{}] ({}..{})\n"
                      "      --eq-string=N        Eq string buffer [{}] ({}..{})\n"
                      "      --eq-array=N         Eq array buffer [{}] ({}..{})\n"
                      "      --eq-proc=N          Eq proc buffer [{}] ({}..{})\n"
@@ -458,9 +458,9 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      format_size(MinStreamBufferSize, sb_min),
                      format_size(MaxStreamBufferSize, sb_max),
                      DefaultNameBucketCount,
-                     DefaultUserDictMaxLength,
-                     MinUserDictMaxLength,
-                     MaxUserDictMaxLength,
+                     DefaultLocalDictMaxLength,
+                     MinLocalDictMaxLength,
+                     MaxLocalDictMaxLength,
                      DefaultEqStringLength,
                      MinEqStringLength,
                      MaxEqStringLength,
@@ -712,9 +712,9 @@ static ParseResult parse_args(int argc, char *argv[]) {
             break;
         }
 
-        case OptUserdictSize:
-            cfg.m_userdict_maxlength =
-                    static_cast<length_t>(parse_clamped("userdict-size", optarg, MinUserDictMaxLength, MaxUserDictMaxLength));
+        case OptLocaldictSize:
+            cfg.m_localdict_maxlength =
+                    static_cast<length_t>(parse_clamped("localdict-size", optarg, MinLocalDictMaxLength, MaxLocalDictMaxLength));
             break;
 
         case OptEqString:

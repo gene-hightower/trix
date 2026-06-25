@@ -35,8 +35,8 @@ fi
 # 2 MB VM: the debug binary's baseline is ~495 KB (heap-tracking tables +
 # debugger substrate) and the unwrapped concurrency tail legitimately
 # retains pool memory across tests (mailbox/pipe/coroutine free-lists are
-# kept for reuse, not collected).  --userdict-size=1024: the unwrapped
-# tail's defs all land in one shared userdict (no per-test restore), and
+# kept for reuse, not collected).  --localdict-size=1024: the unwrapped
+# tail's defs all land in one shared localdict (no per-test restore), and
 # the cumulative count exceeds the 512 default.  Per-test budgets are
 # enforced by tests/run_all.sh (fresh default-config VM per test;
 # documented SPECIAL_ARGS exceptions), not here -- this step's job is
@@ -45,7 +45,7 @@ echo "===================================="
 echo "  Running tests/test_all.trx"
 echo "===================================="
 
-OUTPUT=$(./trix --vm-size=2M --userdict-size=1024 tests/test_all.trx 2>&1)
+OUTPUT=$(./trix --vm-size=2M --localdict-size=1024 tests/test_all.trx 2>&1)
 echo "$OUTPUT"
 
 # Extract results line for final summary

@@ -19,7 +19,7 @@ rt-fails 0 16#0#b put
 % Shared result variables
 /R null def  /R2 null def  /R3 null def  /R4 null def
 
-% -- A counter in userdict that child actors can bump --
+% -- A counter in localdict that child actors can bump --
 /COUNTER 0 def
 
 % =================================================================

@@ -284,7 +284,7 @@ void on_last_death_transition() {
 
 // Walk every live coroutine's binding table and remove any entry keyed
 // on `name_offset`.  Called when a Name is undef'd in a dict that could
-// be reachable from other coroutines (userdict, systemdict, etc.) --
+// be reachable from other coroutines (localdict, systemdict, etc.) --
 // the running coroutine would otherwise be the only one whose cached
 // pointer gets cleared, and peers would keep returning pointers into
 // the now-nulled DictEntry slot.  Cheap: O(live coroutines) per undef,

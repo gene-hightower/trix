@@ -46,8 +46,9 @@ The execution model is the PostScript model.
   arguments from the top.  `count` reports the depth, exactly as in PostScript.
 - **A dictionary stack.**  `begin` pushes a dictionary, `end` pops it, and a
   bare name is resolved by walking the stack top-down, with `systemdict` at the
-  bottom and `userdict` above it.  (Trix also provides dedicated `errordict`
-  and `protocoldict` system dictionaries.)
+  bottom and `localdict` above it -- Trix's name for PostScript's `userdict`.
+  (Trix also provides dedicated `errordict` and `protocoldict` system
+  dictionaries.)
 - **Literal, executable, and immediate names.**  `/x` pushes the name as data,
   `x` looks it up and executes the result, and `//x` resolves *at scan time* --
   PostScript's immediately-evaluated name.

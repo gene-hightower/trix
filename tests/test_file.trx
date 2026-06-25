@@ -447,7 +447,7 @@ test-dyn-dict-expand  (save/restore: dynamic dict expand + restore ok) rt-ok
 % ===--- Name/Dict system: regression tests for Opus review bugs ---===
 
 % Issue 1: store with key NOT on dict stack must store into current (top) dict, not crash
-userdict begin
+localdict begin
   /store-test-key 0 def
   /store-test-key 99 store        % key IS on dict stack — should update
   store-test-key 99 eq  (store: key found on dict stack) rt-ok
@@ -5112,7 +5112,7 @@ null eq  (string-stream: exec null) rt-ok
 false eq  (string-stream: exec false) rt-ok
 true eq  (string-stream: exec true) rt-ok  clear
 
-% --- shadowing: user can redefine true/false/null in userdict ---
+% --- shadowing: user can redefine true/false/null in localdict ---
 /shadow-sv save def
 /true 42 def
 true 42 eq  (string-stream: shadow true) rt-ok

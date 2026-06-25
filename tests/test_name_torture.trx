@@ -254,7 +254,7 @@ save
 
 42ul rand-seed
 
-% Use a dedicated dict so we don't overflow userdict
+% Use a dedicated dict so we don't overflow localdict
 512 dict begin
 
 % Create 500 names and def each to its index

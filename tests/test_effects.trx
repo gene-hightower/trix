@@ -345,10 +345,10 @@ true (fuzz: empty body, clean completion) rt-ok clear
 % ====================================================================
 % `perform` captures a deep-handler continuation that may span one or
 % more |locals| boundaries.  The locals dicts are saved and restored
-% just like the capture/delimit case.  Tests use `put` into userdict
+% just like the capture/delimit case.  Tests use `put` into localdict
 % (not `def`) to avoid filling the fixed-capacity locals dict.
 
-userdict /result 0 put
+localdict /result 0 put
 
 % perform inside |x| body: handler resumes with constant; body reads x after resume
 << /ask { 1 exch exec } >>
@@ -356,11 +356,11 @@ userdict /result 0 put
     99 {
         |x|
         /ask perform x add        % perform -> 1, then x (99) add -> 100
-        userdict exch /result exch put
+        localdict exch /result exch put
     } exec
 } handle-effect
 result 100 eq (locals: perform inside |x|, body sees x on resume) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % handler runs outside the locals scope, aborts (does not resume K)
@@ -383,13 +383,13 @@ clear
             {
                 |c|
                 /sum perform pop        % resume value unused
-                userdict /result a b c add add put
+                localdict /result a b c add add put
             } exec
         } exec
     } exec
 } handle-effect
 result 6 eq (locals: 3-deep |a|/|b|/|c| restored across perform) rt-ok
-userdict /result 0 put
+localdict /result 0 put
 clear
 
 % nested handle-effect inside |locals| -- inner handler wins

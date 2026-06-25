@@ -6,7 +6,7 @@
 % mailbox accounting.
 %
 % Actor bodies receive messages and stash them via /name exch def,
-% then the main test inspects the userdict slot.
+% then the main test inspects the localdict slot.
 % ====================================================================
 
 % rt-ok counts failures in a restore-immune slot -- string byte writes

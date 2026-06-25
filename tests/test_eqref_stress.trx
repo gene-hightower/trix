@@ -19,7 +19,7 @@
 % Each loop body is pre-defined as a named proc so that scanner-time VM
 % allocation for the loop body doesn't pollute the per-iteration VM-delta
 % measurement.  Before measurements start we also pre-warm `before-vm` and
-% `start-gen` in userdict so their first-def DictEntry allocations don't
+% `start-gen` in localdict so their first-def DictEntry allocations don't
 % appear in the first-block delta.
 
 (=== eqref stress tests ===) =
@@ -41,7 +41,7 @@ rt-fails 0 16#0#b put
 /eqproc-body   { pop ({ 1 2 add }#= pop) make-executable exec } def
 /eqset-body    { pop ({{ /a /b }}#= pop) make-executable exec } def
 
-% Pre-warm measurement slots in userdict so their first DictEntry alloc is
+% Pre-warm measurement slots in localdict so their first DictEntry alloc is
 % not charged to the first loop's delta.
 /before-vm 0 def
 /start-gen 0u def

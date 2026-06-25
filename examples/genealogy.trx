@@ -100,7 +100,7 @@
 %  Note the proc preamble `|pa ch|#+1` -- a `|...|` locals frame
 %  with capacity for 2 named args + 1 working slot (`fact`).  Inside
 %  the frame, `local-def` writes to the frame dict; plain `def` walks
-%  past frames into userdict and would clobber any caller's same-named
+%  past frames into localdict and would clobber any caller's same-named
 %  binding, so this convention keeps each call's working state
 %  isolated and lets predicates recurse safely.
 %
@@ -460,7 +460,7 @@ command-line-args { /arg exch def
 
 % Use a `|...|` locals frame so the recursive call doesn't clobber
 % the outer call's bindings.  Plain `def` writes past `|...|` frames
-% into the topmost non-frame dict (userdict), so a recursive call
+% into the topmost non-frame dict (localdict), so a recursive call
 % would otherwise overwrite the caller's `direct` / `transitive`
 % values; `local-def` writes to the frame on top of the dict stack
 % and unwinds on return.

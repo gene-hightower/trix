@@ -18,7 +18,7 @@
 rt-fails 0 16#0#b put
 /rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
-userdict /field-copy-fast known? not {
+localdict /field-copy-fast known? not {
     (test_tetrix_native: skipped (./trix has no user ops)) =
     quit
 } if

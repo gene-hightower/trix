@@ -177,7 +177,7 @@ Everything in Trix runs on a single contiguous block of memory.
 m_vm_base                                              m_vm_limit
   |                                                        |
   v                                                        v
-  [systemdict|protocoldict|userdict|errordict|stacks|...data...| free ]
+  [systemdict|protocoldict|localdict|errordict|stacks|...data...| free ]
                                                    ^
                                                    |
                                               m_vm_ptr
@@ -308,7 +308,7 @@ Trix -- they model Result types, Option types, AST nodes, messages.
 **Dict**: Hash table mapping names to values.  Three modes: ReadOnly
 (immutable after construction), ReadWriteFixed (fixed capacity, fast),
 ReadWriteDynamic (growable).  Dicts serve as namespaces (systemdict,
-userdict), protocol registries, GenServer spec dicts, and closure captures.
+localdict), protocol registries, GenServer spec dicts, and closure captures.
 
 **Curry**: A pair of [value, callable].  When executed, the value is pushed
 onto the operand stack, then the callable executes.  Curry is the

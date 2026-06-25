@@ -8,7 +8,7 @@
 %
 % INVARIANT under test: a bare-name lookup MUST return exactly what a
 % full dict-stack walk would return -- frame dicts (top-down), then
-% userdict, then systemdict -- regardless of cache state (cold, warm,
+% localdict, then systemdict -- regardless of cache state (cold, warm,
 % or warmed-then-invalidated).  Every op that mutates the cache or
 % changes dict-stack precedence is exercised here: def, local-def,
 % begin/end, undef, store, override, save/restore, frame push/pop,
@@ -32,29 +32,29 @@ rt-fails 0 16#0#b put
 /rt-ok { exch { pop } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
 % ====================================================================
-% SECTION 1: frame shadows a WARM-cached userdict name; pop restores it
+% SECTION 1: frame shadows a WARM-cached localdict name; pop restores it
 % ====================================================================
 
 /bc-x 1 def
 bc-x 1 eq                       (S1.1: warm the bc-x cache)                              rt-ok
 /s1 {|bc-x| bc-x } def
-2 s1 2 eq                       (S1.2: frame shadows warm-cached userdict name)          rt-ok
-bc-x 1 eq                       (S1.3: userdict bc-x restored after frame pop)           rt-ok
+2 s1 2 eq                       (S1.2: frame shadows warm-cached localdict name)          rt-ok
+bc-x 1 eq                       (S1.3: localdict bc-x restored after frame pop)           rt-ok
 
 % ====================================================================
 % SECTION 2: def-while-shadowed (engine bug #21 core)
 % ====================================================================
 
 /bc-y 1 def
-/s2-helper { /bc-y 99 def } def         % frameless: def targets userdict
+/s2-helper { /bc-y 99 def } def         % frameless: def targets localdict
 /s2-caller {|bc-y| s2-helper bc-y } def
 2 s2-caller 2 eq                (S2.1: frameless helper def does not hijack frame local) rt-ok
-bc-y 99 eq                      (S2.2: helper def landed in userdict)                    rt-ok
+bc-y 99 eq                      (S2.2: helper def landed in localdict)                    rt-ok
 
 /bc-z 1 def
-/s2b {|bc-z| /bc-z 5 def bc-z } def     % def inside a frame writes userdict, not frame
+/s2b {|bc-z| /bc-z 5 def bc-z } def     % def inside a frame writes localdict, not frame
 7 s2b 7 eq                      (S2.3: def inside frame does not change frame-local read) rt-ok
-bc-z 5 eq                       (S2.4: that def wrote userdict bc-z=5)                    rt-ok
+bc-z 5 eq                       (S2.4: that def wrote localdict bc-z=5)                    rt-ok
 
 % ====================================================================
 % SECTION 3: begin/end of a plain dict shadows a warm-cached name
@@ -63,9 +63,9 @@ bc-z 5 eq                       (S2.4: that def wrote userdict bc-z=5)          
 /bc-w 1 def
 bc-w 1 eq                       (S3.1: warm the bc-w cache)                              rt-ok
 << /bc-w 2 >> begin
-bc-w 2 eq                       (S3.2: begin-pushed dict shadows userdict)               rt-ok
+bc-w 2 eq                       (S3.2: begin-pushed dict shadows localdict)               rt-ok
 end
-bc-w 1 eq                       (S3.3: end restores userdict bc-w)                       rt-ok
+bc-w 1 eq                       (S3.3: end restores localdict bc-w)                       rt-ok
 
 % ====================================================================
 % SECTION 4: undef clears the cache (warm + frame-shadowed)
@@ -73,13 +73,13 @@ bc-w 1 eq                       (S3.3: end restores userdict bc-w)              
 
 /bc-u 5 def
 bc-u 5 eq                       (S4.1: warm the bc-u cache)                              rt-ok
-userdict /bc-u undef
+localdict /bc-u undef
 { bc-u } try /undefined eq      (S4.2: undef cleared the warm cache)                     rt-ok clear
 
 /bc-v 1 def
-/s4 {|bc-v| userdict /bc-v undef bc-v } def
-7 s4 7 eq                       (S4.3: undef of userdict entry leaves frame local intact) rt-ok
-{ bc-v } try /undefined eq      (S4.4: userdict bc-v gone after frame undef)             rt-ok clear
+/s4 {|bc-v| localdict /bc-v undef bc-v } def
+7 s4 7 eq                       (S4.3: undef of localdict entry leaves frame local intact) rt-ok
+{ bc-v } try /undefined eq      (S4.4: localdict bc-v gone after frame undef)             rt-ok clear
 
 % ====================================================================
 % SECTION 5: store updates in place; cache follows the resolved binder
@@ -87,10 +87,10 @@ userdict /bc-u undef
 
 /bc-s 1 def
 /bc-s 3 store
-bc-s 3 eq                       (S5.1: store updates userdict in place)                  rt-ok
+bc-s 3 eq                       (S5.1: store updates localdict in place)                  rt-ok
 /s5 {|bc-s| /bc-s 9 store bc-s } def
 4 s5 9 eq                       (S5.2: store updates the frame local when key resolves there) rt-ok
-bc-s 3 eq                       (S5.3: userdict bc-s unchanged by frame-local store)     rt-ok
+bc-s 3 eq                       (S5.3: localdict bc-s unchanged by frame-local store)     rt-ok
 
 % ====================================================================
 % SECTION 6: override coherence under save/restore (operator <-> user value)
@@ -125,7 +125,7 @@ bc-r 1 eq                       (S7.3: restore reverted def and flushed cache)  
 9 outer8                                % stack: 5 (inner result)  9 (outer frame)
 9 eq                            (S8.1: outer frame bc-n=9)                               rt-ok
 5 eq                            (S8.2: inner frame bc-n=5 isolated from outer)           rt-ok
-bc-n 0 eq                       (S8.3: userdict bc-n=0 untouched by nested frames)       rt-ok
+bc-n 0 eq                       (S8.3: localdict bc-n=0 untouched by nested frames)       rt-ok
 
 % ====================================================================
 % SECTION 9: loop thrash -- 100 shadow/unshadow cycles, summed
@@ -136,7 +136,7 @@ bc-n 0 eq                       (S8.3: userdict bc-n=0 untouched by nested frame
 /acc 0 def
 0 1 99 { /i exch def  i thrash  acc add /acc exch def } for
 acc 4950 eq                     (S9.1: 100 frame-shadow cycles each returned the right value) rt-ok
-bc-loop 0 eq                    (S9.2: userdict bc-loop=0 after 100 cycles)              rt-ok
+bc-loop 0 eq                    (S9.2: localdict bc-loop=0 after 100 cycles)              rt-ok
 
 % ====================================================================
 % SECTION 10: multi-coroutine path (per-coroutine binding table)
@@ -152,11 +152,11 @@ mark { { actor-recv pop } loop } actor-spawn /bc-actor exch def
 /mc-helper { /bc-mc 999 def } def
 /mc-caller {|bc-mc| mc-helper bc-mc } def
 2 mc-caller 2 eq                (S10.1: frameless def no hijack under live actors)       rt-ok
-bc-mc 999 eq                    (S10.2: def landed in userdict via multi-coro clear path) rt-ok
+bc-mc 999 eq                    (S10.2: def landed in localdict via multi-coro clear path) rt-ok
 
 /bc-bid 1 def
 5 [/bc-bid] 1 dict bind-into-dict
-bc-bid 1 eq                     (S10.3: off-stack bind-into-dict leaves userdict cache intact) rt-ok
+bc-bid 1 eq                     (S10.3: off-stack bind-into-dict leaves localdict cache intact) rt-ok
 
 % ====================================================================
 rt-fails 0 get /integer-type cast 0 gt { /rt-assertions-failed throw } if

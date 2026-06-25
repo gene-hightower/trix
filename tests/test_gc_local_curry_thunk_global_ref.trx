@@ -50,7 +50,7 @@ array-count /pre-1 exch def
 
 [ 101 102 103 104 105 ]#$ /g-arr-1 exch def
 g-arr-1 { 0 get } curry /local-curry-1 exch def
-userdict /g-arr-1 undef                       % drop direct binding
+localdict /g-arr-1 undef                       % drop direct binding
 
 % Confirm curry resolves correctly pre-GC.
 local-curry-1                                 (1: pre-gc curry exec) pop
@@ -72,7 +72,7 @@ array-count pre-1 sub 1 ge                    (1: array survives via local Curry
 % any ${...}, the Packed is LOCAL.  Wrap that proc in a thunk and the
 % only path from the dict-stack root to the global Array is:
 %
-%   userdict -> /local-thunk-2 -> Thunk (local) -> storage[ThunkStorageProc]
+%   localdict -> /local-thunk-2 -> Thunk (local) -> storage[ThunkStorageProc]
 %               -> Packed (local) -> embedded global Array literal
 %
 % Pre-Phase-2 the Thunk walk silent-skipped, the chain breaks at
@@ -102,15 +102,15 @@ array-count /pre-3 exch def
 
 % Critical subtlety: name lookup of a Curry EXECUTES it.  To capture
 % the inner Curry as an Object on the operand stack (without executing
-% it), retrieve via `userdict /inner-curry-3 get` instead of bare
+% it), retrieve via `localdict /inner-curry-3 get` instead of bare
 % `inner-curry-3`.  Then it can be passed to the outer `curry` op as
 % a literal value, and the outer Curry's storage[0] holds the inner
 % Curry Object handle.
 [ 201 202 203 ]#$ /g-arr-3 exch def
 g-arr-3 { 0 get } curry /inner-curry-3 exch def
-userdict /inner-curry-3 get { exec } curry /outer-curry-3 exch def
-userdict /g-arr-3 undef                       % drop direct paths
-userdict /inner-curry-3 undef
+localdict /inner-curry-3 get { exec } curry /outer-curry-3 exch def
+localdict /g-arr-3 undef                       % drop direct paths
+localdict /inner-curry-3 undef
 
 vm-global-gc pop
 

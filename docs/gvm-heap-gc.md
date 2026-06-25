@@ -477,7 +477,7 @@ single generation.
    pre-flip value so the flip makes them look unmarked.
 2. **Root scan**: `walk_all_roots()` walks every root set the
    interpreter exposes -- operand / exec / error / dict
-   stacks; system dicts (`systemdict`, `userdict`, `errordict`,
+   stacks; system dicts (`systemdict`, `localdict`, `errordict`,
    `handlersdict`); the root-objects array; and the per-save-level
    suspension journal chains via `Save::gc_walk_chain`.
 3. **Object marking**: `gc_mark_object(Object o)` resolves `o` to a

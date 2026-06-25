@@ -41,7 +41,7 @@
 //
 // Method names are globally unique across all protocols (error on collision).
 // Each method name is bound in protocoldict (the dict-stack level between
-// systemdict and userdict) to an auto-generated dispatch proc
+// systemdict and localdict) to an auto-generated dispatch proc
 // that performs the type lookup and execution.
 //
 //   def-protocol       method-names protocol-name --

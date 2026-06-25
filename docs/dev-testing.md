@@ -159,7 +159,7 @@ runtime to surface latent bugs:
 | `--max-ops=N` | CLI flag | Hard execution-limit watchdog: raises `/execution-limit` after N operations.  Used to bound runaway-loop tests. |
 | `--sleep-budget=N` | CLI flag | Wall-clock companion to `--max-ops` (op counter cannot tick while parked): caps TOTAL granted sleep/timeout park time at N ms, then timed parks wake immediately.  The fuzz harness sets 500. |
 | `--timeout=MS` | CLI flag | Real-time deadline: raises `/time-limit` (exit 59) after MS ms of wall-clock since the run started.  Like `--max-ops`, only fires while ops execute; bounds elapsed time rather than op count. |
-| `--vm-size` / `--userdict-size` / depth flags | CLI flags | Starvation harnesses: a tiny VM or stack turns "works in practice" into deterministic `vm-full` / overflow paths.  Fuzz seeds use tight `--vm-size` to force GC mid-operation. |
+| `--vm-size` / `--localdict-size` / depth flags | CLI flags | Starvation harnesses: a tiny VM or stack turns "works in practice" into deterministic `vm-full` / overflow paths.  Fuzz seeds use tight `--vm-size` to force GC mid-operation. |
 | `--sandbox` | CLI flag | Verifies the host-op ban is airtight: every filesystem/system/terminal op must raise `/unsupported` (a dedicated battery step runs `test_raw_mode_sandbox.trx` this way). |
 | `TRIX_HEAP_TRACKING` | build flag (debug default) | Per-callsite allocation accounting: `alloc-stats`, `vm-heap-snapshot` / `vm-heap-diff` let tests assert *which sites* allocated between two points. |
 | ASan/UBSan | build mode | The default `./build.sh` binary; 10-30x slower, which is why per-test VM budgets and timeouts are calibrated against it. |
@@ -173,9 +173,9 @@ runtime to surface latent bugs:
 Nine steps, each validated positively; any failure flips the exit code:
 
 1. **`tests/test_all.trx`** in-process master runner, at
-   `--vm-size=2M --userdict-size=1024` (the debug binary's baseline is
+   `--vm-size=2M --localdict-size=1024` (the debug binary's baseline is
    ~495 KB of heap-tracking/debugger substrate, and the unwrapped tail
-   legitimately retains pool memory and accumulates userdict entries).
+   legitimately retains pool memory and accumulates localdict entries).
    The runner's own `N failures` summary, per-assert `FAILED:` lines,
    and fatal `Trix exiting` markers are all checked.
 2. **`tests/run_all.sh`** standalone per-test sweep (below).
@@ -211,7 +211,7 @@ Runs 149 test files inside **one** interpreter.  Structure:
   raw `choice` save-level interplay.  Delisted tests still run via
   `run_all.sh`.
 
-What this suite uniquely catches: cross-test interaction.  Userdict
+What this suite uniquely catches: cross-test interaction.  Localdict
 shadowing (a test `def`ing an operator name like `count` breaks later
 tests), save-level leaks (a successful raw `choice` holds its level
 open *by design* -- logic tests must run save-wrapped), pool retention,

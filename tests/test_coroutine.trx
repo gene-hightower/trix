@@ -104,7 +104,7 @@ null eq
 /shared-val 0 def
 [ { /shared-val 42 def } coroutine-launch coroutine-join pop pop
 shared-val 42 eq
-    (shared: userdict write visible) rt-ok clear
+    (shared: localdict write visible) rt-ok clear
 
 % ====================================================================
 % SECTION 6: coroutine-wait-all

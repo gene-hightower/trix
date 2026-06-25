@@ -252,7 +252,7 @@ and its value is spliced in as text using the default object form
 ```trix
 /x 42 def
 (x is \{x}) =                  % "x is 42"
-(x is \{:userdict:x}) =        % dict path -- "x is 42"
+(x is \{:localdict:x}) =        % dict path -- "x is 42"
 ```
 
   * Works only inside escape-aware `( ... )` strings (not `<( ... )>`

@@ -45,7 +45,7 @@ ${ 8 dict } /pre-warm-dict exch def
 vm-global-info /pre1 exch def
 
 true set-global
-12345l /sink exch def       % allocate global Long, put in userdict /sink slot
+12345l /sink exch def       % allocate global Long, put in localdict /sink slot
 false set-global
 
 vm-global-info /mid1 exch def

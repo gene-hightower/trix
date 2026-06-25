@@ -832,7 +832,7 @@ void gc_mark_local_container(Object o, vm_offset_t offset) {
                 // the Object handle's m_length.  The schema referenced
                 // via m_schema may be local too -- gc_mark_object would
                 // silent-skip a local schema but the schema is typically
-                // held via userdict (the top-level def-record's returned
+                // held via localdict (the top-level def-record's returned
                 // proc holds the schema offset as a literal).  We don't
                 // walk the schema here; only the instance's field values.
                 // RecordSchema Objects don't appear as standalone Objects
@@ -1063,7 +1063,7 @@ void walk_block_contents(vm_offset_t payload_offset) {
     //                Following it would hit a non-aligned mid-block
     //                offset that mark_global_offset rejects anyway.
     //                Non-rooting cache; the actual Dict is reached
-    //                via systemdict / userdict / frame-dict roots.
+    //                via systemdict / localdict / frame-dict roots.
     case ChunkKind::Name:
         break;
 
@@ -1150,7 +1150,7 @@ void walk_block_contents(vm_offset_t payload_offset) {
         if (!is_schema) {
             // Instance: first_four = schema offset.  mark_global_offset
             // silent-skips a local offset; a local schema is reached
-            // instead via the dict-stack / userdict registry roots.
+            // instead via the dict-stack / localdict registry roots.
             mark_global_offset(first_four);
         }
 
@@ -1488,7 +1488,7 @@ void walk_all_roots() {
     // skip local-VM offsets); Dict::gc_walk_contents internally
     // calls gc_mark_object on each key/value, and gc_mark_object's range
     // check screens local-VM payloads while marking global ones.
-    for (auto *dict_ptr : {m_systemdict, m_protocoldict, m_userdict, m_errordict, m_handlersdict}) {
+    for (auto *dict_ptr : {m_systemdict, m_protocoldict, m_localdict, m_errordict, m_handlersdict}) {
         if (dict_ptr != nullptr) {
             Dict::gc_walk_contents(this, ptr_to_offset(dict_ptr));
         }

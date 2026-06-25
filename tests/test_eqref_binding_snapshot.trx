@@ -40,8 +40,8 @@ rt-fails 0 16#0#b put
     % populated m_binding_table) when snap-shot fires.
     actor-recv pop
     % After resume: read the names through the cache and write the sum
-    % into main's userdict so both phases can verify it.
-    userdict /sb-actor-sum bx by add put
+    % into main's localdict so both phases can verify it.
+    localdict /sb-actor-sum bx by add put
     end
 } actor-spawn def
 

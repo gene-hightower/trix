@@ -20,7 +20,7 @@
 %                      shorthand so parameter scopes nest properly --
 %                      recursive calls do not stomp the caller's
 %                      expr/env/etc.  (Plain `/x exch def` would put
-%                      locals in userdict and get clobbered on recursion.)
+%                      locals in localdict and get clobbered on recursion.)
 %
 %  Scope (deliberately small to fit the showcase budget):
 %      Integer arithmetic only (fixnums); no floats.
@@ -259,7 +259,7 @@
 % normally need a local scope for /head /tail /inner to avoid clobbering
 % the caller's locals -- but for deeply-nested source that would push the
 % dict stack past its default 24-deep limit.  We instead thread the
-% intermediate values through the operand stack so no userdict/local
+% intermediate values through the operand stack so no localdict/local
 % writes happen per-level.  Shared mutable state lives only in
 % parser-state, which advances monotonically.
 /parse-expr {

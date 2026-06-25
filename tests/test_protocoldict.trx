@@ -2,7 +2,7 @@
 % test_protocoldict.trx -- protocol dict isolation tests
 % ====================================================================
 % Tests that def-protocol binds dispatch procs in protocoldict (not
-% userdict), and that the 3-permanent-dict stack is correctly maintained.
+% localdict), and that the 3-permanent-dict stack is correctly maintained.
 
 % rt-ok counts failures in a restore-immune slot -- string byte writes
 % are unjournaled, so the count survives assertions made inside save
@@ -20,8 +20,8 @@ rt-fails 0 16#0#b put
 
 count-dictstack 3 eq                         (stack: 3 permanent dicts) rt-ok  clear
 
-% dict-stack 0 is userdict (top)
-/dict-stack 0 stack-probe //userdict eq      (stack: top is userdict) rt-ok  clear
+% dict-stack 0 is localdict (top)
+/dict-stack 0 stack-probe //localdict eq      (stack: top is localdict) rt-ok  clear
 
 % dict-stack 2 is systemdict (bottom)
 /dict-stack 2 stack-probe //systemdict eq    (stack: bottom is systemdict) rt-ok  clear
@@ -43,8 +43,8 @@ count-dictstack 3 eq                         (stack: 3 permanent dicts) rt-ok  c
 /test-to-str where
 exch //:systemdict:protocoldict eq           (bind: test-to-str in protocoldict) rt-ok  clear
 
-% Dispatch proc is NOT in userdict
-//userdict /test-to-str known? not           (bind: test-to-str not in userdict) rt-ok  clear
+% Dispatch proc is NOT in localdict
+//localdict /test-to-str known? not           (bind: test-to-str not in localdict) rt-ok  clear
 
 % ====================================================================
 % SECTION 3: PROTOCOL DISPATCH WORKS -- methods resolve through dict stack
@@ -63,14 +63,14 @@ exch //:systemdict:protocoldict eq           (bind: test-to-str in protocoldict)
 % User def shadows but doesn't destroy
 /test-to-str (clobbered) def
 
-% test-to-str now resolves to user string (userdict is on top)
+% test-to-str now resolves to user string (localdict is on top)
 test-to-str (clobbered) eq                   (isolate: user def shadows) rt-ok  clear
 
 % But the dispatch proc is still in protocoldict
 //:protocoldict:test-to-str is-array        (isolate: dispatch proc still exists) rt-ok  clear
 
 % Remove the shadowing user def, dispatch works again
-//userdict /test-to-str undef
+//localdict /test-to-str undef
 42 test-to-str (integer-result) eq           (isolate: dispatch restored after undef) rt-ok  clear
 
 % ====================================================================
@@ -158,9 +158,9 @@ coro-result (integer-result) eq              (coro: protocol dispatch in corouti
 /sp-a where exch //:systemdict:protocoldict eq exch pop    (stress: sp-a in protocoldict) rt-ok  clear
 /sp-h where exch //:systemdict:protocoldict eq exch pop    (stress: sp-h in protocoldict) rt-ok  clear
 
-% None in userdict
-//userdict /sp-a known? not                  (stress: sp-a not in userdict) rt-ok  clear
-//userdict /sp-h known? not                  (stress: sp-h not in userdict) rt-ok  clear
+% None in localdict
+//localdict /sp-a known? not                  (stress: sp-a not in localdict) rt-ok  clear
+//localdict /sp-h known? not                  (stress: sp-h not in localdict) rt-ok  clear
 
 % ====================================================================
 % SECTION 13: PROTOCOLDICT IS READ-WRITE-DYNAMIC -- grows as needed
@@ -301,15 +301,15 @@ end end clear
 1 cyc-d (d) eq                               (rapid: cyc-d dispatches) rt-ok  clear
 1 cyc-e (e) eq                               (rapid: cyc-e dispatches) rt-ok  clear
 
-% All in protocoldict, none in userdict
-//userdict /cyc-a known? not                 (rapid: cyc-a not in userdict) rt-ok  clear
-//userdict /cyc-e known? not                 (rapid: cyc-e not in userdict) rt-ok  clear
+% All in protocoldict, none in localdict
+//localdict /cyc-a known? not                 (rapid: cyc-a not in localdict) rt-ok  clear
+//localdict /cyc-e known? not                 (rapid: cyc-e not in localdict) rt-ok  clear
 
 % ====================================================================
 % SECTION 24: SHADOW + DISPATCH INTERACTION -- shadow one, others work
 % ====================================================================
 
-% Shadow cyc-a in userdict
+% Shadow cyc-a in localdict
 /cyc-a (shadowed) def
 
 % cyc-a is shadowed
@@ -320,7 +320,7 @@ cyc-a (shadowed) eq                          (shadow-interact: cyc-a shadowed) r
 1 cyc-c (c) eq                               (shadow-interact: cyc-c still works) rt-ok  clear
 
 % Remove shadow, dispatch restored
-//userdict /cyc-a undef
+//localdict /cyc-a undef
 1 cyc-a (a) eq                               (shadow-interact: cyc-a restored) rt-ok  clear
 
 (====================================) =

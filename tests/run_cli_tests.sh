@@ -188,7 +188,7 @@ run_case name-buckets-below-min 0 grep 'trix: --name-buckets: 50 is below minimu
 
 #--- value flags wired through to the VM (observable via status dict) ---#
 run_case stream-buffer-k-suffix 0 exact '8192' - -- -q --stream-buffer=8K "$CLI/status-stream-buffer.trx"
-run_case userdict-size 0 exact '2048' - -- -q --userdict-size=2048 "$CLI/status-userdict.trx"
+run_case localdict-size 0 exact '2048' - -- -q --localdict-size=2048 "$CLI/status-localdict.trx"
 
 #--- remaining tuning flags: acceptance (boots and runs) ---#
 run_case depth-flags-accept 0 exact 'cli-ok' - -- -q --operand-depth=128 --exec-depth=256 --dict-depth=16 --error-depth=16 --scratch-depth=128 "$CLI/ok.trx"

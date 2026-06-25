@@ -104,8 +104,8 @@ enum struct SystemName : name_index_t {
     ErrorDict,                     // "errordict"
     HandlersDict,                  // "handlersdict"
     SystemDict,                    // "systemdict"
-    UserDict,                      // "userdict"
-    LAST_VARIABLE = UserDict,      //
+    LocalDict,                      // "localdict"
+    LAST_VARIABLE = LocalDict,      //
     FIRST_CONTROL_OP,              // CONTROL OPERATORS
     atRun = FIRST_CONTROL_OP,      // "@run"
     atStop,                        // "@stop"
@@ -1288,7 +1288,7 @@ enum struct GcProfileSection : uint8_t {
     Coroutines,   // section 2 + 2b: coroutine registry + main context
     Names,        // section 3: global Name buckets (mask-gated)
     ObjTables,    // section 4: well-known cache + root-objects array
-    NamedDicts,   // section 5: systemdict / userdict / errordict / handlers / protocol
+    NamedDicts,   // section 5: systemdict / localdict / errordict / handlers / protocol
     Eqref,        // section 6: eqref tables (eqdict / eqset / eqproc storage)
     SaveJournal,  // section 7: per-save-level journal chains
     RootTail,     // sections 8-11: last-error, misc cells, reactive batch, debugger

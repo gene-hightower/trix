@@ -217,7 +217,7 @@ struct SnapShotHeader {
     vm_offset_t wellknown_offsets_offset;
     vm_offset_t systemdict_offset;
     vm_offset_t protocoldict_offset;
-    vm_offset_t userdict_offset;
+    vm_offset_t localdict_offset;
     vm_offset_t errordict_offset;
     vm_offset_t handlersdict_offset;
     vm_offset_t eqproc_storage_offset;

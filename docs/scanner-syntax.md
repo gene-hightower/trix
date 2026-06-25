@@ -467,7 +467,7 @@ When the name following `//` or `\\` starts with `:`, it is a **path lookup**:
 \\:rootdict:segment:...:leafname
 ```
 
-- `rootdict` must be one of: `systemdict`, `userdict`, `errordict`, `handlersdict`, `modules`, or any dict entry in systemdict (e.g., `protocoldict`, `pipeline`, `records`).
+- `rootdict` must be one of: `systemdict`, `localdict`, `errordict`, `handlersdict`, `modules`, or any dict entry in systemdict (e.g., `protocoldict`, `pipeline`, `records`).
 - Each intermediate `segment` is looked up as a Name in the preceding Dict.
 - `leafname` is looked up in the last intermediate Dict found.
 - Special root form `:status:key` performs on-demand VM introspection without
@@ -475,7 +475,7 @@ When the name following `//` or `\\` starts with `:`, it is a **path lookup**:
 
 ```
 //:systemdict:numbers:real-type:pi     → Real pi
-//:userdict:my-constant                → current value of my-constant
+//:localdict:my-constant                → current value of my-constant
 //:errordict:error-data                → last error data (set by throw-with)
 //:status:vm-used                      → current VM bytes used
 ```
@@ -1941,7 +1941,7 @@ imm_body        = path_lookup | name_body ;
 
 path_lookup     = ':' root_dict ':' { segment ':' } leaf_name ;
 
-root_dict       = 'systemdict' | 'userdict' | 'errordict'
+root_dict       = 'systemdict' | 'localdict' | 'errordict'
                 | 'handlersdict' | 'modules' | 'status'
                 | systemdict_subdict ;   (* any dict entry in systemdict *)
 

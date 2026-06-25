@@ -636,7 +636,7 @@ static void snapshot_op(Trix *trx) {
                 h.wellknown_offsets_offset = trx->nullptr_to_offset(trx->m_wellknown_offsets);
                 h.systemdict_offset = trx->nullptr_to_offset(trx->m_systemdict);
                 h.protocoldict_offset = trx->nullptr_to_offset(trx->m_protocoldict);
-                h.userdict_offset = trx->nullptr_to_offset(trx->m_userdict);
+                h.localdict_offset = trx->nullptr_to_offset(trx->m_localdict);
                 h.errordict_offset = trx->nullptr_to_offset(trx->m_errordict);
                 h.handlersdict_offset = trx->nullptr_to_offset(trx->m_handlersdict);
                 h.eqproc_storage_offset = trx->nullptr_to_offset(trx->m_eqproc_storage_ptr);
@@ -1175,7 +1175,7 @@ static void restore_from_header(Trix *trx, const SnapShotHeader *h) {
     trx->populate_wellknown_cache();
     trx->m_systemdict = trx->offset_to_nullptr<Dict>(h->systemdict_offset);
     trx->m_protocoldict = trx->offset_to_nullptr<Dict>(h->protocoldict_offset);
-    trx->m_userdict = trx->offset_to_nullptr<Dict>(h->userdict_offset);
+    trx->m_localdict = trx->offset_to_nullptr<Dict>(h->localdict_offset);
     trx->m_errordict = trx->offset_to_nullptr<Dict>(h->errordict_offset);
     trx->m_handlersdict = trx->offset_to_nullptr<Dict>(h->handlersdict_offset);
     trx->m_eqproc_storage_ptr = trx->offset_to_nullptr<Object>(h->eqproc_storage_offset);

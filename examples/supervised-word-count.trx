@@ -22,7 +22,7 @@
 %                   no operator input.
 %
 % Each actor body wraps its work in `8 dict begin ... end` so its locals
-% live in a per-actor dict rather than the shared userdict: multiple
+% live in a per-actor dict rather than the shared localdict: multiple
 % workers can all bind /msg, /path, /counts simultaneously with no
 % interference.  The per-coroutine name-binding cache (see
 % src/binding_table.inl) handles the read side -- each actor's cache

@@ -82,7 +82,7 @@ error.
 after allocation (binding cache depends on stable offsets).
 
 **dict stack** — The lookup chain for executable names: systemdict and
-protocoldict at the bottom, userdict above, then any dicts pushed by
+protocoldict at the bottom, localdict above, then any dicts pushed by
 `begin` and any *frame dicts* from `|locals|` procs.  Lookup walks top
 down; `def` writes to the top non-frame dict (frame dicts are bound by
 `local-def`).

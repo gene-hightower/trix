@@ -612,7 +612,7 @@ void execute_resolved_value(Object value, Object name) {
                 // If NO  -- the callee will do its work against whatever dict
                 // is topmost-writable.  Popping the caller's frame would silently
                 // change def semantics in the callee: `/foo def` would land in
-                // the grand-caller's frame (or userdict) instead of the caller's
+                // the grand-caller's frame (or localdict) instead of the caller's
                 // frame.  Preserve the caller's frame instead, at the cost of
                 // keeping @end-locals on the exec stack for the duration of the
                 // tail-call chain.  Stack growth is still +1 per call; the

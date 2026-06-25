@@ -1,0 +1,3 @@
+% status-localdict.trx -- print the live localdict capacity so
+% run_cli_tests.sh can pin --localdict-size.
+//:status:localdict-maxlength =

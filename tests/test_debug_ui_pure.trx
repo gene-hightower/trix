@@ -249,9 +249,9 @@ length 0 gt                                               (cmd: p string) expect
 
 % Side effects in the eval are rolled back via save/restore.  /foo-sand-1
 % is undefined before AND after a :p that defines it.
-userdict /foo-sand-1 known? not                           (sand: /foo-sand-1 absent pre)   expect
+localdict /foo-sand-1 known? not                           (sand: /foo-sand-1 absent pre)   expect
 (p /foo-sand-1 99 def) dbg-execute-command pop
-userdict /foo-sand-1 known? not                           (sand: /foo-sand-1 absent post)  expect
+localdict /foo-sand-1 known? not                           (sand: /foo-sand-1 absent post)  expect
 
 % No-value evals (e.g., just `1 pop`) return "ok".
 (p 1 pop) dbg-execute-command
@@ -338,9 +338,9 @@ _dbg-source-cache 42 seeded-lines put
 % (raw-mode requires a tty), but verify their bindings exist so a future
 % --inspect / --inspect-on-error / --inspect-at can resolve them at boot.
 
-userdict /install-debugger          known?     (install-debugger defined)         expect
-userdict /install-debugger-on-error known?     (install-debugger-on-error defined) expect
-userdict /install-debugger-at       known?     (install-debugger-at defined)       expect
+localdict /install-debugger          known?     (install-debugger defined)         expect
+localdict /install-debugger-on-error known?     (install-debugger-on-error defined) expect
+localdict /install-debugger-at       known?     (install-debugger-at defined)       expect
 
 % --- SECTION 16: _dbg-set-breakpoint-at-pc -------------------------------
 
@@ -586,13 +586,13 @@ captured-w1 (=> 50i)        count-substring 0 gt (watch: row 1 result)          
 
 % --- SECTION 27: watch eval rolls back side effects ---------------------
 
-userdict /watch-side-1 known? not             (watch-sand: side-1 absent pre)  expect
+localdict /watch-side-1 known? not             (watch-sand: side-1 absent pre)  expect
 
 /_dbg-watch-exprs   [(/watch-side-1 99 def)] store
 /_dbg-watch-results [] store
 _dbg-eval-watches
 
-userdict /watch-side-1 known? not             (watch-sand: side-1 absent post) expect
+localdict /watch-side-1 known? not             (watch-sand: side-1 absent post) expect
 
 /_dbg-watch-exprs   [] store
 /_dbg-watch-results [] store
@@ -631,17 +631,17 @@ _dbg-watch-results 0 get
 (quit)            _dbg-cmd-eval-bool not  (eval-bool: blocklist quit)            expect
 (restore)         _dbg-cmd-eval-bool not  (eval-bool: blocklist restore)         expect
 
-% Side effects roll back (verify via userdict probe).
-userdict /eb-side-1 known? not             (eval-bool: side-1 pre)               expect
+% Side effects roll back (verify via localdict probe).
+localdict /eb-side-1 known? not             (eval-bool: side-1 pre)               expect
 (/eb-side-1 99 def true) _dbg-cmd-eval-bool pop
-userdict /eb-side-1 known? not             (eval-bool: side-1 rolled back)       expect
+localdict /eb-side-1 known? not             (eval-bool: side-1 rolled back)       expect
 
 % Operand-stack residue cleaned up (top + below).
 count /eb-before exch def
 (1 2 3 true) _dbg-cmd-eval-bool pop
 count eb-before sub 0 eq                   (eval-bool: residue cleaned)          expect
 /eb-before /erased def
-userdict /eb-before undef
+localdict /eb-before undef
 
 % --- SECTION 30: conditional bp grammar parse ---------------------------
 
@@ -1122,10 +1122,10 @@ _dbg-cmd-history 31 get (e34) eq          (history: newest preserved)          e
 
 % --- SECTION: dict-modal after render (use-after-free regression) ------
 % dbg-render-stacks once bound its op/exec/dict/err snapshots with `def`,
-% which the |locals| shadow rule routes to userdict -- so the snapshot
+% which the |locals| shadow rule routes to localdict -- so the snapshot
 % arrays (holding references to the render proc's own transient frame)
-% dangled in userdict after it returned.  Expanding the DICT pane then
-% snapshots the dict stack and deep-formats each dict (incl. userdict),
+% dangled in localdict after it returned.  Expanding the DICT pane then
+% snapshots the dict stack and deep-formats each dict (incl. localdict),
 % walking those stale references -> misaligned DictEntry read (UBSan).
 % Fixed by binding the snapshots with local-def.  This drives the exact
 % render-then-expand-dict sequence; a regression aborts on the UAF before

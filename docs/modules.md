@@ -31,7 +31,7 @@ without name collisions.
 ### What This Enables
 
 - **Scoped namespaces** -- a module's definitions live in their own dict,
-  not in the global userdict
+  not in the global localdict
 - **Name collision prevention** -- two libraries can define `/parse` without
   conflicting
 - **Controlled imports** -- consumers choose what they pull into scope: nothing
@@ -227,7 +227,7 @@ path syntax.
     /_internal-helper { ... } def         % private by convention
 } module
 
-% math-utils is now registered; its entries are NOT in userdict
+% math-utils is now registered; its entries are NOT in localdict
 ```
 
 ### Duplicate Module Names
@@ -311,7 +311,7 @@ end
 **How it works:** `use` pushes the module's ReadOnly dict onto the dict
 stack, exactly like `begin`.  Name lookup finds module entries via the normal
 dict stack walk.  `end` pops the dict.  The module dict is ReadOnly, so `def`
-inside a `use` block goes into the dict below it (usually userdict), not into
+inside a `use` block goes into the dict below it (usually localdict), not into
 the module.
 
 **Cost:** O(1) `use` (push + binding cache pre-warm).  O(1) `end` (pop +
@@ -400,7 +400,7 @@ Modules are accessible via the `//:modules:` dict path root:
 
 This works because the modules registry is a regular Dict, and `check_systemdicts()`
 in the name lookup code recognizes `:modules:` as a root path alongside
-`:systemdict:`, `:userdict:`, `:errordict:`, and `:handlersdict:`.
+`:systemdict:`, `:localdict:`, `:errordict:`, and `:handlersdict:`.
 
 **Nested dict access:** If a module entry is itself a dict, the path can
 continue:

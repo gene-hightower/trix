@@ -232,7 +232,7 @@ A **Name** is an interned reference; a **Dict** is a hash table of name ->
 Object.  Name resolution walks the dictionary stack top-to-bottom, short-cut by
 a per-call-site binding cache.  System operators live in `systemdict` at the
 bottom of the stack; `protocoldict` (protocol-dispatch procs, filled by
-`def-protocol`) sits above it, then `userdict`; `begin` / `use` push further
+`def-protocol`) sits above it, then `localdict`; `begin` / `use` push further
 scopes on top.  See [Name Lookup](name-lookup.md) and [Collections](collections.md).
 
 ### 4.4 The VM heap

@@ -138,7 +138,7 @@ The terminal is divided into five panes plus a footer:
 |  op[2]  exec[5]  dict[3]  err[0]                               |
 |  op:    integer:1   array:[42]                                 |
 |  exec:  @call:find-min  ...                                    |
-|  dict:  userdict  find-min:locals                              |
+|  dict:  localdict  find-min:locals                              |
 |  err:   (empty)                                                |
 +----------------------------------------------------------------+
 | F11=step F10=over F12=out F5=cont F9=break Tab=focus Enter=expand q=quit |
@@ -667,7 +667,7 @@ Solution: two distinct caches cooperate.
   the path even after a `require`'d file has closed its stream. This
   cache has no Trix-side name.
 
-- The **Trix-side `_dbg-source-cache`** is a plain userdict `64 dict`
+- The **Trix-side `_dbg-source-cache`** is a plain localdict `64 dict`
   keyed by sid → array-of-source-*lines* (the file split on `\n`). It
   holds the rendered source, not paths, and is filled *lazily on halt*
   by `_dbg-load-source-for-sid`: that helper calls `stream-name` (which
@@ -923,7 +923,7 @@ A few facts about the implementation worth surfacing:
   C++ subsystem.
 
 - **The UI is reload-friendly.** Because `lib/debugger.trx` is
-  loaded at install time and lives in userdict, you can edit it
+  loaded at install time and lives in localdict, you can edit it
   during development and re-`require` without recompiling C++. The
   C-side hook contract (event payload format) is stable; everything
   else is malleable Trix.
