@@ -699,9 +699,9 @@ private:
 // the next commit re-sets PRERELEASE to "-dev" (and bumps MINOR/PATCH as needed)
 // to re-open the dev cycle.  Empty PRERELEASE formats to nothing.
 static constexpr uint8_t MAJOR{0};
-static constexpr uint8_t MINOR{11};
+static constexpr uint8_t MINOR{12};
 static constexpr uint8_t PATCH{0};
-static constexpr std::string_view PRERELEASE{""};
+static constexpr std::string_view PRERELEASE{"-dev"};
 
 // Snapshot-image format revision: stored in the snapshot header and
 // strict-compared on thaw.  Increment any time the on-disk layout,
