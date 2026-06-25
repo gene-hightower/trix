@@ -428,9 +428,10 @@ void coroutine_cleanup_stacks(CoroutineContext *ctx) {
     }
 
     // Clear name bindings on dicts the coroutine pushed itself, i.e. above the
-    // permanent dicts (systemdict, protocoldict, localdict = PermanentDictCount).
-    // Starting at dict_base+2 instead clears the SHARED localdict's bindings on
-    // every coroutine death, tombstoning every live coroutine's binding cache.
+    // permanent dicts (systemdict, protocoldict, globaldict, localdict =
+    // PermanentDictCount).  Starting below that instead clears the SHARED
+    // global/localdict bindings on every coroutine death, tombstoning every live
+    // coroutine's binding cache.
     auto dict_base = offset_to_ptr<Object>(ctx->m_dict_base);
     auto dict_ptr = offset_to_ptr<Object>(ctx->m_dict_ptr) - 1;
     for (auto obj = dict_base + PermanentDictCount; obj <= dict_ptr; ++obj) {
@@ -1691,10 +1692,11 @@ static std::pair<CoroutineContext *, vm_offset_t> coroutine_launch_common(Trix *
         // Init error stack: empty
         ctx->m_err_ptr = trx->ptr_to_offset(err_base);
 
-        // Init dict stack: [systemdict, protocoldict, localdict]
+        // Init dict stack: [systemdict, protocoldict, globaldict, localdict]
         dict_base[0] = Object::make_dict(trx->ptr_to_offset(trx->m_systemdict));
         dict_base[1] = Object::make_dict(trx->ptr_to_offset(trx->m_protocoldict));
-        dict_base[2] = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));
+        dict_base[2] = Object::make_dict(trx->ptr_to_offset(trx->m_globaldict));
+        dict_base[3] = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));
         ctx->m_dict_ptr = trx->ptr_to_offset(dict_base + PermanentDictCount);
 
         ctx->m_scanner_stream = nullptr;

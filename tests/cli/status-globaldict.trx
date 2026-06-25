@@ -1,0 +1,3 @@
+% status-globaldict.trx -- print the live globaldict capacity so
+% run_cli_tests.sh can pin --globaldict-size.
+//:status:globaldict-maxlength =

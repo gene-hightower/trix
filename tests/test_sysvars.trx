@@ -321,12 +321,12 @@ clear
 2 get 3 eq (array-store-elem-2) rt-ok clear
 sv restore
 
-% clear-dictstack: reset dict stack to systemdict + localdict
+% clear-dictstack: reset dict stack to the permanent dicts (systemdict, protocoldict, globaldict, localdict)
 /sv save def
 3 dict begin
-count-dictstack 4 eq (clear-dictstack-before) rt-ok clear
+count-dictstack 5 eq (clear-dictstack-before) rt-ok clear
 clear-dictstack
-count-dictstack 3 eq (clear-dictstack-after) rt-ok clear
+count-dictstack 4 eq (clear-dictstack-after) rt-ok clear
 sv restore
 
 % name table stats via status dict path

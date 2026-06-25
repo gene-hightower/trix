@@ -159,7 +159,7 @@ count-dictstack  base-depth2 eq  (nested-end: dictstack back to base) rt-ok  cle
 3 dict begin
 3 dict begin
   clear-dictstack
-  count-dictstack 3 eq  (clear-dictstack: resets to permanent dicts) rt-ok
+  count-dictstack 4 eq  (clear-dictstack: resets to permanent dicts) rt-ok
 clear
 
 % --- Error: end with only systemdict+localdict ---

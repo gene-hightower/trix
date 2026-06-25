@@ -169,7 +169,7 @@ ud /k get 10 eq (update-persist: control applies proc) rt-ok clear
 % ====================================================================
 
 1 { |a|
-    4 array dictstack /ds exch def
+    count-dictstack array dictstack /ds exch def
     ds ds length 1 sub get make-readonly pop
     { /b 2 local-def } try
     /read-only eq (local-def: read-only frame rejected) rt-ok clear

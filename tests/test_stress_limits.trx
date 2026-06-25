@@ -40,7 +40,7 @@ clear-to-mark clear
 { { 1 dict begin } loop } try
 /dictstack-overflow eq  (stress: dictstack overflow detected) rt-ok
 % Clean up: end all extra dicts (dictstack has 3 permanent base dicts)
-{ count-dictstack 3 gt { end } if count-dictstack 3 le { exit } if } loop
+{ count-dictstack 4 gt { end } if count-dictstack 4 le { exit } if } loop
 clear
 
 % ====================================================================

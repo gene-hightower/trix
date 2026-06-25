@@ -144,6 +144,7 @@ class Dict {
 public:
     struct InitConfig {
         length_t m_localdict_maxlength;
+        length_t m_globaldict_maxlength;
         const Operator *m_useroperators;
     };
 
@@ -391,7 +392,7 @@ private:
     }
 public:
     static void init_systemdict(Trix *trx) {
-        auto dict_count = 20;      // systemdict, protocoldict, localdict, errordict, numbers + 15 convenience dicts
+        auto dict_count = 21;      // systemdict, protocoldict, localdict, globaldict, errordict, numbers + 15 convenience dicts
         auto var_count = 9;        // false, true, null, inf, nan, inf#r, nan#r, inf#d, nan#d
         auto stdstream_count = 4;  // stdin, stdedit, stdout, stderr
         auto entry_count = static_cast<length_t>(SYSTEMNAME_STD_OP_COUNT + dict_count + var_count + stdstream_count);
@@ -896,6 +897,18 @@ public:
         trx->m_useroperators = cfg.m_useroperators;
     }
 
+    // globaldict is the sibling of localdict for definitions made under set-global /
+    // current-global.  It is pre-allocated at init in LOCAL VM at save level 0 (like
+    // localdict), so a program that never defines a global pays nothing in the global
+    // region.  FIXED capacity: it never regrows, so its bucket array is stable for the
+    // life of the VM -- a persistent global entry (allocated above the save barrier in
+    // global VM at save level > 0) can never be orphaned by a rolled-back regrow.
+    static void init_globaldict(Trix *trx, InitConfig cfg) {
+        auto [globaldict, globaldict_offset] = create_dict(trx, cfg.m_globaldict_maxlength);
+        trx->m_systemdict->put(trx, SystemName::GlobalDict, Object::make_dict(globaldict_offset));
+        trx->m_globaldict = globaldict;
+    }
+
     static void init_errordict(Trix *trx) {
         auto systemdict = trx->m_systemdict;
 
@@ -957,18 +970,23 @@ public:
     static void init(Trix *trx, InitConfig cfg) {
         init_systemdict(trx);
         init_protocoldict(trx);
+        init_globaldict(trx, cfg);
         init_localdict(trx, cfg);
         init_errordict(trx);
 
-        // Dict stack (bottom to top): systemdict, protocoldict, localdict
-        // def-protocol binds dispatch procs in protocoldict; user def goes to localdict.
+        // Dict stack (bottom to top): systemdict, protocoldict, globaldict, localdict.
+        // def-protocol binds dispatch procs in protocoldict; user def in local-alloc
+        // mode goes to localdict (top), in global-alloc mode to globaldict.  localdict
+        // stays on top so a bare lookup prefers a local definition.
         *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_systemdict));    // bottom
-        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_protocoldict));  // middle
-        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));      // top
+        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_protocoldict));  //
+        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_globaldict));    //
+        *++trx->m_dict_ptr = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));     // top
 
-        // set name binding for all three permanent dicts
+        // set name binding for all permanent dicts
         trx->m_systemdict->set_name_bindings(trx);
         trx->m_protocoldict->set_name_bindings(trx);
+        trx->m_globaldict->set_name_bindings(trx);
         trx->m_localdict->set_name_bindings(trx);
     }
 

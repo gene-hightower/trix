@@ -633,10 +633,11 @@ clear
 clear
 
 % --- Dict stack probing ---
-% Default state: dict-stack 0 = localdict, 1 = protocoldict, 2 = systemdict
+% Default state: dict-stack 0 = localdict, 1 = globaldict, 2 = protocoldict, 3 = systemdict
 /dict-stack 0 stack-probe //localdict eq                (st: dict-stack 0 is localdict) rt-ok clear
-/dict-stack 1 stack-probe //:systemdict:protocoldict eq (st: dict-stack 1 is protocoldict) rt-ok clear
-/dict-stack 2 stack-probe //systemdict eq              (st: dict-stack 2 is systemdict) rt-ok clear
+/dict-stack 1 stack-probe //globaldict eq                (st: dict-stack 1 is globaldict) rt-ok clear
+/dict-stack 2 stack-probe //:systemdict:protocoldict eq              (st: dict-stack 2 is protocoldict) rt-ok clear
+/dict-stack 3 stack-probe //systemdict eq                (st: dict-stack 3 is systemdict) rt-ok clear
 
 % After begin: new dict on top
 << >> begin

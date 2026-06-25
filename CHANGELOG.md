@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`globaldict` -- a second user dictionary, groundwork for a PostScript-style
+  local/global definition split.** A fixed-capacity dictionary pre-allocated in local
+  VM and placed on the dict stack directly below `localdict`, pushed by the new
+  `globaldict` operator. `--globaldict-size=N` sets its capacity (default 64; range
+  16..50000) and `:status:globaldict-length` / `:status:globaldict-maxlength` report
+  it. This adds the dictionary, its snapshot persistence, and the dict-stack slot
+  only; definitions are not yet routed to it (`def` still targets `localdict`). The
+  permanent dict-stack count rises from 3 to 4, and the snapshot format is bumped to
+  **v183** (new `globaldict_offset` header field and the `GlobalDict` name ordinal).
+
 ### Changed
 - **BREAKING: the user dictionary `userdict` is renamed `localdict`.** The operator
   `userdict`, the name-path prefix `:userdict:`, the status variable

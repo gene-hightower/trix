@@ -1894,10 +1894,11 @@ static PipeCoroutineSetup pipe_alloc_stage_context(Trix *trx) {
     ctx->m_scratch_ptr = ctx->m_scratch_base;
     ctx->m_scratch_limit = trx->ptr_to_offset(scratch_base + trx->m_scratch_depth);
 
-    // Dict stack: systemdict + protocoldict + localdict
+    // Dict stack: systemdict + protocoldict + globaldict + localdict
     dict_base[0] = Object::make_dict(trx->ptr_to_offset(trx->m_systemdict));
     dict_base[1] = Object::make_dict(trx->ptr_to_offset(trx->m_protocoldict));
-    dict_base[2] = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));
+    dict_base[2] = Object::make_dict(trx->ptr_to_offset(trx->m_globaldict));
+    dict_base[3] = Object::make_dict(trx->ptr_to_offset(trx->m_localdict));
     ctx->m_dict_ptr = trx->ptr_to_offset(dict_base + PermanentDictCount);
 
     return {ctx_offset, exec_base};

@@ -199,6 +199,7 @@ void init_and_interpret(Config config) {
     const stack_depth_t operand_depth = config.m_operand_depth;
     const stack_depth_t scratch_depth = config.m_scratch_depth;
     const length_t localdict_maxlength = config.m_localdict_maxlength;
+    const length_t globaldict_maxlength = config.m_globaldict_maxlength;
     const Operator *useroperators = config.m_useroperators;
 
     assert((stream_count >= MinStreamCount) && (stream_count <= MaxStreamCount));
@@ -215,6 +216,7 @@ void init_and_interpret(Config config) {
     assert((operand_depth >= MinOperandDepth) && (operand_depth <= MaxOperandDepth));
     assert((scratch_depth >= MinCoroutineScratchDepth) && (scratch_depth <= MaxCoroutineScratchDepth));
     assert((localdict_maxlength >= MinLocalDictMaxLength) && (localdict_maxlength <= MaxLocalDictMaxLength));
+    assert((globaldict_maxlength >= MinGlobalDictMaxLength) && (globaldict_maxlength <= MaxGlobalDictMaxLength));
 
     m_error_init_complete = false;
 // Interactive debugger init -- whole block folds out when Debugger is
@@ -657,7 +659,7 @@ void init_and_interpret(Config config) {
                 Stream::init(trx, stream_enable, stream_count, stream_buffer_size, filename, eval_source, mode, resident);
 
                 // create and populate standard Dicts
-                Dict::init(trx, Dict::InitConfig{localdict_maxlength, useroperators});
+                Dict::init(trx, Dict::InitConfig{localdict_maxlength, globaldict_maxlength, useroperators});
                 m_error_init_complete = true;
 
                 // gen-server ref counter

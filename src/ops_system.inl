@@ -1242,6 +1242,10 @@ static void vm_heap_diff_op(Trix *trx) {
         m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_localdict->length()));
     } else if (key == "localdict-maxlength"sv) {
         m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_localdict->maxlength()));
+    } else if (key == "globaldict-length"sv) {
+        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_globaldict->length()));
+    } else if (key == "globaldict-maxlength"sv) {
+        m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(m_globaldict->maxlength()));
     } else if (key == "eqstring-length"sv) {
         m_status_scratch_obj = Object::make_integer(static_cast<integer_t>(root_object(RootObject::EqString).object_length()));
     } else if (key == "eqarray-length"sv) {
@@ -2481,8 +2485,8 @@ void format_backtrace_report() {
         *m_dstack_ptr = save_stack(*m_dstack_ptr, m_dict_base, m_dict_ptr);
         *m_estack_ptr = save_stack(*m_estack_ptr, m_exec_base, m_exec_ptr);
 
-        // Clear name bindings for all dicts above the three permanent dicts.
-        // dict_base[0] = systemdict, dict_base[1] = protocoldict, dict_base[2] = localdict.
+        // Clear name bindings for all dicts above the permanent dicts.
+        // dict_base[0]=systemdict, [1]=protocoldict, [2]=globaldict, [3]=localdict.
         auto dict_bottom = (m_dict_base + PermanentDictCount - 1);
         for (auto ptr = m_dict_ptr; ptr > dict_bottom; --ptr) {
             ptr->dict_value(trx)->clear_name_bindings(trx);

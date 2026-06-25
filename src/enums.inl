@@ -104,8 +104,9 @@ enum struct SystemName : name_index_t {
     ErrorDict,                     // "errordict"
     HandlersDict,                  // "handlersdict"
     SystemDict,                    // "systemdict"
-    LocalDict,                      // "localdict"
-    LAST_VARIABLE = LocalDict,      //
+    LocalDict,                     // "localdict"
+    GlobalDict,                    // "globaldict"
+    LAST_VARIABLE = GlobalDict,    //
     FIRST_CONTROL_OP,              // CONTROL OPERATORS
     atRun = FIRST_CONTROL_OP,      // "@run"
     atStop,                        // "@stop"

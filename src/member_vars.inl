@@ -178,6 +178,7 @@ Stream *m_stderr{nullptr};
 Dict *m_systemdict{nullptr};
 Dict *m_protocoldict{nullptr};
 Dict *m_localdict{nullptr};
+Dict *m_globaldict{nullptr};
 Dict *m_errordict{nullptr};
 Dict *m_handlersdict{nullptr};
 

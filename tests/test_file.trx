@@ -4877,7 +4877,7 @@ s (test string) eq  (post-filter-alloc: string ok) rt-ok  clear
 //:status:vm-free 0 gt  (status: vm-free > 0) rt-ok  clear
 /base-save-level //:status:save-level def
 //:status:save-level base-save-level eq  (status: save-level = base) rt-ok  clear
-//:status:dict-depth 3 eq  (status: dict-depth = 3) rt-ok  clear
+//:status:dict-depth 4 eq  (status: dict-depth = 4) rt-ok  clear
 //:status:stream-inuse 0 gt  (status: stream-inuse > 0) rt-ok  clear
 
 (Memory optimization safety tests complete.) =

@@ -15,22 +15,23 @@ rt-fails 0 16#0#b put
 /rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
 
 % ====================================================================
-% SECTION 1: DICT STACK STRUCTURE -- 3 permanent dicts
+% SECTION 1: DICT STACK STRUCTURE -- 4 permanent dicts
 % ====================================================================
 
-count-dictstack 3 eq                         (stack: 3 permanent dicts) rt-ok  clear
+count-dictstack 4 eq                         (stack: 4 permanent dicts) rt-ok  clear
 
 % dict-stack 0 is localdict (top)
 /dict-stack 0 stack-probe //localdict eq      (stack: top is localdict) rt-ok  clear
 
-% dict-stack 2 is systemdict (bottom)
-/dict-stack 2 stack-probe //systemdict eq    (stack: bottom is systemdict) rt-ok  clear
+% dict-stack 3 is systemdict (bottom)
+/dict-stack 3 stack-probe //systemdict eq    (stack: bottom is systemdict) rt-ok  clear
 
 % protocoldict exists in systemdict
 //:systemdict:protocoldict is-dict           (stack: protocoldict in systemdict) rt-ok  clear
 
-% protocoldict is on dict stack at position 1
-/dict-stack 1 stack-probe //:systemdict:protocoldict eq  (stack: protocoldict at index 1) rt-ok  clear
+% protocoldict is on dict stack at position 2
+/dict-stack 2 stack-probe //:systemdict:protocoldict eq  (stack: protocoldict at index 2) rt-ok  clear
+/dict-stack 1 stack-probe //globaldict eq     (stack: globaldict at index 1) rt-ok  clear
 
 % ====================================================================
 % SECTION 2: PROTOCOL BINDING -- dispatch procs go to protocoldict
@@ -96,8 +97,8 @@ test-to-str (clobbered) eq                   (isolate: user def shadows) rt-ok  
 { end } try
 /dictstack-underflow eq                      (protect: end raises underflow) rt-ok  clear
 
-% Dict stack still has exactly 3 after failed end
-count-dictstack 3 eq                         (protect: still 3 after failed end) rt-ok  clear
+% Dict stack still has exactly 4 after failed end
+count-dictstack 4 eq                         (protect: still 4 after failed end) rt-ok  clear
 
 % ====================================================================
 % SECTION 7: CLEAR-DICTSTACK -- resets to 3 permanent dicts
@@ -105,19 +106,19 @@ count-dictstack 3 eq                         (protect: still 3 after failed end)
 
 3 dict begin
 3 dict begin
-count-dictstack 5 eq                         (clear: 5 before clear) rt-ok  clear
+count-dictstack 6 eq                         (clear: 6 before clear) rt-ok  clear
 clear-dictstack
-count-dictstack 3 eq                         (clear: 3 after clear) rt-ok  clear
+count-dictstack 4 eq                         (clear: 4 after clear) rt-ok  clear
 
 % ====================================================================
-% SECTION 8: BEGIN/END SCOPING -- user dicts above permanent 3
+% SECTION 8: BEGIN/END SCOPING -- user dicts above permanent 4
 % ====================================================================
 
 << /x 42 >> begin
-count-dictstack 4 eq                         (scope: begin pushes to 4) rt-ok
+count-dictstack 5 eq                         (scope: begin pushes to 5) rt-ok
 x 42 eq                                      (scope: x found in user dict) rt-ok
 end clear
-count-dictstack 3 eq                         (scope: end pops back to 3) rt-ok  clear
+count-dictstack 4 eq                         (scope: end pops back to 4) rt-ok  clear
 
 % ====================================================================
 % SECTION 9: PROTOCOL PATH LOOKUP -- //:protocoldict:method works
@@ -134,7 +135,7 @@ count-dictstack 3 eq                         (scope: end pops back to 3) rt-ok  
 /coro-depth 0 def
 mark { /coro-depth count-dictstack def } coroutine-launch
 coroutine-wait-all
-coro-depth 3 eq                              (coro: 3 permanent dicts in coroutine) rt-ok  clear
+coro-depth 4 eq                              (coro: 4 permanent dicts in coroutine) rt-ok  clear
 
 % ====================================================================
 % SECTION 11: PROTOCOL IN COROUTINE -- dispatch works across coroutines
@@ -206,8 +207,8 @@ sv14 restore
 % Protocol dispatch still works after error recovery
 42 test-to-str (integer-result) eq           (error: protocol works after recovery) rt-ok  clear
 
-% Dict stack is still 3 (try doesn't push extra dicts)
-count-dictstack 3 eq                         (error: dict stack still 3) rt-ok  clear
+% Dict stack is still 4 (try doesn't push extra dicts)
+count-dictstack 4 eq                         (error: dict stack still 4) rt-ok  clear
 
 % ====================================================================
 % SECTION 16: MULTIPLE TYPES PER METHOD -- polymorphic dispatch

@@ -157,7 +157,7 @@ using stack_depth_t = length_t;
 static constexpr stack_depth_t MinDictionaryDepth{16};
 static constexpr stack_depth_t MaxDictionaryDepth{256};
 static constexpr stack_depth_t DefaultDictionaryDepth{64};  // vm usage: dictionary_depth * sizeof(Object)
-static constexpr stack_depth_t PermanentDictCount{3};       // systemdict, protocoldict, localdict
+static constexpr stack_depth_t PermanentDictCount{4};       // systemdict, protocoldict, globaldict, localdict
 
 static constexpr stack_depth_t MinExecutionDepth{128};
 static constexpr stack_depth_t MaxExecutionDepth{8192};
@@ -192,6 +192,13 @@ static constexpr length_t MinLocalDictMaxLength{256};
 static constexpr length_t MaxLocalDictMaxLength{50000};
 // vm usage: 12 bytes + (vm_offset_t * bucket_count) + (2 * (sizeof(DictEntry) * localdict_maxlength))
 static constexpr length_t DefaultLocalDictMaxLength{512};
+// globaldict (local VM, save level 0): holds definitions made under set-global /
+// current-global.  FIXED capacity -- it never regrows, so its bucket array is stable
+// and a persistent global entry (allocated in global VM at save level > 0) can never
+// be orphaned by a rolled-back regrow.  --globaldict-size sets the fixed capacity.
+static constexpr length_t MinGlobalDictMaxLength{16};
+static constexpr length_t MaxGlobalDictMaxLength{50000};
+static constexpr length_t DefaultGlobalDictMaxLength{64};
 static constexpr length_t MaxDictPoolSize{16};  // support maxlength 1..16 (locals + try-catch handlers)
 
 using name_index_t = uint16_t;
@@ -336,6 +343,7 @@ struct Config {
     stack_depth_t m_operand_depth = DefaultOperandDepth;
     stack_depth_t m_scratch_depth = DefaultCoroutineScratchDepth;  // per-coroutine scratch arena
     length_t m_localdict_maxlength = DefaultLocalDictMaxLength;
+    length_t m_globaldict_maxlength = DefaultGlobalDictMaxLength;
     const Operator *m_useroperators = nullptr;
     // -d / --debug: arm the step-in debugger at startup.  Debugger-only --
     // set in api.inl (gated) and read only by the TRIX_DBG-gated DebugState
@@ -1060,7 +1068,13 @@ static constexpr std::string_view PRERELEASE{"-dev"};
 // parallel to the name buckets.  The mask block itself rides in the serialized VM
 // blob; only its offset needs the header slot.  A pre-v182 image lacks the field,
 // so the version gate rejects the mismatch.
-static constexpr uint32_t SNAPSHOT_VERSION{182};
+// v183 adds the globaldict (a global-VM dictionary, sibling to localdict, holding
+// definitions made under set-global / current-global).  This (a) inserts the
+// GlobalDict SystemName next to LocalDict, shifting the ordinals of every operator
+// after it, and (b) adds globaldict_offset (vm_offset_t) to SnapShotHeader so thaw
+// can re-point m_globaldict.  A pre-v183 image mismatches on both counts; the
+// version gate rejects it.
+static constexpr uint32_t SNAPSHOT_VERSION{183};
 public:
 using vm_offset_t = vm_size_t;
 static constexpr vm_offset_t nulloffset{0};
