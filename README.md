@@ -601,7 +601,7 @@ output sinks, plus an internals cleanup sweep -- on top of 0.10.x's `override`
 operator and DWARF host introspection.  Remaining before 1.0: an API-stability
 soak.
 
-60 reference documents cover all subsystems, indexed at
+61 reference documents cover all subsystems, indexed at
 [docs/index.md](docs/index.md).  See
 [docs/vm-internals.md](docs/vm-internals.md) and
 [docs/gvm-heap-gc.md](docs/gvm-heap-gc.md) for the VM architecture,

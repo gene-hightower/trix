@@ -2764,6 +2764,10 @@ and restored on thaw.  All registered modules survive the round-trip.
 
 ### 3.19 Formatting
 
+> **Guide:** for the round-trip guarantee, type-safe parsing, and when to use
+> formatted I/O vs `snapshot`/`thaw` or regex, see
+> [`formatted-io.md`](formatted-io.md).
+
 ```
 =                   any --                   % pop and print with newline
 ==                  any --                   % pop and print (recursive detailed form) with newline

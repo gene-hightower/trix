@@ -388,6 +388,7 @@ Catch with `try`:
 
 ## Where to go next
 
+  * **Round-trip & type-safe-parse capability guide:** [`formatted-io.md`](formatted-io.md).
   * **Per-op stack effects:** [`trix-reference.md`](trix-reference.md) § 3.19.
   * **Error-name catalog + recovery patterns:** [`errors-cheatsheet.md`](errors-cheatsheet.md).
   * **Print engine internals (maintainer-side):** `src/printfmt.inl`.

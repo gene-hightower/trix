@@ -63,6 +63,11 @@ syntactic form.  When in doubt, search this first.
   alignment, width, precision, sign,
   alt form, type letters (including Trix-specific `T` / `O` / `I`
   chrono), full op family with stack effects, common recipes.
+- [**Formatted I/O Guide**](formatted-io.md) --
+  The `print-fmt` / `scan-fmt` inverse pair: the round-trip guarantee
+  (which `{:O}` / radix / suffix forms reparse, and where it stops),
+  type-safe parsing, and when to reach for formatted I/O vs
+  snapshot/thaw or regex.
 - [**Type Cheat Sheet**](types-cheatsheet.md) -- all 30 user-visible
   types, the empirically-verified promotion lattice for `$[ ... ]`
   infix (signed/unsigned/precision rules with edge cases), strict-
