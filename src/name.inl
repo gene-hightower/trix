@@ -331,7 +331,8 @@ public:
     // intern time.
     [[nodiscard]] static vm_offset_t add(Trix *trx, std::string_view sv) {
         const hash_t hash = wyhash32_sv(sv);
-        vm_offset_t *chain = &trx->m_name_buckets[fastmod_u32(hash, trx->m_name_bucket_magic, trx->m_name_bucket_count)];
+        const auto bucket = fastmod_u32(hash, trx->m_name_bucket_magic, trx->m_name_bucket_count);
+        vm_offset_t *chain = &trx->m_name_buckets[bucket];
         while (true) {
             const vm_offset_t offset = *chain;
             if (offset == nulloffset) {
@@ -348,9 +349,11 @@ public:
                 *chain = name_offset;
                 if (trx->is_global(name_offset)) {
                     // A global Name block is GC-managed and rooted only by the
-                    // name-table walk; flag that the walk must run this session
-                    // (see m_has_global_names + gc.inl::walk_all_roots).
+                    // name-table walk; flag that the walk must run AND mark this
+                    // bucket global-bearing so the walk visits it (see
+                    // m_has_global_names + gc.inl::walk_all_roots / the mask).
                     trx->m_has_global_names = true;
+                    trx->name_global_mask_set(static_cast<name_bucket_count_t>(bucket));
                 }
                 return name_offset;
             } else {

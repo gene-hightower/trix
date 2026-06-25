@@ -142,14 +142,26 @@ uint64_t m_name_bucket_magic{0};  // Lemire fastmod magic for m_name_bucket_coun
 // True once any Name has been interned in GLOBAL VM (a `set-global` window, the
 // `$/foo` / `$\foo` prefixes, or a `${...}` block).  Global Name blocks are
 // GC-managed and kept alive ONLY by the name-table root walk (gc.inl
-// walk_all_roots section 3/3b): the bucket chain references them but the sweep
-// never rewrites buckets, so an unmarked global Name would be freed under a live
-// bucket pointer.  When this is false, every interned Name is local-VM -- the
-// global sweep never touches it and mark_global_offset skips it -- so the entire
-// name-table walk is a no-op and gets skipped.  Monotonic at runtime (global
-// names are never unlinked; see Name::restore's !is_global guard); set
-// conservatively on snapshot thaw when the global region is non-empty.
+// walk_all_roots section 3): the bucket chain references them but the sweep never
+// rewrites buckets, so an unmarked global Name would be freed under a live bucket
+// pointer.  When this is false, every interned Name is local-VM -- the global
+// sweep never touches it and mark_global_offset skips it -- so the entire
+// name-table walk is skipped.  Fast O(1) gate before the m_name_global_mask scan.
+// Monotonic at runtime (global names are never unlinked; see Name::restore's
+// !is_global guard); derived from the restored mask on thaw (name_global_mask_any_set).
 bool m_has_global_names{false};
+
+// Per-bucket "this bucket's chain holds a GLOBAL Name" mask -- one bit per name
+// bucket (bit b lives in word b>>6 at position b&63).  When m_has_global_names
+// is true, walk_all_roots marks ONLY the flagged buckets instead of scanning
+// the whole ~2053-bucket / ~1300-name table for the few global ones.  Offset of
+// a local-VM uint64[name_global_mask_words()] block (derive the pointer with
+// offset_to_ptr, like m_gc_scratch_offset).  Pre-allocated at init parallel to
+// m_name_buckets (never lazily -- Name::add can run mid-literal-stream, where a
+// fresh alloc would corrupt the in-progress block); its offset is saved in the
+// snapshot header and the block rides in the serialized VM blob, so it survives
+// thaw verbatim.  m_has_global_names == name_global_mask_any_set().
+vm_offset_t m_name_global_mask{nulloffset};
 
 // Stream
 stream_id_t m_next_sid{0};

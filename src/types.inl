@@ -1055,7 +1055,12 @@ static constexpr std::string_view PRERELEASE{"-dev"};
 // persist their ordinal in the heap (and thus in snapshots), so a pre-v181 image's
 // operators would resolve to the wrong functions under a v181 build -- the version
 // gate rejects the mismatch.
-static constexpr uint32_t SNAPSHOT_VERSION{181};
+// v182 adds name_global_mask_offset (vm_offset_t) to SnapShotHeader: the offset of
+// the per-bucket "holds a global Name" GC-walk mask, pre-allocated in local VM
+// parallel to the name buckets.  The mask block itself rides in the serialized VM
+// blob; only its offset needs the header slot.  A pre-v182 image lacks the field,
+// so the version gate rejects the mismatch.
+static constexpr uint32_t SNAPSHOT_VERSION{182};
 public:
 using vm_offset_t = vm_size_t;
 static constexpr vm_offset_t nulloffset{0};

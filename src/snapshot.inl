@@ -132,6 +132,7 @@ struct SnapShotHeader {
     vm_offset_t gvm_fastbins[GvmFastBinCount];  // per-size LIFO fastbin head pointers (32/40/48/56-byte blocks);
                                                 // each nulloffset when empty
     vm_offset_t gc_scratch_offset;              // lazy GC scratch block (ChunkKind::GcScratch); nulloffset when no user blocks live
+    vm_offset_t name_global_mask_offset;        // per-bucket "holds a global Name" GC-walk mask (local VM); pre-allocated at init
     uint32_t gvm_user_block_count;              // count of LIVE user (non-GcScratch) blocks; gates scratch lifecycle
     uint32_t gvm_free_block_count;              // count of blocks currently on the global VM free list (main + fastbins combined)
 
@@ -320,11 +321,12 @@ struct SnapShotHeader {
     crc32_t checksum;
 };
 static_assert(std::is_trivially_copyable_v<SnapShotHeader>);
-static_assert(sizeof(SnapShotHeader) == 592);              // guard against silent layout changes (v171 added gc_roots_base_offset;
+static_assert(sizeof(SnapShotHeader) == 600);              // guard against silent layout changes (v171 added gc_roots_base_offset;
                                                            // lazy GC scratch added gc_scratch_offset + gvm_user_block_count;
                                                            // live free-block counter consumed existing pad in v168;
-                                                           // v174 added operator_table_signature + operator_count)
-static_assert(offsetof(SnapShotHeader, checksum) == 584);  // checksum must be the last field
+                                                           // v174 added operator_table_signature + operator_count;
+                                                           // v182 added name_global_mask_offset)
+static_assert(offsetof(SnapShotHeader, checksum) == 592);  // checksum must be the last field
 
 //===--- CRC-32 /ISO-HDLC (IEEE 802.3) reflected polynomial Checksum ---===//
 constexpr static std::array<crc32_t, 256> crc32_table = []() {

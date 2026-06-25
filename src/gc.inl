@@ -348,6 +348,59 @@ vm_size_t gc_count_live_blocks() {
 }
 
 //
+// Name-table global-bucket mask helpers.  The mask carries one bit per name
+// bucket, set when that bucket's chain holds a Name allocated in GLOBAL VM.
+// walk_all_roots marks only the flagged buckets, skipping the ~1300 local-only
+// system-name buckets.  Pre-allocated at init parallel to m_name_buckets (so
+// Name::add never allocates mid-scan); its offset is saved in the snapshot
+// header and the block rides in the serialized VM blob, so it survives thaw
+// verbatim.  Bit b lives in word (b >> 6) at position (b & 63).
+//
+[[nodiscard]] vm_size_t name_global_mask_words() const {
+    return ((static_cast<vm_size_t>(m_name_bucket_count) + 63) / 64);
+}
+
+// name_global_mask_set(bucket): record that `bucket` now holds a global Name.
+// Called from Name::add when a Name is interned into global VM.
+void name_global_mask_set(name_bucket_count_t bucket) {
+    auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
+    mask[bucket >> 6] |= (uint64_t{1} << (bucket & 63));
+}
+
+// name_global_mask_any_set(): true iff any bucket is flagged -- i.e. at least
+// one global Name exists.  Used at thaw to derive m_has_global_names (the fast
+// gate) from the restored mask.
+[[nodiscard]] bool name_global_mask_any_set() {
+    auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
+    auto words = name_global_mask_words();
+    for (vm_size_t w = 0; w < words; ++w) {
+        if (mask[w] != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// gc_global_mask_covers_all_global_names(): debug oracle for the mask walk.
+// Every live global Name's bucket MUST be flagged, else walk_all_roots would
+// skip the bucket and the sweep would free a still-rooted Name (UAF).  Walks
+// the table once; referenced only from an assert (compiled out in release).
+[[nodiscard]] bool gc_global_mask_covers_all_global_names() {
+    auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
+    for (name_bucket_count_t b = 0; b < m_name_bucket_count; ++b) {
+        for (auto curr = m_name_buckets[b]; curr != nulloffset; curr = offset_to_ptr<Name>(curr)->next()) {
+            if (is_global(curr)) {
+                if ((mask[b >> 6] & (uint64_t{1} << (b & 63))) == 0) {
+                    return false;
+                }
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+//
 // gc_advance_generation(): flip m_gc_current_gen for the next pass.
 // m_gc_current_gen is a 1-bit flip-flop holding {0,1}; XOR-ing it
 // makes every existing block's m_mark_gen point to the "other"
@@ -1319,47 +1372,44 @@ void walk_all_roots() {
         gc_walk_coroutine_context(m_main_context);
     }
 
-    // 3 + 3b. Name table buckets + pre-interned Name offset tables.
+    // 3. Global Name blocks.
     //
-    // Both walks exist SOLELY to mark global Name blocks so the sweep keeps them
-    // alive (a global Name is rooted only here -- the bucket chain references it,
-    // but the sweep never rewrites buckets, so an unmarked global Name would be
-    // freed under a live bucket pointer -> UAF).  When no Name has ever been
-    // interned globally (m_has_global_names false), every entry is local-VM:
-    // mark_global_offset skips it AND the global sweep never touches it, so the
-    // whole walk is a no-op.  Skipping it drops the dominant per-pass root-walk
-    // cost (~1300 boot system names all live in local VM) on every program with
-    // no global names -- the common case.
+    // The name-table walk's only job is to mark global Name blocks so the sweep
+    // keeps them alive (a global Name is rooted only here -- the bucket chain
+    // references it, but the sweep never rewrites buckets, so an unmarked global
+    // Name would be freed under a live bucket pointer -> UAF).  Two fast paths:
     //
-    // Debug oracle: if the flag is false there must be zero live global Name
-    // blocks, else we are about to wrongly skip marking a sweep-eligible Name.
+    //   * No Name was ever interned globally (m_has_global_names false, the
+    //     common case): every entry is local-VM -- mark_global_offset skips it
+    //     AND the global sweep never touches it -- so the whole walk is a no-op.
+    //   * Otherwise: walk ONLY the buckets the per-bucket mask flags as holding a
+    //     global Name, skipping the ~1300 local-only system-name buckets.
+    //
+    // The pre-interned offset-table walk (systemname / typename / errorname /
+    // wellknown) is GONE: every name, including those, is interned via Name::add
+    // into a bucket (init.inl), so the bucket walk already reaches every global
+    // Name; the offset tables only ever held local system names, making that
+    // walk a pure no-op.
+    //
+    // Debug oracles: (a) flag false => zero live global Name blocks; (b) every
+    // live global Name's bucket bit is set, else its bucket would be skipped and
+    // the Name swept under a live bucket pointer.
     assert((m_has_global_names || (gc_count_global_name_blocks() == 0)) &&
-           "m_has_global_names is false but a live global Name block exists -- name-table walk wrongly skipped");
+           "m_has_global_names false but a live global Name block exists -- name walk wrongly skipped");
     if (m_has_global_names) {
-        // 3. Name table buckets.
-        if (m_name_buckets != nullptr) {
-            for (name_bucket_count_t i = 0; i < m_name_bucket_count; ++i) {
-                for (auto curr = m_name_buckets[i]; curr != nulloffset; curr = offset_to_ptr<Name>(curr)->next()) {
+        assert((m_name_global_mask != nulloffset) && "m_has_global_names true but the global-bucket mask is missing");
+        assert(gc_global_mask_covers_all_global_names() &&
+               "a live global Name's bucket is not flagged in the mask -- it would be swept");
+        auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
+        auto words = name_global_mask_words();
+        for (vm_size_t w = 0; w < words; ++w) {
+            auto bits = mask[w];
+            while (bits != 0) {
+                auto bucket = static_cast<name_bucket_count_t>((w * 64) + static_cast<vm_size_t>(std::countr_zero(bits)));
+                for (auto curr = m_name_buckets[bucket]; curr != nulloffset; curr = offset_to_ptr<Name>(curr)->next()) {
                     mark_global_offset(curr);
                 }
-            }
-        }
-        // 3b. Pre-interned Name offset tables (vm_offset_t arrays, null until
-        // built): walk each entry by raw offset via mark_global_offset.
-        struct OffsetTable {
-            const vm_offset_t *base_ptr;
-            size_t count;
-        };
-        for (auto table : {
-                     OffsetTable{m_systemname_offsets,  static_cast<size_t>(SYSTEMNAME_COUNT)},
-                     OffsetTable{  m_typename_offsets, static_cast<size_t>(Object::TypeCount)},
-                     OffsetTable{ m_errorname_offsets,        static_cast<size_t>(ErrorCount)},
-                     OffsetTable{ m_wellknown_offsets,   static_cast<size_t>(WELLKNOWN_COUNT)}
-        }) {
-            if (table.base_ptr != nullptr) {
-                for (size_t i = 0; i < table.count; ++i) {
-                    mark_global_offset(table.base_ptr[i]);
-                }
+                bits &= (bits - 1);
             }
         }
     }

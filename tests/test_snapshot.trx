@@ -208,6 +208,14 @@ sD /z known? not (s:dict-unknown?) rt-ok  clear
 % Names interned via $/foo survive thaw (in both phase-1 in-process
 % and phase-2 cold thaw).  Their global Name structs were serialised
 % with the global region.
+%
+% Force a GC first: the per-bucket global-Name mask (gc.inl walk_all_roots) is
+% restored from the snapshot header, and a GC must keep every table-rooted global
+% Name alive across the sweep.  An unrestored or mis-derived mask would sweep
+% $/sg-name etc. under a live bucket pointer -- the lookups below would then fault
+% under ASan or miss.  So this exercises the mask through the full save/thaw/sweep.
+vm-global-gc pop
+$/sg-name $/sg-name eq (s:global-name-survives-gc) rt-ok  clear
 sg-dict $/sg-key get 100 eq (s:global-dict-key) rt-ok  clear
 sg-arr 0 get 11 eq (s:global-arr-0) rt-ok  clear
 sg-arr 2 get 33 eq (s:global-arr-2) rt-ok  clear

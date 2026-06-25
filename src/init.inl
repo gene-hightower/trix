@@ -455,6 +455,15 @@ void init_and_interpret(Config config) {
                     m_name_buckets[--name_bucket_count] = nulloffset;
                 } while (name_bucket_count > 0);
 
+                // Pre-allocate the per-bucket "holds a global Name" GC-walk mask
+                // (zeroed), in local VM parallel to the bucket array.  NEVER lazily:
+                // Name::add can intern a global name mid-literal-stream (e.g. the
+                // $/foo in [ $/foo ]), where a fresh local alloc would corrupt the
+                // in-progress block.  Its offset rides the snapshot like m_name_buckets.
+                auto [name_mask_ptr, name_mask_off] = vm_alloc_n<uint64_t>(name_global_mask_words());
+                std::fill_n(name_mask_ptr, name_global_mask_words(), uint64_t{0});
+                m_name_global_mask = name_mask_off;
+
                 // initialize the systemname table
                 // Control and placeholder operators are internal -- skip name-table
                 // registration so they are invisible to user-level name lookup.

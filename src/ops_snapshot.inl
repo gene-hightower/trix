@@ -563,6 +563,7 @@ static void snapshot_op(Trix *trx) {
                     h.gvm_fastbins[i] = trx->m_gvm_fastbins[i];
                 }
                 h.gc_scratch_offset = trx->m_gc_scratch_offset;
+                h.name_global_mask_offset = trx->m_name_global_mask;
                 h.gvm_user_block_count = static_cast<uint32_t>(trx->m_gvm_user_block_count);
                 h.gvm_free_block_count = static_cast<uint32_t>(trx->m_gvm_free_block_count);
 
@@ -1099,16 +1100,14 @@ static void restore_from_header(Trix *trx, const SnapShotHeader *h) {
     for (length_t i = 0; i < GvmFastBinCount; ++i) {
         trx->m_gvm_fastbins[i] = h->gvm_fastbins[i];  // fastbin heads survive thaw
     }
-    trx->m_gc_scratch_offset = h->gc_scratch_offset;  // lazy GC scratch survives thaw
+    trx->m_gc_scratch_offset = h->gc_scratch_offset;       // lazy GC scratch survives thaw
+    trx->m_name_global_mask = h->name_global_mask_offset;  // global-bucket mask rides the VM blob; restore its offset
+    // Derive the fast gate from the restored mask -- m_has_global_names iff any
+    // bucket is flagged.  name_global_mask_any_set needs only the mask block (just
+    // restored) and m_name_bucket_count (restored above), so it is valid here.
+    trx->m_has_global_names = trx->name_global_mask_any_set();
     trx->m_gvm_user_block_count = h->gvm_user_block_count;
     trx->m_gvm_free_block_count = h->gvm_free_block_count;
-    // A thawed global region may contain global Name blocks; the snapshot does
-    // not record their presence separately.  Set conservatively: if the region
-    // holds any user block, assume a global Name may be present so the
-    // name-table walk runs (runtime Name::add refines nothing -- it only ever
-    // sets the flag true).  False only when the global region is empty, where no
-    // Name block can exist.  Over-walking after thaw is a perf miss, never a UAF.
-    trx->m_has_global_names = (h->gvm_user_block_count > 0);
     // Local-visited pointer is derived from m_gc_scratch_offset on every GC
     // entry; reset to nullptr here.  Thaw doesn't run GC, so an idle pointer
     // is correct.
