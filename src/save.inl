@@ -1019,8 +1019,17 @@ public:
     // for a local (or non-VM scalar) value, so over-calling at store sites is
     // harmless -- it never corrupts, at worst walks localdict one extra pass.  Call
     // at EVERY site that writes an Object into a local-capable container slot.
+    //
+    // EXCEPTION -- a global Name is NOT flagged.  A global Name block is rooted
+    // unconditionally by the section-3 name-table walk every GC pass (gc.inl
+    // gc_mark_global_names), and a Name is a GC leaf -- its m_binding is not followed,
+    // and the value it names lives in (and is rooted by) its home dict, not the Name.
+    // So a localdict proc that merely REFERENCES a global Name never uniquely roots
+    // any global block; flagging it would force a needless localdict walk every pass
+    // (e.g. zmachine's z-run interned in globaldict, referenced by every local proc).
+    // The matching skip oracle pre-marks names so it does not false-fire.
     static void note_global_into_local(Trix *trx, bool container_is_global, Object val_obj) {
-        if (!container_is_global && val_obj.uses_vm() && trx->is_global(val_obj.storage_offset())) {
+        if (!container_is_global && val_obj.uses_vm() && !val_obj.is_name() && trx->is_global(val_obj.storage_offset())) {
             trx->m_localdict_maybe_global = true;
         }
     }

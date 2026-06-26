@@ -707,6 +707,17 @@ void gc_mark_local_container(Object o, vm_offset_t offset) {
         auto *dict = offset_to_ptr<Dict>(offset);
         if (dict->next_in_visit() == nulloffset) {  // not yet visited (cycle break)
             gc_visit_mark(offset);
+            // localdict is a permanent base dict ON the dict stack, so it is reached
+            // HERE via the section-1 dict-stack walk (walk_object_range(m_dict_base,
+            // m_dict_ptr)) as well as via the section-5 named-dict walk.  Dropping it
+            // from section 5 + gating the isolated pre-pass therefore does NOT skip it
+            // unless this path honors the flag too -- otherwise the walk just relocates
+            // to section 1.  When m_localdict_maybe_global is clear localdict provably
+            // owns no global ref (same proof the pre-pass gate relies on), so skip the
+            // descent and mark it visited so no later root re-walks it this pass.
+            if ((offset == ptr_to_offset(m_localdict)) && !m_localdict_maybe_global) {
+                break;
+            }
             Dict::gc_walk_contents(this, offset);
         }
         break;
@@ -1417,47 +1428,8 @@ void walk_all_roots() {
     }
     gc_profile_tick(GcProfileSection::Coroutines);
 
-    // 3. Global Name blocks.
-    //
-    // The name-table walk's only job is to mark global Name blocks so the sweep
-    // keeps them alive (a global Name is rooted only here -- the bucket chain
-    // references it, but the sweep never rewrites buckets, so an unmarked global
-    // Name would be freed under a live bucket pointer -> UAF).  Two fast paths:
-    //
-    //   * No Name was ever interned globally (m_has_global_names false, the
-    //     common case): every entry is local-VM -- mark_global_offset skips it
-    //     AND the global sweep never touches it -- so the whole walk is a no-op.
-    //   * Otherwise: walk ONLY the buckets the per-bucket mask flags as holding a
-    //     global Name, skipping the ~1300 local-only system-name buckets.
-    //
-    // The pre-interned offset-table walk (systemname / typename / errorname /
-    // wellknown) is GONE: every name, including those, is interned via Name::add
-    // into a bucket (init.inl), so the bucket walk already reaches every global
-    // Name; the offset tables only ever held local system names, making that
-    // walk a pure no-op.
-    //
-    // Debug oracles: (a) flag false => zero live global Name blocks; (b) every
-    // live global Name's bucket bit is set, else its bucket would be skipped and
-    // the Name swept under a live bucket pointer.
-    assert((m_has_global_names || (gc_count_global_name_blocks() == 0)) &&
-           "m_has_global_names false but a live global Name block exists -- name walk wrongly skipped");
-    if (m_has_global_names) {
-        assert((m_name_global_mask != nulloffset) && "m_has_global_names true but the global-bucket mask is missing");
-        assert(gc_global_mask_covers_all_global_names() &&
-               "a live global Name's bucket is not flagged in the mask -- it would be swept");
-        auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
-        auto words = name_global_mask_words();
-        for (vm_size_t w = 0; w < words; ++w) {
-            auto bits = mask[w];
-            while (bits != 0) {
-                auto bucket = static_cast<name_bucket_count_t>((w * 64) + static_cast<vm_size_t>(std::countr_zero(bits)));
-                for (auto curr = m_name_buckets[bucket]; curr != nulloffset; curr = offset_to_ptr<Name>(curr)->next()) {
-                    mark_global_offset(curr);
-                }
-                bits &= (bits - 1);
-            }
-        }
-    }
+    // 3. Global Name blocks -- rooted ONLY by this walk (see gc_mark_global_names).
+    gc_mark_global_names();
     gc_profile_tick(GcProfileSection::Names);
 
     // 4. Object arrays: the WellKnownName cache (fixed member array -- base is
@@ -1674,16 +1646,59 @@ vm_size_t vm_global_gc() {
     }
 }
 
+// gc_mark_global_names(): mark every live global Name block -- the section-3 root
+// work.  A global Name's only job to root is here: the bucket chain references it,
+// but the sweep never rewrites buckets, so an unmarked global Name would be freed
+// under a live bucket pointer (UAF).  Two fast paths: no Name ever interned globally
+// (m_has_global_names false -- the whole walk is a no-op, and the sweep never touches
+// a local-VM Name either), else walk ONLY the buckets the per-bucket mask flags as
+// holding a global Name (skipping the ~1300 local-only system-name buckets).  The
+// pre-interned offset tables (systemname / typename / errorname / wellknown) need no
+// separate walk: every name is interned via Name::add into a bucket (init.inl), so
+// the bucket walk reaches them all -- and those tables only ever held local names.
+//
+// Idempotent (mark_global_offset short-circuits an already-marked block), so the
+// localdict-skip oracle pre-marks names through this same call before checking that
+// localdict reaches no OTHER (non-name) global -- a localdict proc may REFERENCE a
+// global Name but never uniquely roots it, since this walk marks it unconditionally.
+//
+// Debug oracles: (a) flag false => zero live global Name blocks; (b) every live
+// global Name's bucket bit is set, else its bucket would be skipped and the Name
+// swept under a live bucket pointer.
+void gc_mark_global_names() {
+    assert((m_has_global_names || (gc_count_global_name_blocks() == 0)) &&
+           "m_has_global_names false but a live global Name block exists -- name walk wrongly skipped");
+    if (m_has_global_names) {
+        assert((m_name_global_mask != nulloffset) && "m_has_global_names true but the global-bucket mask is missing");
+        assert(gc_global_mask_covers_all_global_names() &&
+               "a live global Name's bucket is not flagged in the mask -- it would be swept");
+        auto *mask = offset_to_ptr<uint64_t>(m_name_global_mask);
+        auto words = name_global_mask_words();
+        for (vm_size_t w = 0; w < words; ++w) {
+            auto bits = mask[w];
+            while (bits != 0) {
+                auto bucket = static_cast<name_bucket_count_t>((w * 64) + static_cast<vm_size_t>(std::countr_zero(bits)));
+                for (auto curr = m_name_buckets[bucket]; curr != nulloffset; curr = offset_to_ptr<Name>(curr)->next()) {
+                    mark_global_offset(curr);
+                }
+                bits &= (bits - 1);
+            }
+        }
+    }
+}
+
 // Mark localdict's transitive closure in ISOLATION and report how many global
 // blocks it reached.  Called as a Phase-B pre-pass BEFORE walk_all_roots, so when
-// it runs nothing else is marked yet: the delta in m_gc_marked_count is EXACTLY the
-// number of live global blocks reachable from localdict -- a root-independent
-// answer (a global also reachable from, say, the operand stack is still counted
-// here, which is the conservative-correct behaviour).  The marks it sets are real
-// and persist for the rest of the pass; walk_all_roots re-encountering localdict's
-// objects short-circuits on the already-marked / visit-set checks.  The returned
-// count drives only the TRIX_DEBUGGER skip oracle (it must be 0 when the flag was
-// clear); the production clear is the monotonic m_gvm_user_block_count==0 rule.
+// it runs (almost) nothing else is marked yet: the delta in m_gc_marked_count is
+// the number of live global blocks reachable from localdict that were not already
+// marked.  The marks it sets are real and persist for the rest of the pass;
+// walk_all_roots re-encountering localdict's objects short-circuits on the already-
+// marked / visit-set checks.  The returned count drives only the TRIX_DEBUGGER skip
+// oracle: the oracle pre-marks the section-3-rooted global Names via
+// gc_mark_global_names first, so this count then excludes them and must be 0 (a
+// localdict reference to a global Name is NOT a unique root -- the name walk keeps
+// it alive regardless).  The production clear is the monotonic
+// m_gvm_user_block_count==0 rule.
 [[nodiscard]] vm_size_t gc_mark_localdict_isolated() {
     auto before = m_gc_marked_count;
     Dict::gc_walk_contents(this, ptr_to_offset(m_localdict));
@@ -1808,9 +1823,16 @@ vm_size_t vm_global_gc_impl() {
             }
 #ifdef TRIX_DEBUGGER
             else {
-                assert((gc_mark_localdict_isolated() == 0) &&
-                       "localdict skipped by GC but reaches a live global block -- "
-                       "note_global_into_local write-barrier gap");
+                // Oracle: localdict was skipped.  Pre-mark the section-3-rooted global
+                // Names first (a localdict proc may REFERENCE a global Name -- which the
+                // barrier deliberately does NOT flag -- but never uniquely roots it), so
+                // they are already-marked and excluded from the isolated count; then
+                // assert localdict reaches no OTHER (non-name) live global block.  The
+                // whole expression rides inside assert(), so -DNDEBUG strips the extra
+                // mark + walk: zero cost in the optimized/measurement binary.
+                assert((gc_mark_global_names(), gc_mark_localdict_isolated() == 0) &&
+                       "localdict skipped by GC but reaches a non-name live global block "
+                       "-- note_global_into_local write-barrier gap");
             }
 #endif
             gc_profile_tick(GcProfileSection::LocalDictScan);
