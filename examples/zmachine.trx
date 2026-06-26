@@ -4224,6 +4224,16 @@ dispatch-ext 16#0D {|instr|#+2
 % games (~1k opcodes/turn) only sweep every ~16 turns.
 /z-gc-interval 16384 def
 
+% z-run is the ONE interpreter proc that owns global VM -- its ${...} body and the
+% nested while-procs are global Packed blocks (the wrap that routes per-instruction
+% allocation into global VM, above).  Defining it under set-global puts its NAME and
+% VALUE in globaldict instead of localdict, which leaves localdict (the other ~312
+% pure-local procs) provably free of any global reference.  The global mark-sweep then
+% SKIPS localdict entirely rather than decoding all ~312 proc bodies every pass -- a
+% ~240x cut to the per-pass GC cost (~392us -> ~1.6us at this proc count).  This is the
+% "keep localdict GC-cheap" best practice: a proc that allocates into global VM belongs
+% in globaldict.  See docs/gvm-heap-gc.md and docs/local-global-vm.md.
+true set-global
 /z-run {
     ${
         { z-quit-flag not  z-pc story-bytes-len lt and } {
@@ -4232,6 +4242,7 @@ dispatch-ext 16#0D {|instr|#+2
         } while
     }
 }#e def
+false set-global
 
 % ----- §7 self-test
 %
