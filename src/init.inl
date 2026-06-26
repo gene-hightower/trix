@@ -466,6 +466,14 @@ void init_and_interpret(Config config) {
                 std::fill_n(name_mask_ptr, name_global_mask_words(), uint64_t{0});
                 m_name_global_mask = name_mask_off;
 
+                // Pre-allocate the value_reaches_global path-stack (VrgFrame[VRG_MAX_DEPTH])
+                // in local VM.  Fixed-size scratch for the Phase-5 store-time deep scan; its
+                // contents are transient (rewritten per scan) but the block rides the VM blob,
+                // so its offset rides the snapshot (SnapShotHeader::vrg_workspace_offset).
+                auto [vrg_ws_ptr, vrg_ws_off] = vm_alloc_n<VrgFrame>(VRG_MAX_DEPTH);
+                static_cast<void>(vrg_ws_ptr);
+                m_vrg_workspace_offset = vrg_ws_off;
+
                 // initialize the systemname table
                 // Control and placeholder operators are internal -- skip name-table
                 // registration so they are invisible to user-level name lookup.

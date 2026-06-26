@@ -1029,7 +1029,20 @@ public:
     // (e.g. zmachine's z-run interned in globaldict, referenced by every local proc).
     // The matching skip oracle pre-marks names so it does not false-fire.
     static void note_global_into_local(Trix *trx, bool container_is_global, Object val_obj) {
-        if (!container_is_global && val_obj.uses_vm() && !val_obj.is_name() && trx->is_global(val_obj.storage_offset())) {
+        if (container_is_global || !val_obj.uses_vm()) {
+            return;
+        }
+        // Direct: the stored value IS a global (non-name) block.
+        if (!val_obj.is_name() && trx->is_global(val_obj.storage_offset())) {
+            trx->m_localdict_maybe_global = true;
+            return;
+        }
+        // Buried (Phase 5): a stored LOCAL composite may hold a global below its local
+        // top-level offset.  The shallow check above misses it, so deep-scan -- but only
+        // when a global exists to bury (m_gvm_user_block_count > 0) and the flag is not
+        // already set (the scan can only set it, never clear it; the GC's precise clear
+        // owns clearing).  value_reaches_global short-circuits on the first buried global.
+        if (!trx->m_localdict_maybe_global && (trx->m_gvm_user_block_count > 0) && trx->value_reaches_global(val_obj)) {
             trx->m_localdict_maybe_global = true;
         }
     }

@@ -874,6 +874,240 @@ void gc_mark_local_container(Object o, vm_offset_t offset) {
     }
 }
 
+// value_reaches_global(root): does any block reachable from root reach a live GLOBAL
+// non-name block?  The Phase-5 store-time deep scan that makes the PRECISE clear sound:
+// the shallow note_global_into_local barrier inspects only a stored value's TOP-LEVEL
+// offset, so a global BURIED inside a LOCAL composite (a local array/dict/record whose
+// own header is local but whose elements reference global VM) slips past it -- and could
+// then enter localdict's closure via a def/store AFTER a GC cleared the flag, leaving a
+// live global rooted solely through a now-skipped localdict (UAF).  Scanning the
+// composite at store time re-arms the flag, closing that hole.
+//
+// ITERATIVE over an explicit path-stack pre-allocated in LOCAL VM at init
+// (m_vrg_workspace_offset -> VrgFrame[VRG_MAX_DEPTH]) -- NO recursion, NO C++ heap / STL
+// container (house rule), in the spirit of the GC's own mark work-stack rather than a
+// deep C recursion.  The path-stack holds one resume-frame per nesting LEVEL (not per
+// child), so it is bounded by DEPTH, never breadth.  Two scalar bounds keep it
+// terminating and cheap on pathological graphs: the depth cap (a frame push past
+// VRG_MAX_DEPTH) and a visit BUDGET (total children processed) -- hitting either returns
+// a CONSERVATIVE hit.  Over-reporting is SOUND and self-correcting (the next GC's
+// isolated scan finds no real global and the precise clear re-clears, costing one extra
+// localdict walk); UNDER-reporting would be a UAF, so when in doubt report true.  Global
+// Names are NOT hits (section-3-rooted leaves -- the barrier/oracle exception);
+// Cell/Continuation report a conservative hit.  Read-only: sets no marks, mutates no GC
+// state.  Caller gates on m_gvm_user_block_count > 0 (nothing to bury otherwise).
+static constexpr int VRG_MAX_DEPTH = 256;         // path-stack depth (== workspace frames)
+static constexpr int VRG_VISIT_BUDGET = 1 << 16;  // total children processed (cycle / shared-DAG bound)
+
+// One resume-frame per composite being iterated (16 bytes; the workspace is
+// VRG_MAX_DEPTH of these).  Fields double up by container kind:
+//   array-likes : index = next element idx, count = element count
+//   Packed      : index = next element idx, count = element count, cursor = byte-cursor
+//   Dict / Set  : index = next bucket idx,  cursor = current chain-entry offset,
+//                 half  = 0 emit key next / 1 emit value next
+struct VrgFrame {
+    vm_offset_t container;  // composite block offset
+    vm_offset_t cursor;     // Packed byte-cursor offset / Dict chain-entry offset
+    uint32_t index;         // array-like element index OR Dict bucket index
+    uint16_t count;         // array-like child count (length_t <= 65535)
+    uint8_t kind;           // Object::Type of the container
+    uint8_t half;           // Dict: 0 emit key next, 1 emit value next
+};
+static_assert(sizeof(VrgFrame) == 16);
+
+enum class VrgClass : uint8_t { Skip, Hit, Descend };
+
+// Classify one reached Object: a leaf / uninteresting ref (Skip), a live global non-name
+// block or conservative carrier (Hit), or a LOCAL composite to descend (Descend, writing
+// its block offset to *out_offset).  Mirrors gc_mark_local_container's child set; the
+// local switch has NO default so -Wswitch-enum + -Werror force every type to be classified.
+[[nodiscard]] VrgClass vrg_classify(Object o, vm_offset_t *out_offset) {
+    if (!o.uses_vm() || o.is_eqref() || (o.m_offset == nulloffset)) {
+        return VrgClass::Skip;  // immediate / eqref / null -- no VM block
+    }
+    auto offset = o.m_offset;
+    auto vm_global_off = static_cast<vm_offset_t>(m_vm_global - m_vm_base);
+    auto vm_limit_off = static_cast<vm_offset_t>(m_vm_limit - m_vm_base);
+    if (offset >= (vm_global_off + GvmHeaderSize)) {
+        // GLOBAL region (or out-of-bounds slack).  Resolve advanceable types exactly as
+        // gc_mark_object does before judging.
+        if (offset >= vm_limit_off) {
+            return VrgClass::Skip;  // out-of-range slack noise
+        }
+        if (o.offset_can_advance()) {
+            if (gvm_find_owning_payload(offset, expected_chunk_kind_for(o.type())) == nulloffset) {
+                return VrgClass::Skip;  // unresolved -- not a real block
+            }
+        } else if ((offset & (GvmBlockAlignment - 1)) != 0) {
+            return VrgClass::Skip;  // misaligned garbage
+        }
+        return (o.is_name() ? VrgClass::Skip : VrgClass::Hit);  // global Name = section-3 leaf
+    }
+    // LOCAL block.
+    switch (o.type()) {
+    case Object::Type::Array:
+    case Object::Type::Packed:
+    case Object::Type::Record:
+    case Object::Type::Tagged:
+    case Object::Type::Curry:
+    case Object::Type::Thunk:
+        *out_offset = offset;
+        return VrgClass::Descend;
+    case Object::Type::Dict:
+    case Object::Type::Set:
+        // An immutable readonly-sealed dict provably holds no global ref -- skip it.
+        if (offset_to_ptr<Dict>(offset)->has_no_global_refs()) {
+            return VrgClass::Skip;
+        }
+        *out_offset = offset;
+        return VrgClass::Descend;
+    case Object::Type::Cell:
+    case Object::Type::Continuation:
+        return VrgClass::Hit;  // rare buried-global carriers; conservative (self-correcting)
+    // Leaves -- scalars, byte/string payloads, interned names, operators, marks, and the
+    // VM handles the GC reaches through OTHER roots (Stream / Coroutine / PipeBuffer /
+    // OpaqueHandle via section-2 / handle tables, never a local container).
+    case Object::Type::Null:
+    case Object::Type::Byte:
+    case Object::Type::Integer:
+    case Object::Type::UInteger:
+    case Object::Type::Long:
+    case Object::Type::ULong:
+    case Object::Type::Address:
+    case Object::Type::Real:
+    case Object::Type::Double:
+    case Object::Type::Boolean:
+    case Object::Type::Operator:
+    case Object::Type::Mark:
+    case Object::Type::Name:
+    case Object::Type::String:
+    case Object::Type::Stream:
+    case Object::Type::SourceLoc:
+    case Object::Type::Coroutine:
+    case Object::Type::PipeBuffer:
+    case Object::Type::Int128:
+    case Object::Type::UInt128:
+    case Object::Type::OpaqueHandle:
+    case Object::Type::SlotRef:
+        return VrgClass::Skip;
+    }
+    return VrgClass::Skip;  // unreachable: the no-default switch is exhaustive
+}
+
+// Initialise frame *f to iterate the Descend'd composite o (block at offset).
+void vrg_init_frame(VrgFrame *f, Object o, vm_offset_t offset) {
+    f->container = offset;
+    f->cursor = nulloffset;
+    f->index = 0;
+    f->count = 0;
+    f->half = 0;
+    f->kind = static_cast<uint8_t>(+o.type());
+    switch (+o.type()) {  // switch on the underlying int (not the enum) -- only composites occur
+    case +Object::Type::Array:
+        f->count = static_cast<uint16_t>(o.arrays_length());
+        break;
+    case +Object::Type::Packed:
+        f->count = static_cast<uint16_t>(o.arrays_length());
+        f->cursor = offset;  // packed byte-cursor starts at the payload
+        break;
+    case +Object::Type::Record:
+        f->count = static_cast<uint16_t>(o.object_length());
+        break;
+    case +Object::Type::Tagged:
+    case +Object::Type::Curry:
+        f->count = 2;
+        break;
+    case +Object::Type::Thunk:
+        f->count = 3;
+        break;
+    default:
+        break;  // Dict / Set: count unused (the step walks buckets via m_bucket_count)
+    }
+}
+
+// Fetch the next child of frame *f, advancing its cursor.  Returns true with *out_child
+// set; false when the frame is exhausted.  *out_global is set true (with a false return)
+// when a Dict/Set step reaches a standalone GLOBAL entry block -- the caller treats that
+// as an immediate hit.
+[[nodiscard]] bool vrg_next_child(VrgFrame *f, Object *out_child, bool *out_global) {
+    *out_global = false;
+    auto kind = static_cast<Object::Type>(f->kind);
+    switch (+kind) {  // switch on the underlying int (not the enum) -- only composites occur
+    case +Object::Type::Array:
+    case +Object::Type::Record:
+    case +Object::Type::Tagged:
+    case +Object::Type::Curry:
+    case +Object::Type::Thunk: {
+        if (f->index >= f->count) {
+            return false;
+        }
+        auto base = (kind == Object::Type::Record) ? static_cast<vm_offset_t>(f->container + offsetof(RecordInstance, m_fields))
+                                                   : f->container;
+        auto *slots = offset_to_ptr<Object>(base);
+        *out_child = slots[f->index];
+        ++f->index;
+        return true;
+    }
+    case +Object::Type::Packed: {
+        if (f->index >= f->count) {
+            return false;
+        }
+        auto *cursor = offset_to_ptr<const packed_data_t>(f->cursor);
+        auto [next, obj] = Object::extract_next_packed(this, cursor);
+        *out_child = obj;
+        f->cursor = ptr_to_offset(next);
+        ++f->index;
+        return true;
+    }
+    case +Object::Type::Dict:
+    case +Object::Type::Set:
+        return offset_to_ptr<Dict>(f->container)->vrg_dict_step(this, &f->index, &f->cursor, &f->half, out_child, out_global);
+    default:
+        return false;  // unreachable: only composites get frames
+    }
+}
+
+[[nodiscard]] bool value_reaches_global(Object root) {
+    vm_offset_t offset = nulloffset;
+    auto root_class = vrg_classify(root, &offset);
+    if (root_class == VrgClass::Hit) {
+        return true;
+    }
+    if (root_class != VrgClass::Descend) {
+        return false;
+    }
+    auto *stack = offset_to_ptr<VrgFrame>(m_vrg_workspace_offset);
+    int sp = 0;
+    int budget = VRG_VISIT_BUDGET;
+    vrg_init_frame(&stack[sp++], root, offset);
+    while (sp > 0) {
+        Object child;
+        bool global_entry = false;
+        if (!vrg_next_child(&stack[sp - 1], &child, &global_entry)) {
+            if (global_entry) {
+                return true;  // Dict/Set reached a standalone global entry block
+            }
+            --sp;  // frame exhausted
+            continue;
+        }
+        if (--budget <= 0) {
+            return true;  // total-work bound -> conservative
+        }
+        vm_offset_t child_offset = nulloffset;
+        auto cls = vrg_classify(child, &child_offset);
+        if (cls == VrgClass::Hit) {
+            return true;
+        }
+        if (cls == VrgClass::Descend) {
+            if (sp >= VRG_MAX_DEPTH) {
+                return true;  // workspace full -> conservative
+            }
+            vrg_init_frame(&stack[sp++], child, child_offset);
+        }
+    }
+    return false;
+}
+
 void gc_mark_object(Object o) {
     if (o.uses_vm() && !o.is_eqref() && (o.m_offset != nulloffset)) {
         auto offset = o.m_offset;
@@ -1794,32 +2028,41 @@ vm_size_t vm_global_gc_impl() {
             assert(m_gc_visit_head == nulloffset);
             m_gc_marked_count = 0;
 
-            // Phase 3 localdict pre-pass.  localdict is NOT in the section-5 walk; it
-            // is marked HERE, in isolation, and ONLY when it may transitively own
-            // global VM (m_localdict_maybe_global).  The flag is set by the
-            // note_global_into_local write-barrier the moment a global value FIRST
-            // enters a barrier-relevant local container, and is MONOTONIC while any
-            // global user block lives -- cleared only when m_gvm_user_block_count
-            // reaches 0.  That monotonicity is what makes the skip sound: a global
-            // already trips the flag at its first local store, and the flag cannot go
-            // clear again while that global (or any other) is alive, so a value moved
-            // INTO localdict's closure later -- even buried inside a local composite
-            // whose own header is local -- can never slip behind a cleared flag.
-            // (A per-pass "scan localdict, clear if it reached no global" would be
-            // unsound: it could clear while a global-bearing local container is still
-            // transient outside localdict, then miss it entering localdict.)
+            // Phase 3/5 localdict pre-pass.  localdict is NOT in the section-5 walk; it
+            // is marked HERE, in isolation, and ONLY when it may transitively own global
+            // VM (m_localdict_maybe_global).  The flag is set by the note_global_into_local
+            // write-barrier the moment a global value enters a barrier-relevant local
+            // container -- a DIRECT global value cheaply, a global BURIED inside a stored
+            // local composite via the value_reaches_global deep scan (Phase 5).
+            //
+            // CLEAR is PRECISE (Phase 5): while the flag is set the isolated mark runs
+            // anyway (to keep localdict's reachable globals live), and its name-excluded
+            // count tells us whether localdict STILL owns a global -- if not, clear the
+            // flag so the next pass skips.  This is sound ONLY because the store-time deep
+            // scan re-arms the flag whenever a buried global later enters localdict's
+            // closure; a naive "scan + clear" WITHOUT that deep scan would be unsound (it
+            // could clear while a global-bearing local container is transient OUTSIDE
+            // localdict, then miss it entering localdict).  The m_gvm_user_block_count==0
+            // monotonic clear is kept as a cheap fast path (no globals => nothing to own).
             //
             // When the flag is clear the global sweep skips localdict entirely.  A
-            // TRIX_DEBUGGER build still marks it via the oracle and asserts the skip
-            // was safe (localdict reaches no live global block), turning any
-            // write-barrier gap into a test failure rather than a silent release-build
-            // heap corruption.
+            // TRIX_DEBUGGER build still marks it via the oracle and asserts the skip was
+            // safe (localdict reaches no non-name live global block), turning any
+            // write-barrier / deep-scan gap into a test failure rather than a silent
+            // release-build heap corruption.
             if (m_gvm_user_block_count == 0) {
                 m_localdict_maybe_global = false;  // no global blocks exist -> localdict owns none
             }
             gc_profile_begin();
             if (m_localdict_maybe_global) {
-                static_cast<void>(gc_mark_localdict_isolated());  // keep localdict's reachable globals live
+                // Pre-mark the section-3 global Names so a localdict reference to one (which
+                // the barrier does NOT flag) is excluded from the count, then mark
+                // localdict's closure to keep its reachable globals live.  PRECISE clear: if
+                // that closure reaches no non-name global, localdict is provably clean now.
+                gc_mark_global_names();
+                if (gc_mark_localdict_isolated() == 0) {
+                    m_localdict_maybe_global = false;
+                }
             }
 #ifdef TRIX_DEBUGGER
             else {

@@ -133,8 +133,9 @@ struct SnapShotHeader {
                                                 // each nulloffset when empty
     vm_offset_t gc_scratch_offset;              // lazy GC scratch block (ChunkKind::GcScratch); nulloffset when no user blocks live
     vm_offset_t name_global_mask_offset;        // per-bucket "holds a global Name" GC-walk mask (local VM); pre-allocated at init
-    uint32_t gvm_user_block_count;              // count of LIVE user (non-GcScratch) blocks; gates scratch lifecycle
-    uint32_t gvm_free_block_count;              // count of blocks currently on the global VM free list (main + fastbins combined)
+    vm_offset_t vrg_workspace_offset;  // value_reaches_global path-stack (VrgFrame[VRG_MAX_DEPTH], local VM); pre-allocated at init
+    uint32_t gvm_user_block_count;     // count of LIVE user (non-GcScratch) blocks; gates scratch lifecycle
+    uint32_t gvm_free_block_count;     // count of blocks currently on the global VM free list (main + fastbins combined)
 
     // scalar instance variables (size-descending order to avoid manual padding)
     name_bucket_count_t name_bucket_count;
@@ -155,14 +156,14 @@ struct SnapShotHeader {
     save_level_t max_save_level;
     save_level_t curr_save_level;
     bool sid_wrapped;
-    bool curr_alloc_global;        // m_curr_alloc_global (the set-global / current-global flag)
-    bool localdict_maybe_global;   // m_localdict_maybe_global: localdict may transitively own global VM
-                                   // (gates the GC's localdict skip).  Exact value saved/restored, never re-derived.
-    uint8_t gc_current_gen;  // m_gc_current_gen at save time (a 1-bit flip-flop, {0,1}).  Restoring
-                             // this is MANDATORY: m_gc_current_gen must never reset to a default on
-                             // thaw.  Without it the post-thaw GC's first flip would collide with the
-                             // stale m_mark_gen values stamped at save time -- a 1-in-2 false-mark
-                             // (premature collection).  Saving the bit drives that probability to 0.
+    bool curr_alloc_global;       // m_curr_alloc_global (the set-global / current-global flag)
+    bool localdict_maybe_global;  // m_localdict_maybe_global: localdict may transitively own global VM
+                                  // (gates the GC's localdict skip).  Exact value saved/restored, never re-derived.
+    uint8_t gc_current_gen;       // m_gc_current_gen at save time (a 1-bit flip-flop, {0,1}).  Restoring
+                                  // this is MANDATORY: m_gc_current_gen must never reset to a default on
+                                  // thaw.  Without it the post-thaw GC's first flip would collide with the
+                                  // stale m_mark_gen values stamped at save time -- a 1-in-2 false-mark
+                                  // (premature collection).  Saving the bit drives that probability to 0.
     Error last_error;
     Error external_error;
     interrupt_t interrupt;
@@ -324,14 +325,16 @@ struct SnapShotHeader {
     crc32_t checksum;
 };
 static_assert(std::is_trivially_copyable_v<SnapShotHeader>);
-static_assert(sizeof(SnapShotHeader) == 600);  // guard against silent layout changes (v171 added gc_roots_base_offset;
-                                               // lazy GC scratch added gc_scratch_offset + gvm_user_block_count;
-                                               // live free-block counter consumed existing pad in v168;
-                                               // v174 added operator_table_signature + operator_count;
-                                               // v182 added name_global_mask_offset;
-                                               // v183 added globaldict_offset, reusing existing interior pad -- size unchanged;
-                                               // v184 added localdict_maybe_global (bool), reusing interior pad -- size unchanged)
-static_assert(offsetof(SnapShotHeader, checksum) == 592);  // checksum must be the last field
+static_assert(sizeof(SnapShotHeader) ==
+              608);  // guard against silent layout changes (v171 added gc_roots_base_offset;
+                     // lazy GC scratch added gc_scratch_offset + gvm_user_block_count;
+                     // live free-block counter consumed existing pad in v168;
+                     // v174 added operator_table_signature + operator_count;
+                     // v182 added name_global_mask_offset;
+                     // v183 added globaldict_offset, reusing existing interior pad -- size unchanged;
+                     // v184 added localdict_maybe_global (bool), reusing interior pad -- size unchanged;
+                     // v185 added vrg_workspace_offset (vm_offset_t) -- 600 -> 608 under 8-byte alignment)
+static_assert(offsetof(SnapShotHeader, checksum) == 600);  // checksum must be the last field
 
 //===--- CRC-32 /ISO-HDLC (IEEE 802.3) reflected polynomial Checksum ---===//
 constexpr static std::array<crc32_t, 256> crc32_table = []() {

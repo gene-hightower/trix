@@ -565,6 +565,7 @@ static void snapshot_op(Trix *trx) {
                 }
                 h.gc_scratch_offset = trx->m_gc_scratch_offset;
                 h.name_global_mask_offset = trx->m_name_global_mask;
+                h.vrg_workspace_offset = trx->m_vrg_workspace_offset;
                 h.gvm_user_block_count = static_cast<uint32_t>(trx->m_gvm_user_block_count);
                 h.gvm_free_block_count = static_cast<uint32_t>(trx->m_gvm_free_block_count);
 
@@ -1103,8 +1104,9 @@ static void restore_from_header(Trix *trx, const SnapShotHeader *h) {
     for (length_t i = 0; i < GvmFastBinCount; ++i) {
         trx->m_gvm_fastbins[i] = h->gvm_fastbins[i];  // fastbin heads survive thaw
     }
-    trx->m_gc_scratch_offset = h->gc_scratch_offset;       // lazy GC scratch survives thaw
-    trx->m_name_global_mask = h->name_global_mask_offset;  // global-bucket mask rides the VM blob; restore its offset
+    trx->m_gc_scratch_offset = h->gc_scratch_offset;        // lazy GC scratch survives thaw
+    trx->m_name_global_mask = h->name_global_mask_offset;   // global-bucket mask rides the VM blob; restore its offset
+    trx->m_vrg_workspace_offset = h->vrg_workspace_offset;  // value_reaches_global path-stack; rides the VM blob, restore offset
     // Derive the fast gate from the restored mask -- m_has_global_names iff any
     // bucket is flagged.  name_global_mask_any_set needs only the mask block (just
     // restored) and m_name_bucket_count (restored above), so it is valid here.

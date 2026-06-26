@@ -243,9 +243,8 @@ public:
     // be walked every pass and defeat the whole skip.  Gates the
     // Save::note_global_into_local write-barrier at the dict/set store sites.
     [[nodiscard]] bool barrier_relevant_for_localdict(const Trix *trx) const {
-        return !(is_frame() || (this == trx->m_systemdict) || (this == trx->m_protocoldict) ||
-                 (this == trx->m_globaldict) || (this == trx->m_errordict) ||
-                 (this == trx->m_handlersdict) || (this == trx->m_eqdict) || (this == trx->m_eqset));
+        return !(is_frame() || (this == trx->m_systemdict) || (this == trx->m_protocoldict) || (this == trx->m_globaldict) ||
+                 (this == trx->m_errordict) || (this == trx->m_handlersdict) || (this == trx->m_eqdict) || (this == trx->m_eqset));
     }
 
     [[nodiscard]] length_t length() const { return m_length; }
@@ -3028,6 +3027,57 @@ public:
     // bucket traversal is the natural canonical iteration -- mirrors
     // quiet_flush() and the rest of the Dict iteration sites.)
     //
+
+    // One resumable step of the Phase-5 value_reaches_global path-stack over this (LOCAL)
+    // Dict/Set -- entry iteration lives here because DictEntry/SetEntry are private to Dict.
+    // Cursor is carried in the caller's VrgFrame as (*bucket, *entry, *half): *bucket = next
+    // bucket to start from, *entry = current chain entry (nulloffset between buckets), *half
+    // = 0 emit key next / 1 emit value next.  Returns true with *out_child set to the next
+    // key/value to scan; false when exhausted.  *out_global is set true (false return) on a
+    // standalone GLOBAL entry block hung off this local dict (exactly gc_walk_contents'
+    // mark_aux_if_external case) -- the caller treats that as an immediate hit.  Marks
+    // nothing.  Callers reach this only for a non-readonly-sealed dict (vrg_classify skips
+    // a has_no_global_refs dict).
+    [[nodiscard]] bool
+    vrg_dict_step(Trix *trx, uint32_t *bucket, vm_offset_t *entry, uint8_t *half, Object *out_child, bool *out_global) {
+        *out_global = false;
+        auto is_set = is_set_data();
+        while (true) {
+            if (*entry == nulloffset) {
+                // Advance to the next non-empty bucket.
+                while ((*bucket < static_cast<uint32_t>(m_bucket_count)) && (m_buckets[*bucket] == nulloffset)) {
+                    ++(*bucket);
+                }
+                if (*bucket >= static_cast<uint32_t>(m_bucket_count)) {
+                    return false;  // exhausted
+                }
+                *entry = m_buckets[*bucket];
+                ++(*bucket);
+                *half = 0;
+            }
+            if (trx->is_global(*entry)) {
+                *out_global = true;  // standalone global entry block hung off a local dict
+                return false;
+            }
+            if (is_set) {
+                auto *e = trx->offset_to_ptr<SetEntry>(*entry);
+                *out_child = e->m_key;
+                *entry = e->m_next;
+                return true;
+            }
+            auto *e = trx->offset_to_ptr<DictEntry>(*entry);
+            if (*half == 0) {
+                *half = 1;
+                *out_child = e->m_key;
+                return true;
+            }
+            *out_child = e->m_value;
+            *entry = e->m_next;
+            *half = 0;
+            return true;
+        }
+    }
+
     static void gc_walk_contents(Trix *trx, vm_offset_t payload_offset) {
         auto *dict = trx->offset_to_ptr<Dict>(payload_offset);
         // Short-circuit when the dict is flagged as guaranteed-no-global-refs

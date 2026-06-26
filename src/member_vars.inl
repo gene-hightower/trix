@@ -180,14 +180,23 @@ Dict *m_protocoldict{nullptr};
 Dict *m_localdict{nullptr};
 Dict *m_globaldict{nullptr};
 
-// Phase 3 GC-skip flag: true when localdict MAY transitively reference a global-VM
-// block -- a global value/key stored into localdict or into a local container
-// reachable from it, or a def-persist global entry hung off localdict's buckets.
-// Set conservatively by the Save::note_global_into_local write-barrier; cleared by
-// the GC's isolated localdict mark once that closure is proven global-free.  When
-// false the global mark-sweep SKIPS localdict entirely (the headline win).  Rides
-// the snapshot via SnapShotHeader::localdict_maybe_global (exact value, no re-derive).
+// GC-skip flag: true when localdict MAY transitively reference a global-VM block --
+// a global value/key stored into localdict or into a local container reachable from
+// it, or a def-persist global entry hung off localdict's buckets.  Set by the
+// Save::note_global_into_local write-barrier: a direct global value trips it cheaply;
+// a global BURIED inside a stored LOCAL composite trips it via the value_reaches_global
+// deep scan (Phase 5).  Cleared by the GC's isolated localdict mark once that closure
+// is proven global-free (the Phase-5 PRECISE clear -- recovers the skip as soon as
+// localdict is clean, not only when all globals die).  When false the global
+// mark-sweep SKIPS localdict entirely (the headline win).  Rides the snapshot via
+// SnapShotHeader::localdict_maybe_global (exact value, no re-derive).
 bool m_localdict_maybe_global{false};
+// value_reaches_global() workspace: a VrgFrame[VRG_MAX_DEPTH] path-stack pre-allocated
+// in LOCAL VM at init (derive the pointer with offset_to_ptr<VrgFrame>).  The Phase-5
+// store-time deep scan iterates it instead of recursing -- no C++ heap, no recursion,
+// fixed footprint (VRG_MAX_DEPTH * sizeof(VrgFrame)).  Offset rides the snapshot
+// (SnapShotHeader::vrg_workspace_offset); its contents are transient scratch.
+vm_offset_t m_vrg_workspace_offset{nulloffset};
 Dict *m_errordict{nullptr};
 Dict *m_handlersdict{nullptr};
 

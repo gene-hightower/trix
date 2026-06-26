@@ -1084,7 +1084,11 @@ static constexpr std::string_view PRERELEASE{"-dev"};
 // is saved/restored -- never re-derived on thaw -- so a restored image keeps walking
 // or skipping localdict precisely as the saved run did.  A pre-v184 image lacks the
 // field; the version gate rejects the mismatch.
-static constexpr uint32_t SNAPSHOT_VERSION{184};
+// v185 adds vrg_workspace_offset (vm_offset_t) to SnapShotHeader: the offset of the
+// init-time local-VM VrgFrame[VRG_MAX_DEPTH] path-stack the Phase-5 value_reaches_global
+// deep scan iterates over (pre-allocated at init like name_global_mask; its contents are
+// transient scratch, but the block rides the VM blob so its offset must be restored).
+static constexpr uint32_t SNAPSHOT_VERSION{185};
 public:
 using vm_offset_t = vm_size_t;
 static constexpr vm_offset_t nulloffset{0};
