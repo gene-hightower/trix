@@ -49,8 +49,9 @@ semantics live in [`trix-reference.md`](trix-reference.md).
 4. [Region-Aware Operator Results](#4-region-aware-operator-results)
 5. [What This Unlocked: find-all Over Heap Results](#5-what-this-unlocked-find-all-over-heap-results)
 6. [Special Cases](#6-special-cases)
-7. [Garbage Collection Reaches Global Values Inside Local Containers](#7-garbage-collection-reaches-global-values-inside-local-containers)
-8. [Worked Examples](#8-worked-examples)
+7. [The Two User Dictionaries: localdict and globaldict](#7-the-two-user-dictionaries-localdict-and-globaldict)
+8. [Garbage Collection Reaches Global Values Inside Local Containers](#8-garbage-collection-reaches-global-values-inside-local-containers)
+9. [Worked Examples](#9-worked-examples)
 
 ---
 
@@ -108,7 +109,7 @@ for the first time after the `save` -- is allocated in local VM and is
 restore-fragile like a container, so it must be interned global (with
 `${ /k }` or the `$/k` directive) before it goes into a global container.
 In practice this only surfaces for a fresh key name; see
-[§3](#3-the-store-table) and [§8](#8-worked-examples).
+[§3](#3-the-store-table) and [§9](#9-worked-examples).
 
 So the rule you actually learn is one sentence:
 
@@ -154,7 +155,7 @@ A few notes that the table compresses:
   local name above the barrier, is itself a container and must also be
   global. Build the key and value together: `dict ${ /k value } put`,
   or use a value key (an integer), or a global-name directive (`$/k`).
-  See [§8](#8-worked-examples) for the worked version.
+  See [§9](#9-worked-examples) for the worked version.
 - The `-persist` row is **stricter** than ordinary stores: it rejects
   *any* above-barrier operand -- even a plain number -- with
   `/above-barrier`. That is a different contract; see
@@ -340,7 +341,143 @@ alternative.)
 
 ---
 
-## 7. Garbage Collection Reaches Global Values Inside Local Containers
+## 7. The Two User Dictionaries: localdict and globaldict
+
+Sections 1–6 are about *data* -- where a value or container lives, and how it
+survives `restore`. This section applies the same distinction to *definitions*.
+Trix has **two user dictionaries**, and which one a `def` lands in decides
+whether that definition is rolled back by `restore` or outlives it.
+
+### Why two
+
+The dictionary stack carries four permanent base dictionaries. Bottom to top:
+`systemdict` (operators), `protocoldict` (protocol dispatch), **`globaldict`**,
+and **`localdict`** on top. The two *user* dictionaries differ exactly the way
+the two heaps do:
+
+| Aspect               | `localdict`                                 | `globaldict`                    |
+| -------------------- | ------------------------------------------- | ------------------------------- |
+| Backing region       | local VM                                    | entries persist into global VM  |
+| `save` / `restore`   | a definition above a barrier is rolled back | a definition survives `restore` |
+| Reclamation          | with the local VM                           | global mark-sweep GC            |
+| GC cost              | the largest mutable root                    | a root, but small               |
+| Default `def` target | yes                                         | only under `set-global`         |
+
+`localdict` is PostScript's `userdict` renamed; `globaldict` is PostScript's
+`globaldict`. Every plain `def` you have written so far went to `localdict`.
+
+### How `def` chooses — sticky home
+
+`set-global` is the switch. In the default (local) allocation mode a
+genuinely-new `def` lands in `localdict`; while `set-global` is true it lands in
+`globaldict` instead. The same routing governs `override`, `def-persist`, and
+`store`'s create path. (`begin`-pushed dicts and `|locals|` frames are
+unaffected -- a `def` with a non-base user dict on top writes *there*, exactly
+as before; the split applies only at the permanent base.)
+
+```trix
+/here 1 def                                        % localdict (default)
+true set-global  /there 2 def  false set-global    % globaldict
+(here lives in localdict)   localdict  /here  known? assert
+(there lives in globaldict) globaldict /there known? assert
+(both resolve through the dict stack) here there add 3 eq assert
+(ok) =
+```
+
+Routing is by **sticky home**: a name keeps the dictionary it was *first*
+defined in. Re-`def`'ing an existing name updates it *in place* in its original
+dictionary regardless of the current mode, so toggling `set-global` can never
+silently fork a name into a second copy:
+
+```trix
+/x 1 def
+true set-global  /x 9 def  false set-global        % updates the localdict x in place
+(x was updated in place) x 9 eq assert
+(x is still in localdict) localdict /x known? assert
+(no shadow copy appeared in globaldict) globaldict /x known? not assert
+(ok) =
+```
+
+### A name lives in exactly one base dict
+
+Because routing gives every name a sticky home, a name is in `localdict` *or*
+`globaldict`, never both -- and that is what makes a bare lookup unambiguous (it
+walks the stack top-down and finds the single copy). If you *bypass* routing
+with a direct `put` straight into a base dictionary, you can force a name into
+both, and Trix refuses to guess: the next `def` of that name raises
+`/dict-conflict`.
+
+```trix
+localdict  /k 1 put                                % direct puts bypass routing...
+globaldict /k 2 put                                % ...now /k is in BOTH base dicts
+(def of a doubly-bound name is refused) { /k 5 def } try /dict-conflict eq assert
+(undef one copy to disambiguate) localdict /k undef
+(now def resolves to the single remaining copy) /k 5 def  k 5 eq assert
+(ok) =
+```
+
+You will not reach `/dict-conflict` through ordinary `def` / `set-global`; it is
+purely a guard against the hand-rolled `put`-into-both case. (A plain *lookup*
+of a doubly-bound name does not raise -- it resolves to `localdict`, the higher
+of the two on the stack; the error is reserved for a definition, the operation
+that must pick a single home.)
+
+### Persistence: globaldict definitions survive `restore`
+
+This is the whole reason to define into `globaldict`. A `localdict` definition
+made above a save barrier is rolled back; a `globaldict` definition made above
+the same barrier persists:
+
+```trix
+/loc 0 def
+save /sv exch def
+  /loc 11 def                                       % localdict, above the barrier
+  true set-global /glob 22 def false set-global     % globaldict, above the barrier
+sv restore
+(the localdict def was rolled back) loc 0 eq assert
+(the globaldict def survived restore) glob 22 eq assert
+(ok) =
+```
+
+### The value rule still applies to globaldict
+
+Defining *into* `globaldict` is a store into a global container, so the
+value-vs-container rule from [§2](#2-the-user-model-values-vs-containers) holds:
+above a save barrier the value must be global-safe. A scalar is always fine, and
+a container built under `set-global` is itself global -- so the usual
+`true set-global … false set-global` idiom builds and defines in one stroke.
+Only a *restore-fragile local* container forced into a `globaldict` definition
+above a barrier is rejected, with `/above-barrier` -- the same stricter contract
+the persist family uses ([§6](#6-special-cases)):
+
+```trix
+save /sv exch def
+/frag [ 7 7 ]#$$ def                                % a forced-local array
+(a fragile local container cannot be defined into globaldict above a barrier)
+{ true set-global /bad frag def false set-global } try /above-barrier eq assert
+(ok) =
+```
+
+At save level 0 there is no barrier and nothing to roll back, so the same store
+simply succeeds.
+
+### When to reach for globaldict
+
+- A definition that must outlive a `restore` -- configuration, a registry, a
+  cache, a long-lived service object. `globaldict` is the dictionary-level
+  counterpart to building data inside `${...}`.
+- Keeping the global GC cheap. `localdict` is the largest mutable GC root, and
+  the collector **skips it** whenever it holds no global reference
+  ([§8](#8-garbage-collection-reaches-global-values-inside-local-containers)).
+  Routing your persistent definitions into `globaldict` keeps `localdict`
+  skippable.
+
+For everything else -- ordinary helpers, loop bindings, scratch -- plain `def`
+into `localdict` is exactly right. `globaldict` is opt-in.
+
+---
+
+## 8. Garbage Collection Reaches Global Values Inside Local Containers
 
 A global value or container held *inside* a local container is reachable
 by the global GC. During its mark phase the GC descends into local
@@ -374,14 +511,14 @@ definition keeps `localdict` flagged, so it is still walked and the
 global still survives. The practical consequence is a best practice --
 keep your persistent state in `globaldict` (via `set-global`) rather
 than in plain `def`s, and `localdict` stays skippable, which is the
-cheapest GC. See [`gvm-heap-gc.md` § Skipping
-localdict](gvm-heap-gc.md#skipping-localdict) for the mechanism and
-[`from-postscript.md`](from-postscript.md) for the `localdict` /
-`globaldict` split.
+cheapest GC. The `localdict` / `globaldict` split that makes this
+practical is [§7](#7-the-two-user-dictionaries-localdict-and-globaldict)
+above; see [`gvm-heap-gc.md` § Skipping
+localdict](gvm-heap-gc.md#skipping-localdict) for the GC mechanism.
 
 ---
 
-## 8. Worked Examples
+## 9. Worked Examples
 
 These tie the rules together. Each runs cleanly on the current binary.
 
