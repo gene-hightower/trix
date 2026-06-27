@@ -548,7 +548,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
 | `--bench` | -- | Time all eleven algorithms; write no PNG | off |
-| `--metrics` | -- | Print a quality report (degree histogram, loops, twistiness, solution length); square only; no PNG | off |
+| `--metrics` | -- | Print a quality report (degree histogram, loops, solution length) on any grid; twistiness is square-only; no PNG | off |
 | `--quiet` | -- | Suppress stderr progress and phase timings | off |
 
 **VM size.** `--vm-size` is a *Trix interpreter* flag and goes **before** the

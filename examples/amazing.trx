@@ -2409,15 +2409,34 @@
     cnt
 } def
 
+% ----- per-topology "is wall d open?" (read-only, for degree metrics) ------
+%   True when the wall in direction d has been carved.  The mask lives at a
+%   topology-specific slot of the DIRS entry (square/theta/upsilon at index
+%   2, hex/triangle at index 4 after their parity-offset pairs).
+/square-open?   {|g cx cy d -- bool|  g cx cy cell-at        DIRS       d get 2 get  and  0b eq } def
+/hex-open?      {|g cx cy d -- bool|  g cx cy cell-at        HEX-DIRS   d get 4 get  and  0b eq } def
+/theta-open?    {|g cx cy d -- bool|  g cx cy theta-cell-at  THETA-DIRS d get 2 get  and  0b eq } def
+/triangle-open? {|g cx cy d -- bool|  g cx cy cell-at        TRI-DIRS   d get 4 get  and  0b eq } def
+/upsilon-open?  {|g cx cy d -- bool|
+    g cx cy upsilon-cell-walls
+    cx cy upsilon-octagon? { UPSILON-DIRS-OCT d get } { UPSILON-DIRS-SQ d get } if-else  2 get
+    and  0b eq
+} def
+
 % ----- descriptors (vtables) ------------------------------------------------
 %   Hex and triangle store the visited bit in the same 1-byte cell as the
-%   square grid, so they reuse cell-visited?/mark-visited.
+%   square grid, so they reuse cell-visited?/mark-visited.  open?/make-grid/
+%   bfs-solve round out the vtable so the generic generators AND the generic
+%   --metrics report are fully topology-driven.
 
 /square-desc <<
     (neighbors) { square-neighbors }
     (link)      { carve-wall }
     (visited?)  { cell-visited? }
     (mark)      { mark-visited }
+    (open?)     { square-open? }
+    (make-grid) { make-grid }
+    (bfs-solve) { bfs-solve }
 >> def
 
 /hex-desc <<
@@ -2425,6 +2444,9 @@
     (link)      { hex-carve-wall }
     (visited?)  { cell-visited? }
     (mark)      { mark-visited }
+    (open?)     { hex-open? }
+    (make-grid) { hex-make-grid }
+    (bfs-solve) { hex-bfs-solve }
 >> def
 
 /theta-desc <<
@@ -2432,6 +2454,9 @@
     (link)      { theta-carve-wall }
     (visited?)  { theta-cell-visited? }
     (mark)      { theta-mark-visited }
+    (open?)     { theta-open? }
+    (make-grid) { theta-make-grid }
+    (bfs-solve) { theta-bfs-solve }
 >> def
 
 /triangle-desc <<
@@ -2439,6 +2464,9 @@
     (link)      { triangle-carve-wall }
     (visited?)  { cell-visited? }
     (mark)      { mark-visited }
+    (open?)     { triangle-open? }
+    (make-grid) { triangle-make-grid }
+    (bfs-solve) { triangle-bfs-solve }
 >> def
 
 /upsilon-desc <<
@@ -2446,6 +2474,9 @@
     (link)      { upsilon-carve-wall }
     (visited?)  { upsilon-cell-visited? }
     (mark)      { upsilon-mark-visited }
+    (open?)     { upsilon-open? }
+    (make-grid) { upsilon-make-grid }
+    (bfs-solve) { upsilon-bfs-solve }
 >> def
 
 /TD-DESCRIPTORS <<
@@ -5638,7 +5669,7 @@
 /opt-quiet    false       def         % suppress progress + phase-timing output (stderr)
 /opt-self-test  false     def
 /opt-bench      false     def         % run timing harness instead of generating a maze
-/opt-metrics    false     def         % print a read-only quality report (square only)
+/opt-metrics    false     def         % print a read-only quality report (all grids; twistiness on square only)
 
 % (--) print-help -- write usage to stdout and quit the interpreter.
 /print-help {
@@ -5693,7 +5724,8 @@ OPTIONS
 
   Misc:
     --bench             Algo timing harness (no PNG output)
-    --metrics           Quality report: degree histogram, loops, solution (square)
+    --metrics           Quality report: degree histogram, loops, solution
+                        (all grids; twistiness on square only)
     --self-test         Run internal regression suite
     --quiet             Suppress progress + phase-timing on stderr
     --out FILE          Output PNG filename
@@ -5846,7 +5878,13 @@ EXAMPLES
 %  open) and a "turn" otherwise; the turn fraction is the maze's twistiness.
 %  Edges = (sum of degrees)/2; for a connected maze the independent loop
 %  count is edges - cells + 1 (0 for a perfect/tree maze, >0 once braided).
-%  Square grid only -- degree counting needs the 4-bit wall nibble.
+%
+%  The procs below (degree-bucket, -degree-tally, maze-metrics) are the
+%  SQUARE report and include twistiness (the straight/turn split), which is
+%  intrinsically square-shaped.  The topology-generic report (-td-degree-
+%  tally / -td-maze-metrics, defined after maze-metrics) drives every grid
+%  off the descriptor's open?/neighbors and omits twistiness; run-metrics
+%  dispatches square -> the full report, others -> the generic one.
 
 % Degree -> histogram-bucket handlers.  Each runs inside -degree-tally's frame,
 % so it resolves the running counters (and `walls`) dynamically.  Keyed by degree
@@ -5915,18 +5953,84 @@ EXAMPLES
         mark soln sx sy ex ey  print-fmt pop pop
 } def
 
-% (--) run-metrics -- generate a square maze per the CLI options and report.
-/run-metrics {||#+6
-    opt-grid (square) eq not {
-        (--metrics supports the square grid only; got --grid ) print opt-grid print nl
-    } {
-        opt-seed 0u eq { now } { opt-seed } if-else  rand-seed
+% (desc g) -td-degree-tally -- deadends passages junctions edges maxdeg
+%   Topology-generic: a cell's degree = open walls toward its in-bounds
+%   neighbors (descriptor open? + neighbors).  Buckets degree 1/2/3+ and
+%   tracks the max degree (square caps at 4, hex 6, upsilon 8).
+/-td-degree-tally {|desc g -- deadends passages junctions edges maxdeg|#+11
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /scratch 24 array local-def
+    /deadends   0 local-def
+    /passages   0 local-def
+    /junctions  0 local-def
+    /open-total 0 local-def
+    /maxdeg     0 local-def
+    0 1 h 1 sub {|y|#+6
+        0 1 w 1 sub {|x|#+6
+            /cnt g x y scratch nbrs local-def
+            /deg 0 local-def
+            0 1 cnt 1 sub {|k|#+1
+                g x y  scratch 3 k mul 2 add get  opn { /deg deg 1 add store } if
+            } for
+            /open-total open-total deg add store
+            deg maxdeg gt { /maxdeg deg store } if
+            deg 1 eq
+                { /deadends deadends 1 add store }
+                { deg 2 eq
+                    { /passages passages 1 add store }
+                    { deg 3 ge { /junctions junctions 1 add store } { } if-else }
+                    if-else }
+                if-else
+        } for
+    } for
+    deadends passages junctions  open-total 2 div  maxdeg
+} def
+
+% (desc g sx sy ex ey) -td-maze-metrics -- print a report for any topology.
+%   Twistiness is square-only (see maze-metrics) and omitted here; junctions
+%   fold degree 3+ together since non-square cells can exceed degree 4.
+/-td-maze-metrics {|desc g sx sy ex ey|#+16
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /cells w h mul local-def
+    desc g -td-degree-tally
+    [ /deadends /passages /junctions /edges /maxdeg ] bind-locals
+    /loops edges cells sub 1 add local-def
+    /soln  g sx sy ex ey  desc (bfs-solve) get exec  length local-def
+    /dead-pct  deadends 100 mul /real-type cast  cells /real-type cast  div local-def
+    /loop-note loops 0 eq { (   perfect maze) } { () } if-else local-def
+
+    (maze metrics: {0} {1} {2}x{3}  (seed {4})\n)  mark opt-algo opt-grid w h opt-seed  print-fmt pop pop
+    (  cells          : {0}\n)                          mark cells              print-fmt pop pop
+    (  dead-ends      : {0}  ({1:.1f}%)\n)              mark deadends dead-pct  print-fmt pop pop
+    (  passages       : {0}\n)                          mark passages          print-fmt pop pop
+    (  junctions (3+) : {0}  (max degree {1})\n)        mark junctions maxdeg   print-fmt pop pop
+    (  edges          : {0}\n)                          mark edges             print-fmt pop pop
+    (  loops (cycles) : {0}{1}\n)                       mark loops loop-note    print-fmt pop pop
+    (  solution       : {0} cells  ({1},{2} -> {3},{4})\n)
+        mark soln sx sy ex ey  print-fmt pop pop
+} def
+
+% (--) run-metrics -- generate a maze per the CLI options and report.  Square
+%   keeps the full report (incl. twistiness); the other grids run the generic
+%   topology-driven report (no twistiness).
+/run-metrics {||#+8
+    opt-seed 0u eq { now } { opt-seed } if-else  rand-seed
+    /mex opt-end-x 0 lt { opt-w 1 sub } { opt-end-x } if-else local-def
+    /mey opt-end-y 0 lt { opt-h 1 sub } { opt-end-y } if-else local-def
+    opt-grid (square) eq {
         /g opt-w opt-h make-grid local-def
         g opt-algo opt-start-x opt-start-y dispatch-algo
         opt-braid 0.0r gt { g opt-braid braid } if
-        /mex opt-end-x 0 lt { opt-w 1 sub } { opt-end-x } if-else local-def
-        /mey opt-end-y 0 lt { opt-h 1 sub } { opt-end-y } if-else local-def
         g opt-start-x opt-start-y mex mey maze-metrics
+    } {
+        /desc opt-grid td-descriptor-for local-def
+        /g opt-w opt-h  desc (make-grid) get exec  local-def
+        desc g opt-algo opt-start-x opt-start-y dispatch-algo-td
+        desc g opt-start-x opt-start-y mex mey -td-maze-metrics
     } if-else
 } def
 
@@ -5946,6 +6050,20 @@ EXAMPLES
     (metrics: corridor has no junctions)     mju 0 eq  mcr 0 eq  and     expect
     (metrics: corridor edges = 2)            med 2 eq                    expect
     (metrics: corridor is perfect, 0 loops)  med 3 sub 1 add  0 eq       expect
+} def
+
+% ----- generic metrics on a non-square grid ------------------------------
+%   A backtracker hex maze is a spanning tree: edges == cells-1 (0 loops),
+%   it has dead-ends, and no cell exceeds the 6 hex directions.
+/test-td-metrics {||#+6
+    1ul rand-seed
+    /hg 6 6 hex-make-grid local-def
+    hex-desc hg 0 0 g-backtracker
+    hex-desc hg -td-degree-tally
+    [ /tmde /tmpa /tmju /tmed /tmmax ] bind-locals
+    (td-metrics: hex 6x6 is perfect, 0 loops)  tmed 36 sub 1 add  0 eq  expect
+    (td-metrics: hex maze has dead-ends)       tmde 0 gt                 expect
+    (td-metrics: hex degree never exceeds 6)   tmmax 6 le                expect
 } def
 
 command-line-args parse-args
@@ -6026,6 +6144,7 @@ opt-self-test {
     test-recursive-division
     test-td-matrix
     test-metrics
+    test-td-metrics
     test-cmap-endpoints
     test-png-viridis
     test-png-hex-color
