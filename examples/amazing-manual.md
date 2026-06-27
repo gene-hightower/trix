@@ -92,7 +92,7 @@ Before the algorithms, three implementation facts that recur throughout.
 
 ### 2.1 One byte per cell
 
-Each cell is a single byte (Section 5, lines 309-353). The low nibble holds the
+Each cell is a single byte (Section 5). The low nibble holds the
 four walls; the high nibble holds transient flags:
 
 | Bit | Mask   | Meaning                               |
@@ -114,7 +114,7 @@ per cell for the VISITED / IN-SOLUTION flags (see [§4](#4-grid-topologies)).
 
 ### 2.2 The grid container and the 65,535 cap
 
-A grid is a packed 3-array `[width height rows]` (lines 445-456), where `rows` is
+A grid is a packed 3-array `[width height rows]` (`grid-w` / `grid-h` / `grid-cells`), where `rows` is
 an array of byte-strings, one per row. Trix's `length_t` is a `uint16_t`, so a
 single string maxes out at 65,535 bytes -- a flat one-string grid would cap you
 at a ~255×255 maze. Storing one string *per row* sidesteps that: a `--monster`
@@ -122,7 +122,7 @@ at a ~255×255 maze. Storing one string *per row* sidesteps that: a `--monster`
 
 Auxiliary per-cell storage that an algorithm needs (union-find parents, BFS
 queues, frontier lists) faces the same cap, so the file provides a
-**chunked-array** (Section 4B, lines 356-427): a logical array split into chunks
+**chunked-array** (Section 4B): a logical array split into chunks
 of `CHUNK = 32768` elements, indexed by `(i / CHUNK, i mod CHUNK)`. This is what
 lets the spanning-tree algorithms scale past 65,535 cells.
 
@@ -150,7 +150,7 @@ watch for it in the per-algorithm notes.
 All eleven algorithms below run on the **square** grid. (The four non-square grids
 are backtracker-only -- see [§4](#4-grid-topologies).) Select one with
 `--algo NAME`; the default is `backtrack`. Dispatch is a string-keyed table
-(`algo-dispatch` / `dispatch-algo`, lines 5176-5197).
+(`algo-dispatch` / `dispatch-algo`).
 
 Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
 `binary-tree`, `sidewinder`, `division`); the other six begin carving from
@@ -162,7 +162,7 @@ These grow a single tree by walking and backtracking. They tend to produce
 **long, winding corridors with few short dead-ends** -- the "twisty little
 passages" look.
 
-**recursive-backtracker** (`--algo backtrack`, lines 592-675)
+**recursive-backtracker** (`--algo backtrack`)
 The default, and the prettiest general-purpose maze. Depth-first search: from
 the current cell, step to a random unvisited neighbor (carving the wall), and
 when you hit a dead-end, backtrack to the last cell that still has an unvisited
@@ -172,7 +172,7 @@ shuffled permutation of the four directions, so there is no recursion-depth
 limit. *Texture:* long corridors, low branching, every cell on one snaking
 spine. This is also the only algorithm that supports `--weave` ([§6](#6-overlays-solve-braid-weave)).
 
-**hunt-and-kill** (`--algo hunt-kill`, lines 2027-2097)
+**hunt-and-kill** (`--algo hunt-kill`)
 Same walk as the backtracker, but with no stack. When the walk gets stuck, it
 **hunts**: scan the grid row by row for the first unvisited cell that has at
 least one visited neighbor, carve into it, and resume the walk there. *Texture:*
@@ -180,7 +180,7 @@ similar long corridors to the backtracker but with longer "rivers", because the
 hunt restarts deterministically from the top-left rather than backtracking.
 *Cost:* the repeated scans make it slower; the payoff is O(1) extra memory.
 
-**growing-tree** (`--algo growing-tree`, lines 2107-2158)
+**growing-tree** (`--algo growing-tree`)
 A generalization that subsumes two others. Keep an **active set** of cells; each
 step, *pick* one active cell, carve to a random unvisited neighbor (adding it to
 the set), and drop a cell from the set when it has no unvisited neighbors left.
@@ -194,17 +194,16 @@ These think of the maze as a graph and build a spanning tree directly. Two of
 them (Wilson's, Aldous-Broder) are *uniform* -- every possible maze equally
 likely.
 
-**Kruskal's** (`--algo kruskal`, lines 711-775)
+**Kruskal's** (`--algo kruskal`)
 Classic minimum-spanning-tree shape: list every interior wall, shuffle the list,
 and remove each wall **only if** the two cells it separates are not already
-connected. *Implementation:* a **path-compressed union-find** (`-uf-find`, lines
-699-709) tracks connectivity; the wall list is a chunked-array of UIntegers,
+connected. *Implementation:* a **path-compressed union-find** (`-uf-find`) tracks connectivity; the wall list is a chunked-array of UIntegers,
 each wall packed as `(y*w + x)*2 + (east|south)`, shuffled in place with
 Fisher-Yates. All union-find and wall writes go through `chunked-put-persist`
 (journal-cold) because there are millions of them. *Texture:* lots of short
 dead-ends, a "spiky", uniform-looking maze with no global grain.
 
-**Prim's (randomized)** (`--algo prim`, lines 1948-2021)
+**Prim's (randomized)** (`--algo prim`)
 Grow a tree from a seed by repeatedly connecting a random **frontier** cell (a
 not-yet-in cell adjacent to the tree) to a random in-tree neighbor.
 *Implementation:* the frontier is a chunked-array used as a stack with O(1)
@@ -213,7 +212,7 @@ O(1) membership tests so cells are never double-added. This is *random* Prim's
 (uniform edge weights), not weighted. *Texture:* very short dead-ends and a
 strong "radial" branching look around the seed.
 
-**Wilson's** (`--algo wilson`, lines 800-855)
+**Wilson's** (`--algo wilson`)
 A **uniform** spanning tree via loop-erased random walks. Pick a cell not yet in
 the maze, random-walk until you hit the maze, then add the walk's *loop-erased*
 path. *Implementation:* two parallel byte arrays -- `in-maze` and `walk-dir`
@@ -224,7 +223,7 @@ scan cursor finds the next start cell and never backs up. *Texture:* unbiased --
 the fairest maze in the zoo. *Cost:* the early walks wander a long time before
 the maze is big enough to hit; slow to start, fast to finish.
 
-**Aldous-Broder** (`--algo aldous-broder`, lines 1913-1938)
+**Aldous-Broder** (`--algo aldous-broder`)
 The other **uniform** algorithm, and the simplest to state: random-walk the
 whole grid; whenever you step into an unvisited cell, carve the wall you crossed.
 Stop when every cell is visited. *Implementation:* no auxiliary structure at all
@@ -239,21 +238,21 @@ re-rolled to keep the neighbor choice uniform (the property that makes it a
 These sweep the grid once, top to bottom, with O(width) or O(1) memory. They are
 the fastest, at the price of an obvious directional grain.
 
-**binary-tree** (`--algo binary-tree`, lines 1855-1874)
+**binary-tree** (`--algo binary-tree`)
 The simplest possible maze: for every cell, carve **either north or east** (coin
 flip; the only available option at the edges). One pass, no state. *Texture:* a
 hard diagonal bias -- the entire top row is one open corridor, the entire right
 column is another, and every cell has an unobstructed path to the top-right.
 Great for teaching, ugly as a maze.
 
-**sidewinder** (`--algo sidewinder`, lines 1881-1905)
+**sidewinder** (`--algo sidewinder`)
 binary-tree's smarter cousin. Sweep each row left to right building a horizontal
 "run"; at each cell, either extend the run east or **close** it -- and when you
 close a run, carve north from one *random* cell in the run. *Texture:* removes
 the vertical-corridor artifact (only the top row is one long hall), leaving a
 characteristic "rising" look. O(1) memory.
 
-**Eller's** (`--algo eller`, lines 1749-1833)
+**Eller's** (`--algo eller`)
 The cleverest of the row algorithms and the one that makes `--monster` possible.
 It produces a perfect maze while holding **only two rows in memory at a time**.
 Each row, randomly join horizontally-adjacent cells into sets, then for every
@@ -269,7 +268,7 @@ point: this is the algorithm behind `--stress` (200×200) and `--monster`
 
 The lone generator here that **adds** walls rather than carving them.
 
-**recursive-division** (`--algo division`, lines 2192-2274)
+**recursive-division** (`--algo division`)
 The inverse of every other algorithm. Start from an open chamber (knock down
 every interior wall, leaving only the border), then **recursively partition**:
 lay one straight wall across the region -- horizontal or vertical, whichever
@@ -316,7 +315,7 @@ this cell's neighbors?" and "which wall separates these two?". Each grid below
 answers those two questions differently.
 
 Slanted and curved walls are drawn with an integer **Bresenham line** primitive
-(`-draw-line`, lines 2633-2656); only the square grid gets away with
+(`-draw-line`); only the square grid gets away with
 axis-aligned rectangle fills.
 
 ### 4.1 square (default)
@@ -324,7 +323,7 @@ Four neighbors (N/E/S/W), one byte per cell, axis-aligned walls. `--size WxH` is
 columns × rows. The reference topology; everything else is measured against it.
 
 ### 4.2 hex (`--grid hex`)
-Pointy-top hexagons in an **odd-r offset** layout (Section 5B, lines 509-554):
+Pointy-top hexagons in an **odd-r offset** layout (Section 5B):
 odd rows are shifted half a hex to the right. Six neighbors; the neighbor offsets
 depend on row parity (`row mod 2`), so the direction table stores even-row and
 odd-row deltas side by side. Cell byte init is `0x3F` (six walls). Walls are
@@ -332,7 +331,7 @@ drawn as Bresenham lines along the closed hex edges; the color path scanline-fil
 each hexagon with its distance color, then stamps walls on top.
 
 ### 4.3 theta (`--grid theta`) -- polar
-Concentric rings of cells around a central hole (Section 5C, lines 1019-1068).
+Concentric rings of cells around a central hole (Section 5C).
 Here `--size WxH` reads as **rings × sectors**. Four neighbors: inward, outward,
 clockwise, counter-clockwise -- and CW/CCW **wrap** around the ring modularly.
 Rendering is the most unusual in the file: a **per-pixel polar scan** (no
@@ -344,16 +343,15 @@ independent, theta is the *lightest* grid on VM memory; it runs in the default
 1 MB VM.)
 
 ### 4.4 triangle (`--grid triangle`)
-Alternating up- and down-pointing equilateral triangles (Section 5D, lines
-1218-1265). A cell points up when `(col + row)` is even, down otherwise. Three
+Alternating up- and down-pointing equilateral triangles (Section 5D). A cell
+points up when `(col + row)` is even, down otherwise. Three
 neighbors: left, right, and a horizontal edge whose direction flips with the
 cell's orientation (an up-triangle's horizontal neighbor is below it; a
 down-triangle's is above). Walls are Bresenham lines along the three closed
 edges.
 
 ### 4.5 upsilon (`--grid upsilon`) -- octagons + squares
-A 4.8.8 truncated-square tiling: octagons and squares alternate (Section 5E,
-lines 1424-1539). A cell is an **octagon** when `(col + row)` is even (eight
+A 4.8.8 truncated-square tiling: octagons and squares alternate (Section 5E). A cell is an **octagon** when `(col + row)` is even (eight
 neighbors: four axis squares + four diagonal octagons) and a **square**
 otherwise (four axis neighbors, all octagons). The octagon needs all eight wall
 bits, so upsilon is the one grid that uses **two bytes per cell** -- a walls byte
@@ -380,13 +378,13 @@ The heatmap coloring answers "how far is each cell from the start?" and paints
 the answer.
 
 **The distance field** is a plain breadth-first search from the start cell
-(`bfs-distances`, lines 2428-2467), implemented as a ring-buffer FIFO over two
+(`bfs-distances`), implemented as a ring-buffer FIFO over two
 chunked UInteger arrays. Because a perfect maze is a tree, BFS distance is just
 the unique path length; the field also records `max-d`, the eccentricity used to
 normalize colors. Every topology has its own BFS variant with the same shape but
 the right neighbor set.
 
-**The colormaps** (`--color NAME`, Section 9B, lines 2833-2929). Ten are
+**The colormaps** (`--color NAME`, Section 9B). Ten are
 available; the default is `mono` (plain black/white, no distance field computed):
 
 | Name        | Stops | Source                                    |
@@ -404,7 +402,7 @@ available; the default is `mono` (plain black/white, no distance field computed)
 
 A cell's color is found by normalizing `t = dist / max-d` into `[0,1]`, scaling
 to the stop range, and **linearly interpolating** each RGB channel between the
-two bracketing stops (`cmap-color` / `-lerp-byte`, lines 2931-2959). The polar
+two bracketing stops (`cmap-color` / `-lerp-byte`). The polar
 and octagon renderers precompute one color per cell so the per-pixel inner loop
 stays a pure byte lookup.
 
@@ -419,8 +417,7 @@ then **solve** and **weave** (render-time overlays).
 
 Draws the start→end geodesic as a red ribbon. The path is recovered by running
 the BFS distance field from the start and then walking *backward* from the end,
-always stepping to a neighbor whose distance is exactly one less (`bfs-solve`,
-lines 2483-2524) -- correct because BFS on a tree gives true geodesic distances.
+always stepping to a neighbor whose distance is exactly one less (`bfs-solve`) -- correct because BFS on a tree gives true geodesic distances.
 The end defaults to the far corner; override with `--start X,Y` / `--end X,Y`.
 The ribbon is stamped over the finished image (it does not alter cell bytes), and
 on the non-square grids it is drawn as a real Bresenham polyline between cell
@@ -473,7 +470,7 @@ zlib only for the DEFLATE step.
 
 ### 7.1 File structure
 
-The encoder (Sections 2-4, lines 79-306) emits, in order:
+The encoder (Sections 2-4) emits, in order:
 
 1. **Signature** -- the 8 bytes `89 50 4E 47 0D 0A 1A 0A`.
 2. **IHDR** -- width and height (big-endian u32), **bit depth 8**, **color type
@@ -490,7 +487,7 @@ Every chunk is framed as `length (BE u32) ‖ type ‖ data ‖ crc32(type ‖ d
 ### 7.2 Two IDAT backends
 
 The 65,535-byte string cap bites again, this time on the *compressed* buffer.
-`amazing.trx` picks a backend by size (`write-idat`, lines 285-292):
+`amazing.trx` picks a backend by size (`write-idat`):
 
 - **In-memory** (`-write-idat-deflated`): when the filtered data fits in a Trix
   string (`height·(1 + 3·width) ≤ 65535`), `deflate` the whole buffer at once.
@@ -505,8 +502,7 @@ This is why `--monster` (a 1001×1001 PNG) works at all.
 
 ## 8. Command-Line Reference
 
-Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table
-(lines 5078-5135). A bare non-flag argument is taken as the output filename.
+Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A bare non-flag argument is taken as the output filename.
 
 | Flag | Argument | Effect | Default |
 | --- | --- | --- | --- |
@@ -598,30 +594,30 @@ cells and roughly ~4× the time, so a 2000×2000 maze is ten-plus minutes.
 
 The file is organized into numbered `Section N` headers (grep `^%  Section`):
 
-| Section | Lines | Contents                                               |
-| ------- | ----- | ------------------------------------------------------ |
-| 2-4     | 82    | PNG container, IDAT framing, `write-png`               |
-| 5 / 4B  | 312   | Cell encoding, grid, chunked-array                     |
-| 5B-5E   | 512+  | Hex / theta / triangle / upsilon grids                 |
-| 6-7     | 560   | Direction shuffle; recursive backtracker               |
-| 7B-7C   | 681   | Kruskal, Wilson                                        |
-| 7C-*    | 861+  | Per-topology backtrackers                              |
-| 7D-7G   | 1729+ | Eller; long-tail algorithms; recursive division; braid |
-| 7D / 7F | 2416  | BFS distance field; path solver; hardest pair          |
-| 8-10E   | 2578+ | Pixel buffer; mono and color renderers per grid        |
-| 11-13   | 3765+ | Solve overlay; 5×7 font; compare mode                  |
-| 99      | 4131  | `--self-test` suite                                    |
-| 100     | 4981+ | CLI parsing, main dispatch, `--bench` / `--metrics`    |
+| Section | Contents                                               |
+| ------- | ------------------------------------------------------ |
+| 2-4     | PNG container, IDAT framing, `write-png`               |
+| 5 / 4B  | Cell encoding, grid, chunked-array                     |
+| 5B-5E   | Hex / theta / triangle / upsilon grids                 |
+| 6-7     | Direction shuffle; recursive backtracker               |
+| 7B-7C   | Kruskal, Wilson                                        |
+| 7C-*    | Per-topology backtrackers                              |
+| 7D-7G   | Eller; long-tail algorithms; recursive division; braid |
+| 7D / 7F | BFS distance field; path solver; hardest pair          |
+| 8-10E   | Pixel buffer; mono and color renderers per grid        |
+| 11-13   | Solve overlay; 5×7 font; compare mode                  |
+| 99      | `--self-test` suite                                    |
+| 100     | CLI parsing, main dispatch, `--bench` / `--metrics`    |
 
 ### 9.2 The `--compare` font
 
 `--compare` labels each panel using a tiny built-in **5×7 bitmap font** (Section
-12, lines 4033-4056): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
+12): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
 lowercase folded to uppercase and unknown characters rendered blank.
 
 ### 9.3 Self-test
 
-`--self-test` runs **115 assertions** across 28 test procedures (lines 5344-5375):
+`--self-test` runs **115 assertions** across 28 test procedures (the `opt-self-test` block):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
 fully connected spanning tree), the recursive-division perfect-maze check (connected
