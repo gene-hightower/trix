@@ -1902,6 +1902,7 @@ vm_size_t vm_global_gc() {
 void gc_mark_global_names() {
     assert((m_has_global_names || (gc_count_global_name_blocks() == 0)) &&
            "m_has_global_names false but a live global Name block exists -- name walk wrongly skipped");
+
     if (m_has_global_names) {
         assert((m_name_global_mask != nulloffset) && "m_has_global_names true but the global-bucket mask is missing");
         assert(gc_global_mask_covers_all_global_names() &&
