@@ -26,6 +26,7 @@ examples/gallery.sh
 | [`algo-division-grayscale.png`](algo-division-grayscale.png) | **Recursive division** (wall-adding), grayscale heatmap — the README algorithm hero; nested gray blocks trace the subdivision |
 | [`flow-spiral-turbo.png`](flow-spiral-turbo.png) | **Flow field** — `--flow spiral`, a weighted-Kruskal maze whose corridors follow a scalar field; still a perfect maze (`--flow-jitter` dials art ↔ twisty) |
 | [`flow-image-logo.png`](flow-image-logo.png) | **Image flow field** — `--flow-image logo`, the same weighted Kruskal steered by an IMAGE (the bundled `logo`, sampled from `assets/trix-logo.svg` by `tools/gen_flow_field.py`); the corridors trace the wordmark while Kruskal still punches a perfect maze |
+| [`flow-image-cat.png`](flow-image-cat.png) | **Image flow field (silhouette)** — `--flow-image cat`, a bold silhouette field (drawn by `tools/gen_flow_field.py`); its broad tonal masses steer the flow so the maze drapes over the figure |
 | [`grid-hex-solve.png`](grid-hex-solve.png) | Hex maze with the solution path overlaid in red |
 | [`monster-magma.png`](monster-magma.png) | **Monster** heatmap — a 400×400 maze (160k cells) in magma distance shading |
 | [`monster-division-rainbow.png`](monster-division-rainbow.png) | **Monster recursive-division** — 400×400 (160k cells), rainbow heatmap; the color blocks expose the recursive partition hierarchy |

@@ -137,6 +137,45 @@ def normalize(a):
     return (a - lo) / (hi - lo)
 
 
+# --- Built-in synthetic shapes ------------------------------------------------
+# Self-contained, license-clean demo sources drawn by us (no external image), in
+# the spirit of "derive, don't bundle".  A bold silhouette has the strong tonal
+# masses that steer the flow far more legibly than a thin-line logo does.
+
+def draw_cat(n):
+    """A sitting-cat silhouette (a nod to Trixie, the project's namesake): one
+    big bold mass -- the demo that shows --flow-image draping over a subject."""
+    import math
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    s = n / 600.0
+    im = Image.new("L", (n, n), 255)
+    d = ImageDraw.Draw(im)
+    cx = n // 2
+
+    def sc(v):
+        return int(v * s)
+
+    d.ellipse([cx - sc(165), sc(300), cx + sc(165), sc(600)], fill=0)   # haunches
+    d.rectangle([cx - sc(120), sc(430), cx + sc(120), sc(600)], fill=0)
+    hr, hy = sc(120), sc(250)
+    d.ellipse([cx - hr, hy - hr, cx + hr, hy + hr], fill=0)             # head
+    d.polygon([(cx - sc(110), hy - sc(70)), (cx - sc(150), hy - sc(200)),
+               (cx - sc(35), hy - sc(110))], fill=0)                    # left ear
+    d.polygon([(cx + sc(110), hy - sc(70)), (cx + sc(150), hy - sc(200)),
+               (cx + sc(35), hy - sc(110))], fill=0)                    # right ear
+    for t in np.linspace(0, 1, 60):                                     # tail
+        tx = cx + sc(150) + sc(120 * math.sin(t * 1.5))
+        ty = sc(540) - sc(300 * t)
+        rr = sc(26 - 10 * t)
+        d.ellipse([tx - rr, ty - rr, tx + rr, ty + rr], fill=0)
+    return np.asarray(im, dtype=np.float32) / 255.0
+
+
+SHAPES = {"cat": draw_cat}
+
+
 def emit(a, name):
     """Render the field as a Trix [w h [rows]] literal (rows are hex strings,
     one byte = one cell's 0..255 value)."""
@@ -157,10 +196,8 @@ def emit(a, name):
     return "\n".join(lines) + "\n"
 
 
-def build(path, target_w, supersample, gamma, do_blur, do_gradient,
-          do_invert, do_normalize):
-    a = load_gray(path, supersample)
-    a = resize(a, target_w)
+def build(raw, target_w, gamma, do_blur, do_gradient, do_invert, do_normalize):
+    a = resize(raw, target_w)
     if gamma != 1.0:
         a = a ** gamma
     a = blur(a, do_blur)
@@ -178,9 +215,12 @@ def main():
         description="Sample an image into a Trix flow field for amazing.trx.")
     ap.add_argument("image", nargs="?",
                     help="source image (.png/.jpg/.svg; default: the bundled logo)")
+    ap.add_argument("--shape", choices=sorted(SHAPES),
+                    help="draw a built-in synthetic shape (a license-clean demo "
+                         "source) instead of loading an image -- e.g. 'cat'")
     ap.add_argument("--name", help="field name / output stem (default: from the file)")
-    ap.add_argument("--width", type=int, default=128,
-                    help="field width in cells (height follows aspect; default 128)")
+    ap.add_argument("--width", type=int, default=0,
+                    help="field width in cells (height follows aspect; default: auto)")
     ap.add_argument("--gamma", type=float, default=1.0,
                     help="tone curve exponent (>1 darkens mids, <1 brightens; default 1)")
     ap.add_argument("--blur", type=float, default=0.0,
@@ -198,24 +238,37 @@ def main():
                     help="where to write <name>.trx (default examples/flow-fields)")
     args = ap.parse_args()
 
-    if args.image is None:
-        # Default: the bundled logo field consumed by `--flow-image logo`.  The
-        # wordmark's slash-art is thin, so blur it into broad tonal regions that
-        # actually steer the flow.  Left un-inverted, the dark ink is the
-        # low-value (carved-first) valley, so the corridors pool into the
-        # letterforms and the maze's flow traces the wordmark.
-        args.image = LOGO_SVG
-        if args.name is None:
-            args.name = "logo"
-        args.width = 160
-        args.blur = 2.5
+    if args.shape:
+        # Built-in synthetic source (e.g. `--shape cat`): a bold silhouette whose
+        # broad masses steer the flow.  Drawn at high res, then blurred so the
+        # carve has a tonal band to follow instead of a hard cliff.
+        name = args.name or args.shape
+        if args.width == 0:
+            args.width = 160
+        if args.blur == 0.0:
+            args.blur = 6.0
+        _require_deps(False)
+        raw = SHAPES[args.shape](600)
+    else:
+        if args.image is None:
+            # Default: the bundled logo field consumed by `--flow-image logo`.
+            # The wordmark's slash-art is thin, so blur it into broad tonal
+            # regions that actually steer the flow.  Left un-inverted, the dark
+            # ink is the low-value (carved-first) valley, so the corridors pool
+            # into the letterforms and the maze's flow traces the wordmark.
+            args.image = LOGO_SVG
+            if args.name is None:
+                args.name = "logo"
+            args.width = 160
+            args.blur = 2.5
+        if args.width == 0:
+            args.width = 128
+        _require_deps(args.image.lower().endswith(".svg"))
+        name = args.name or os.path.splitext(os.path.basename(args.image))[0]
+        ss = args.supersample or min(2400, max(1200, args.width * 8))
+        raw = load_gray(args.image, ss)
 
-    _require_deps(args.image.lower().endswith(".svg"))
-
-    name = args.name or os.path.splitext(os.path.basename(args.image))[0]
-    ss = args.supersample or min(2400, max(1200, args.width * 8))
-
-    a = build(args.image, args.width, ss, args.gamma, args.blur,
+    a = build(raw, args.width, args.gamma, args.blur,
               args.gradient, args.invert, not args.no_normalize)
 
     os.makedirs(args.out_dir, exist_ok=True)

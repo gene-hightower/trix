@@ -20,10 +20,13 @@ colour and is not the artwork, so the maze engine is source-agnostic.
 | File       | Used by             | Source                                            |
 | ---------- | ------------------- | ------------------------------------------------- |
 | `logo.trx` | `--flow-image logo` | the in-repo `assets/trix-logo.svg` (our own logo) |
+| `cat.trx`  | `--flow-image cat`  | a synthetic cat silhouette drawn by the host tool |
 
 `logo` is the wordmark blurred into broad tonal regions: the dark ink is the
 low-value valley, so the corridors pool into the letterforms and the maze's flow
-traces the Trix wordmark.
+traces the Trix wordmark. `cat` is a bold silhouette (a nod to Trixie, the
+project's namesake) drawn by the tool itself -- its broad masses steer the flow
+far more legibly than the thin-line logo, so the maze drapes over the figure.
 
 ## Regenerate / add a field
 
@@ -38,6 +41,9 @@ sudo apt install python3-cairosvg                 # only for .svg input
 ```bash
 # regenerate the bundled logo field from assets/trix-logo.svg
 python3 tools/gen_flow_field.py
+
+# regenerate the bundled cat field (a built-in synthetic shape, no source file)
+python3 tools/gen_flow_field.py --shape cat
 
 # sample any image you have, for your own local mazes (not committed)
 python3 tools/gen_flow_field.py photo.png --name photo --width 140

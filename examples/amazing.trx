@@ -6285,8 +6285,8 @@ OPTIONS
                         (any grid; pairs well with --color)
     --flow-image NAME   Flow maze steered by an IMAGE field (a flow-fields/
                         <NAME>.trx sampled from a PNG/SVG by
-                        tools/gen_flow_field.py); 'logo' is bundled. Corridors
-                        align to the picture's tones; match --size to its aspect
+                        tools/gen_flow_field.py); 'logo' and 'cat' are bundled.
+                        Corridors align to the tones; match --size to its aspect
     --flow-image-dir DIR  where to find the flow-fields/*.trx (default auto)
     --flow-jitter N     Flow tie-break randomness (default 3): 0 = strict flow
                         art, larger = twistier / more maze-like

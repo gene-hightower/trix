@@ -38,9 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   picture's dark regions first, so the maze's flow aligns to the image at a macro scale
   while still punching a perfect maze. Trix has no image decoder, so the new
   `tools/gen_flow_field.py` samples a PNG/SVG once into a small `flow-fields/<NAME>.trx`
-  grayscale grid (loaded via a new `FLOW-FIELDS` registry); the bundled `logo` field traces
-  the Trix wordmark. Only the derived logo field is committed -- bring your own image for
-  local mazes.
+  grayscale grid (loaded via a new `FLOW-FIELDS` registry). Two fields are bundled: `logo`
+  (from `assets/trix-logo.svg`, traces the wordmark) and `cat` (a bold silhouette the tool
+  draws itself -- broad masses steer the flow more legibly). Only the derived fields are
+  committed -- bring your own image for local mazes.
 - **`globaldict` -- a second user dictionary implementing a PostScript-style
   local/global definition split.** A fixed-capacity dictionary pre-allocated in local
   VM and placed on the dict stack directly below `localdict`, pushed by the new

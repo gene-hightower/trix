@@ -81,6 +81,9 @@ run "flow-spiral-turbo.png"  --flow spiral --color turbo --size 60x60 --cell-px 
 # --flow-image steers the same weighted Kruskal with an IMAGE field (the bundled
 # 'logo', sampled from the Trix logo SVG): the corridors trace the wordmark.
 run "flow-image-logo.png"    --flow-image logo --flow-jitter 0 --color turbo --size 100x100 --cell-px 7 --wall-px 1
+# 'cat' is a bold silhouette (a synthetic demo source): broad masses steer the
+# flow more legibly than the thin-line logo -- the maze drapes over the cat.
+run "flow-image-cat.png"     --flow-image cat --flow-jitter 0 --color turbo --size 100x100 --cell-px 7 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Colormaps (kruskal, square 30x30):"
 for color in viridis magma inferno plasma cividis turbo rainbow cubehelix grayscale two-tone; do
