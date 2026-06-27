@@ -17,9 +17,10 @@
 %
 % Feature surface
 % ---------------
-%   Algorithms (10):  recursive-backtracker, Kruskal, Wilson,
+%   Algorithms (11):  recursive-backtracker, Kruskal, Wilson,
 %                     Eller (row-streaming), binary-tree, sidewinder,
-%                     Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree.
+%                     Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
+%                     recursive-division (wall-adding).
 %   Grids (5):        square, hex (pointy-top, odd-r offset), theta
 %                     (concentric polar rings), triangle (alternating
 %                     up/down by parity), upsilon (octagon + square).
@@ -2159,6 +2160,104 @@
 } def
 
 % ============================================================================
+%  Section 7D-bis: Recursive Division (wall-adding fractal)
+% ============================================================================
+%
+%  The one wall-ADDING algorithm in the canon.  Every other generator
+%  here starts from all-walls and carves passages; recursive division
+%  inverts that: open the interior into a single chamber, then split it
+%  with a straight wall pierced by exactly one gap, and recurse on the
+%  two sub-chambers.  Recursion bottoms out when a region is one cell
+%  wide in either dimension -- such a region is already an acyclic
+%  corridor, so the assembled result is a perfect (tree) maze.  Its
+%  texture -- long straight walls and nested rectangular rooms -- is
+%  unmistakably distinct from the carving algorithms' organic look.
+%  Square grid only.
+
+% (g x y dir) -add-wall -- inverse of carve-wall: raise the wall on this
+%   side of (x,y) AND the matching wall on the neighbor cell.
+/-add-wall {|g x y d -- |#+8
+    /info DIRS d get  local-def
+    /dx   info 0 get  local-def
+    /dy   info 1 get  local-def
+    /mask info 2 get  local-def
+    /opp  info 3 get  local-def
+    /nx   x dx add    local-def
+    /ny   y dy add    local-def
+    g x  y    g x  y  cell-at mask or  set-cell
+    g nx ny   g nx ny cell-at opp  or  set-cell
+} def
+
+% (g) recursive-division -- partition an open chamber into a perfect maze.
+/recursive-division {|g|#+8
+    /w g grid-w local-def
+    /h g grid-h local-def
+
+    % Phase 1: knock down every interior wall.  The border survives, since
+    % we only ever carve E/S (never a perimeter cell's outward N/W/E/S edge).
+    0 1 h 1 sub {|y|#+1
+        0 1 w 1 sub {|x|#+1
+            x w 1 sub lt { g x y 1 carve-wall } if    % carve E
+            y h 1 sub lt { g x y 2 carve-wall } if    % carve S
+        } for
+    } for
+
+    % Phase 2: iterative subdivision.  The stack holds [x0 y0 x1 y1]
+    % inclusive-bound regions; coexisting regions stay pairwise disjoint,
+    % so at most w*h are live at once and the chunked-array size is safe.
+    /stack w h mul chunked-array local-def
+    /sp 0 local-def
+    /r0 4 array local-def
+    r0 0 0 put  r0 1 0 put  r0 2 w 1 sub put  r0 3 h 1 sub put
+    stack sp r0 chunked-put  /sp sp 1 add store
+
+    { sp 0 gt } {||#+18
+        /sp sp 1 sub store
+        /reg stack sp chunked-get local-def
+        /x0 reg 0 get local-def
+        /y0 reg 1 get local-def
+        /x1 reg 2 get local-def
+        /y1 reg 3 get local-def
+        /rw x1 x0 sub 1 add local-def
+        /rh y1 y0 sub 1 add local-def
+
+        rw 2 ge  rh 2 ge  and {
+            % Split the longer axis (wall laid across it); coin-flip a square.
+            /horiz
+                rh rw gt { true } {
+                    rw rh gt { false } { 2 rand-bound-int 0 eq } if-else
+                } if-else
+                local-def
+            horiz {
+                % Horizontal wall below cell-row wy in [y0..y1-1]; one gap at
+                % a random column in [x0..x1].  Children: top + bottom halves.
+                /wy  y0  rh 1 sub rand-bound-int  add  local-def
+                /gap x0  rw rand-bound-int         add  local-def
+                x0 1 x1 {|cx| cx gap ne { g cx wy 2 -add-wall } if} for
+                /ra 4 array local-def
+                ra 0 x0 put  ra 1 y0 put  ra 2 x1 put  ra 3 wy put
+                stack sp ra chunked-put  /sp sp 1 add store
+                /rb 4 array local-def
+                rb 0 x0 put  rb 1 wy 1 add put  rb 2 x1 put  rb 3 y1 put
+                stack sp rb chunked-put  /sp sp 1 add store
+            } {
+                % Vertical wall right of cell-col wx in [x0..x1-1]; one gap at
+                % a random row in [y0..y1].  Children: left + right halves.
+                /wx  x0  rw 1 sub rand-bound-int  add  local-def
+                /gap y0  rh rand-bound-int         add  local-def
+                y0 1 y1 {|cy| cy gap ne { g wx cy 1 -add-wall } if} for
+                /ra 4 array local-def
+                ra 0 x0 put  ra 1 y0 put  ra 2 wx put  ra 3 y1 put
+                stack sp ra chunked-put  /sp sp 1 add store
+                /rb 4 array local-def
+                rb 0 wx 1 add put  rb 1 y0 put  rb 2 x1 put  rb 3 y1 put
+                stack sp rb chunked-put  /sp sp 1 add store
+            } if-else
+        } if
+    } while
+} def
+
+% ============================================================================
 %  Section 7E: Braid pass (probabilistic dead-end removal)
 % ============================================================================
 %
@@ -4142,7 +4241,7 @@
     tcount
 } def
 
-/test-algo-connectivity {||#+10
+/test-algo-connectivity {||#+12
     1ul rand-seed
     /gb 8 8 make-grid local-def    gb 0 0 recursive-backtracker
     (algo: backtrack 8x8 fully connected)  gb -bfs-unreached  0 eq  expect
@@ -4182,6 +4281,33 @@
     1ul rand-seed
     /ggt 8 8 make-grid local-def   ggt 0 0 growing-tree
     (algo: growing-tree  8x8 fully connected)  ggt -bfs-unreached  0 eq  expect
+
+    1ul rand-seed
+    /gdv 8 8 make-grid local-def   gdv recursive-division
+    (algo: division      8x8 fully connected)  gdv -bfs-unreached  0 eq  expect
+} def
+
+% ----- recursive-division perfect-maze property --------------------------
+%   A wall-ADDING generator can fail two ways the carving ones can't:
+%   leave an interior loop (too many passages) or seal a cell off (too
+%   few).  A perfect maze on w*h cells is a spanning tree -- fully
+%   connected AND exactly w*h-1 passages.  Count passages as absent
+%   E walls (x<w-1) plus absent S walls (y<h-1): every interior edge once.
+/test-recursive-division {||#+12
+    1ul rand-seed
+    /gd 10 7 make-grid local-def   gd recursive-division
+    /dw gd grid-w local-def
+    /dh gd grid-h local-def
+    /edges 0 local-def
+    0 1 dh 1 sub {|dy|#+5
+        0 1 dw 1 sub {|dx|#+5
+            /cv gd dx dy cell-at local-def
+            dx dw 1 sub lt { cv WALL-E and 0b eq { /edges edges 1 add store } if } if
+            dy dh 1 sub lt { cv WALL-S and 0b eq { /edges edges 1 add store } if } if
+        } for
+    } for
+    (division: fully connected)      gd -bfs-unreached  0 eq         expect
+    (division: spanning-tree edges)  edges  dw dh mul 1 sub  eq      expect
 } def
 
 % ----- Colormap endpoint sanity (Phase 3) --------------------------------
@@ -4822,7 +4948,8 @@ OPTIONS
     --grid TYPE         square | hex | theta | triangle | upsilon (default square)
     --algo NAME         backtrack | kruskal | wilson | eller |
                         binary-tree | sidewinder | aldous-broder |
-                        prim | hunt-kill | growing-tree (default backtrack)
+                        prim | hunt-kill | growing-tree | division
+                        (default backtrack)
                         Non-square grids only support backtrack.
 
   Rendering:
@@ -4934,7 +5061,7 @@ EXAMPLES
     /algos [
         (backtrack) (kruskal) (wilson) (eller)
         (binary-tree) (sidewinder) (aldous-broder)
-        (prim) (hunt-kill) (growing-tree)
+        (prim) (hunt-kill) (growing-tree) (division)
     ] local-def
 
     stderr  (algo               100x100         200x200\n)    write-string
@@ -4977,10 +5104,11 @@ EXAMPLES
     algo (prim)          eq { g sx sy prim } {
     algo (hunt-kill)     eq { g sx sy hunt-kill } {
     algo (growing-tree)  eq { g sx sy growing-tree } {
+    algo (division)      eq { g recursive-division } {
         (Unknown --algo: ) print algo print nl
-        (Valid: backtrack | kruskal | wilson | eller | binary-tree | sidewinder | aldous-broder | prim | hunt-kill | growing-tree) print nl
+        (Valid: backtrack | kruskal | wilson | eller | binary-tree | sidewinder | aldous-broder | prim | hunt-kill | growing-tree | division) print nl
         (unknown algo) false assert
-    } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else
+    } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else } if-else
 } def
 
 command-line-args parse-args
@@ -5020,6 +5148,7 @@ opt-self-test {
     test-cell-storage
     test-png-checkerboard
     test-algo-connectivity
+    test-recursive-division
     test-cmap-endpoints
     test-png-viridis
     test-png-hex-color

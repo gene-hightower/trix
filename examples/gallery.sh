@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 42 PNGs
+#   examples/gallery.sh              Default: 46 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -64,9 +64,15 @@ run() {
 }
 
 [[ "$QUIET" -eq 0 ]] && echo "Algorithms (mono, square 25x25, seed 42):"
-for algo in backtrack kruskal wilson eller binary-tree sidewinder aldous-broder prim hunt-kill growing-tree; do
+for algo in backtrack kruskal wilson eller binary-tree sidewinder aldous-broder prim hunt-kill growing-tree division; do
     run "algo-${algo}.png" --algo "$algo" --size 25x25
 done
+
+# Curated colored showcase: recursive-division's nested-room structure is
+# most legible as a distance heatmap (the bands trace the subdivision).
+[[ "$QUIET" -eq 0 ]] && echo "Recursive-division showcase (magma + rainbow heatmaps):"
+run "algo-division-magma.png"   --algo division --color magma   --size 30x30  --cell-px 16
+run "algo-division-rainbow.png" --algo division --color rainbow --size 100x100 --cell-px 6 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Colormaps (kruskal, square 30x30):"
 for color in viridis magma inferno plasma rainbow two-tone; do
@@ -118,6 +124,9 @@ run "compare-4-algos.png" --compare backtrack,kruskal,wilson,eller --size 16x16
 
 [[ "$QUIET" -eq 0 ]] && echo "Monster (colored heatmap, ~15s):"
 run "monster-magma.png" --algo backtrack --color magma --size 400x400 --cell-px 3 --wall-px 1
+# Recursive division at monster scale: the rainbow distance field paints the
+# nested-room hierarchy as broad color blocks -- the algorithm's structure at a glance.
+run "monster-division-rainbow.png" --algo division --color rainbow --size 400x400 --cell-px 3 --wall-px 1
 
 if [[ "$FULL" -eq 1 ]]; then
     [[ "$QUIET" -eq 0 ]] && echo "Stress (slow):"

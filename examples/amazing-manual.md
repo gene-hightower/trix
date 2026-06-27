@@ -59,7 +59,7 @@ on the 128K Macintosh in 1984.
 
 A **perfect maze** is a grid of cells where exactly one path connects any two
 cells -- no loops, no isolated regions. In graph terms it is a **spanning tree**
-of the grid: every cell reachable, no cycles. All ten algorithms here produce
+of the grid: every cell reachable, no cycles. All eleven algorithms here produce
 perfect mazes; they differ only in *which* spanning tree they pick, and that
 choice is what gives each its visual character ("texture" or "bias").
 
@@ -146,13 +146,14 @@ watch for it in the per-algorithm notes.
 
 ## 3. The Algorithm Zoo
 
-All ten algorithms below run on the **square** grid. (The four non-square grids
+All eleven algorithms below run on the **square** grid. (The four non-square grids
 are backtracker-only -- see [§4](#4-grid-topologies).) Select one with
 `--algo NAME`; the default is `backtrack`. The dispatch table is at lines
-4948-4964.
+5096-5112.
 
-Four of the ten ignore the start cell entirely (`kruskal`, `eller`,
-`binary-tree`, `sidewinder`); the other six begin carving from `--start`.
+Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
+`binary-tree`, `sidewinder`, `division`); the other six begin carving from
+`--start`.
 
 ### 3.1 Carving family (DFS)
 
@@ -263,7 +264,26 @@ similar to a relaxed binary-tree, but its O(1)-in-height memory is the whole
 point: this is the algorithm behind `--stress` (200×200) and `--monster`
 (1000×1000).
 
-### 3.4 Bias at a glance
+### 3.4 Wall-adding family
+
+The lone generator here that **adds** walls rather than carving them.
+
+**recursive-division** (`--algo division`, lines 2192-2274)
+The inverse of every other algorithm. Start from an open chamber (knock down
+every interior wall, leaving only the border), then **recursively partition**:
+lay one straight wall across the region -- horizontal or vertical, whichever
+splits the longer axis -- pierce it with a single random gap, and recurse on the
+two halves. Recursion stops once a region is one cell wide in either dimension,
+since such a corridor is already acyclic; assembling acyclic regions joined by one
+passage each yields a perfect (tree) maze. *Implementation:* an open-the-interior
+pass followed by an explicit `w*h` region stack of `[x0 y0 x1 y1]` bounds
+(coexisting regions stay pairwise disjoint, so the stack can never overflow), plus
+an `-add-wall` helper that is the exact inverse of `carve-wall`. *Texture:* long
+straight walls and nested rectangular rooms -- a crisp, architectural look unlike
+any of the carving algorithms' organic grain. *Cost:* O(n), no recursion-depth
+limit.
+
+### 3.5 Bias at a glance
 
 | Algorithm | Family | Bias / texture | Uniform? | Extra memory |
 | --- | --- | --- | --- | --- |
@@ -277,6 +297,7 @@ point: this is the algorithm behind `--stress` (200×200) and `--monster`
 | binary-tree | row-wise | hard NE diagonal bias | no | O(1) |
 | sidewinder | row-wise | "rising" look, one top corridor | no | O(1) |
 | Eller's | row-wise | relaxed grain, O(height)=O(1) memory | no | O(width) |
+| recursive-division | wall-adding | straight walls, nested rectangular rooms | no | O(n) region stack |
 
 ---
 
@@ -294,7 +315,7 @@ this cell's neighbors?" and "which wall separates these two?". Each grid below
 answers those two questions differently.
 
 Slanted and curved walls are drawn with an integer **Bresenham line** primitive
-(`-draw-line`, lines 2483-2506); only the square grid gets away with
+(`-draw-line`, lines 2633-2656); only the square grid gets away with
 axis-aligned rectangle fills.
 
 ### 4.1 square (default)
@@ -358,13 +379,13 @@ The heatmap coloring answers "how far is each cell from the start?" and paints
 the answer.
 
 **The distance field** is a plain breadth-first search from the start cell
-(`bfs-distances`, lines 2328-2367), implemented as a ring-buffer FIFO over two
+(`bfs-distances`, lines 2428-2467), implemented as a ring-buffer FIFO over two
 chunked UInteger arrays. Because a perfect maze is a tree, BFS distance is just
 the unique path length; the field also records `max-d`, the eccentricity used to
 normalize colors. Every topology has its own BFS variant with the same shape but
 the right neighbor set.
 
-**The colormaps** (`--color NAME`, Section 9B, lines 2671-2777). Six are
+**The colormaps** (`--color NAME`, Section 9B, lines 2831-2937). Six are
 available; the default is `mono` (plain black/white, no distance field computed):
 
 | Name       | Stops | Source                               |
@@ -378,7 +399,7 @@ available; the default is `mono` (plain black/white, no distance field computed)
 
 A cell's color is found by normalizing `t = dist / max-d` into `[0,1]`, scaling
 to the stop range, and **linearly interpolating** each RGB channel between the
-two bracketing stops (`cmap-color` / `-lerp-byte`, lines 2737-2763). The polar
+two bracketing stops (`cmap-color` / `-lerp-byte`, lines 2887-2913). The polar
 and octagon renderers precompute one color per cell so the per-pixel inner loop
 stays a pure byte lookup.
 
@@ -394,7 +415,7 @@ then **solve** and **weave** (render-time overlays).
 Draws the start→end geodesic as a red ribbon. The path is recovered by running
 the BFS distance field from the start and then walking *backward* from the end,
 always stepping to a neighbor whose distance is exactly one less (`bfs-solve`,
-lines 2383-2424) -- correct because BFS on a tree gives true geodesic distances.
+lines 2483-2524) -- correct because BFS on a tree gives true geodesic distances.
 The end defaults to the far corner; override with `--start X,Y` / `--end X,Y`.
 The ribbon is stamped over the finished image (it does not alter cell bytes), and
 on the non-square grids it is drawn as a real Bresenham polyline between cell
@@ -479,8 +500,8 @@ This is why `--monster` (a 1001×1001 PNG) works at all.
 
 ## 8. Command-Line Reference
 
-Flags are parsed in `/parse-args` (lines 4818-4905). A bare non-flag argument is
-taken as the output filename.
+Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table
+(lines 5001-5057). A bare non-flag argument is taken as the output filename.
 
 | Flag | Argument | Effect | Default |
 | --- | --- | --- | --- |
@@ -502,7 +523,7 @@ taken as the output filename.
 | `--compare` | `A,B,C` | Side-by-side mono panels of several algorithms | -- |
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
-| `--bench` | -- | Time all ten algorithms; write no PNG | off |
+| `--bench` | -- | Time all eleven algorithms; write no PNG | off |
 | `--quiet` | -- | Suppress stderr progress and phase timings | off |
 
 **VM size.** `--vm-size` is a *Trix interpreter* flag and goes **before** the
@@ -589,15 +610,17 @@ The file is organized into numbered `Section N` headers (grep `^%  Section`):
 ### 9.2 The `--compare` font
 
 `--compare` labels each panel using a tiny built-in **5×7 bitmap font** (Section
-12, lines 3815-3838): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
+12, lines 3978-4001): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
 lowercase folded to uppercase and unknown characters rendered blank.
 
 ### 9.3 Self-test
 
-`--self-test` runs **95 assertions** across 26 test procedures (lines 4973-4998):
+`--self-test` runs **101 assertions** across 27 test procedures (lines 5144-5174):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
-fully connected spanning tree), colormap endpoints, end-to-end color renders,
+fully connected spanning tree), the recursive-division perfect-maze check (connected
+*and* exactly `w*h-1` passages -- the failure modes a wall-adder has that carvers
+don't), colormap endpoints, end-to-end color renders,
 BFS-solve correctness on all five grids, braid-to-zero-dead-ends at `P=1.0`,
 weave under-cell presence with intact connectivity, font glyph bits, and compare
 geometry. Run it with a large VM:

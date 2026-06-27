@@ -28,8 +28,15 @@ C++23 | Single-Header | ASan/UBSan clean | Apache 2.0
 </p>
 
 <p align="center"><em>Sample output from the Trix program
-<a href="examples/amazing.trx"><code>examples/amazing.trx</code></a> &mdash; ten maze algorithms across five
+<a href="examples/amazing.trx"><code>examples/amazing.trx</code></a> &mdash; eleven maze algorithms across five
 grid topologies. <a href="examples/maze-gallery/">More in the gallery.</a></em></p>
+
+<p align="center">
+  <img src="examples/maze-gallery/algo-division-rainbow.png" alt="A 100x100 recursive-division maze rendered as a rainbow distance heatmap by examples/amazing.trx" width="400">
+</p>
+
+<p align="center"><em>Recursive division as a rainbow distance field &mdash; the color
+blocks trace the algorithm's nested-room subdivision (a 100&times;100 maze).</em></p>
 
 <p align="center">
   <img src="examples/maze-gallery/monster-magma.png" alt="A 400x400 maze rendered as a magma distance heatmap by examples/amazing.trx" width="400">
@@ -247,7 +254,7 @@ emulators and interpreters.  The highlights:
 | Program | Demonstrates |
 | --- | --- |
 | [zmachine.trx](examples/zmachine.trx) | Infocom Z-machine covering V1-V5, V7, V8 (no V6 graphical) -- runs interactive-fiction story files, fetched separately (none bundled) |
-| [amazing.trx](examples/amazing.trx) | Maze zoo -- ten algorithms across five grid topologies, distance-field heatmaps, PNG output |
+| [amazing.trx](examples/amazing.trx) | Maze zoo -- eleven algorithms across five grid topologies, distance-field heatmaps, PNG output |
 | [mini-scheme.trx](examples/mini-scheme.trx) | Metacircular Scheme: CEK machine, first-class continuations, `call/cc` |
 | [tetrix.trx](examples/tetrix.trx) | Playable terminal falling-block game -- SRS rotation, T-spins, lookahead AI |
 | [chip8.trx](examples/chip8.trx) | CHIP-8 / Super-CHIP emulator for the classic 1977 VM |

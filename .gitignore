@@ -70,6 +70,9 @@ examples/maze-gallery/*
 !examples/maze-gallery/compare-4-algos.png
 !examples/maze-gallery/grid-hex-solve.png
 !examples/maze-gallery/monster-magma.png
+!examples/maze-gallery/algo-division-magma.png
+!examples/maze-gallery/monster-division-rainbow.png
+!examples/maze-gallery/algo-division-rainbow.png
 
 # Fuzz artifacts (binaries, auto-corpus, crashes)
 fuzz/fuzz_trix
