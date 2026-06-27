@@ -39,6 +39,16 @@ grid topologies. <a href="examples/maze-gallery/">More in the gallery.</a></em><
 blocks trace the algorithm's nested-room subdivision (a 100&times;100 maze).</em></p>
 
 <p align="center">
+  <img src="examples/maze-gallery/mask-logo.png" alt="The word Trix carved as a maze by examples/amazing.trx via font masking" width="400">
+</p>
+
+<p align="center"><em>Masking carves the maze into a shape &mdash; here the
+<code>Trix</code> wordmark (<code>--mask logo</code>), each letter its own
+perfect maze. Also words (<code>--mask-text</code>, selectable <code>--font</code>),
+analytic figures, and the inverse cut-out. See the
+<a href="examples/maze-gallery/">gallery</a>.</em></p>
+
+<p align="center">
   <img src="examples/maze-gallery/monster-magma.png" alt="A 400x400 maze rendered as a magma distance heatmap by examples/amazing.trx" width="400">
 </p>
 

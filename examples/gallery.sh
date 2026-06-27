@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 86 PNGs
+#   examples/gallery.sh              Default: 88 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -56,7 +56,7 @@ mkdir -p "$OUT_DIR"
 run() {
     local outname="$1"; shift
     [[ "$QUIET" -eq 0 ]] && printf "  %-32s " "$outname"
-    "$TRIX" --vm-size=128M "$AMAZING" --quiet --seed 42 "$@" --out "$OUT_DIR/$outname" >/dev/null
+    "$TRIX" --vm-size=128M "$AMAZING" --quiet --seed 42 --font-dir "$SCRIPT_DIR/mask-fonts" "$@" --out "$OUT_DIR/$outname" >/dev/null
     [[ "$QUIET" -eq 0 ]] && echo "ok"
     # explicit success: under --quiet the [[ ]] && echo above returns 1,
     # and set -e treats a non-zero function return as fatal
@@ -132,13 +132,18 @@ done
 
 # Masking: carve the maze into a word / logo / analytic figure (square grid).
 # Disconnected shapes (letters) become one perfect maze per connected piece.
+# --mask-text / --mask logo render through a selectable --font: roboto-bold
+# (default bitmap), roboto-mono-bold, and the public-domain hershey-* stroke
+# fonts (examples/mask-fonts/).
 [[ "$QUIET" -eq 0 ]] && echo "Masking (shape-carved mazes):"
-run "mask-logo.png"          --mask logo
-run "mask-text-amazing.png"  --mask-text AMAZING --color viridis
+run "mask-logo.png"          --mask logo --color viridis --cell-px 10 --wall-px 1
+run "mask-text-amazing.png"  --mask-text 'Amazing!' --color inferno --cell-px 9 --wall-px 1
+run "mask-font-roboto.png"   --mask-text Trix --font roboto-mono-bold --color turbo --cell-px 9 --wall-px 1
+run "mask-font-hershey.png"  --mask-text Trix --font hershey-serif --color viridis --cell-px 9 --wall-px 1
 run "mask-disc.png"          --mask disc  --size 28x28 --color inferno
 run "mask-ring.png"          --mask ring  --size 28x28 --color magma
 run "mask-frame.png"         --mask frame --size 28x28
-run "mask-trix-invert.png"   --mask-text TRIX --mask-invert --color magma
+run "mask-trix-invert.png"   --mask-text Trix --mask-invert --mask-margin 36 --color magma --cell-px 7 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Compare:"
 run "compare-4-algos.png" --compare backtrack,kruskal,wilson,eller --size 16x16

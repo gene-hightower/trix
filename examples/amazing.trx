@@ -4560,45 +4560,205 @@
     m
 } def
 
-% ----- logo mask (the in-repo ASCII wordmark, rasterised) -------------------
-%   Each non-space character of the banner becomes a `scale`x`scale` block of
-%   in-mask cells.  The art is the same slash-art that heads every source file
-%   (reproduced here as data, ASCII-only).  Raw strings keep the backslashes
-%   literal.  Scale it up so the 1-char strokes are several cells thick.
-/LOGO-ART [
-    <(   ______    _)>
-    <(  /_  __/___(_)_  __)>
-    <(   / / / __/ /\ \/ /)>
-    <(  / / / / / /  > . <)>
-    <( /_/ /_/ /_/  /_/\_\)>
-] def
+% ----- hi-res font registry (lazy-loaded mask-fonts/*.trx) ------------------
+%   `--mask-text WORD` and `--mask logo` (= the word "Trix") render through a
+%   selectable font.  `5x7` is the built-in block font above; the hi-res faces
+%   (roboto-bold, roboto-mono-bold = bitmap atlases; hershey-* = stroke fonts)
+%   live in examples/mask-fonts/<name>.trx and register THEMSELVES into
+%   MASK-FONTS when required.  A font is loaded once, on first use.
 
-% (scale) mask-logo -- mask shaped like the Trix wordmark
-/mask-logo {|scale -- mask|#+8
-    /art LOGO-ART local-def
-    /ah art length local-def
-    /aw 0 local-def
-    0 1 ah 1 sub {|y|#+1  /aw  art y get length  aw max  store} for
-    /m  aw scale mul  ah scale mul  make-mask local-def
-    0 1 ah 1 sub {|ay|#+5
-        /line art ay get local-def
-        /ll line length local-def
-        0 1 aw 1 sub {|ax|#+4
-            ax ll lt { line ax get 32b ne } { false } if-else {
-                /bx ax scale mul local-def
-                /by ay scale mul local-def
-                0 1 scale 1 sub {|sy|#+2
-                    0 1 scale 1 sub {|sx|#+1  m bx sx add by sy add 1b mask-set} for
-                } for
+/MASK-FONTS 8 dynamic-dict def     % name -> font dict (filled by the font files)
+
+% (name) -font-path -- locate mask-fonts/<name>.trx: --font-dir if given, else
+%   the first existing candidate (works run-from-repo-root or run-from-examples).
+/-font-path {|name -- path|#+3
+    /cands
+        opt-font-dir () ne
+            { [ opt-font-dir ] }
+            { [ (examples/mask-fonts) (mask-fonts) ] }
+            if-else
+        local-def
+    /found () local-def
+    0 1 cands length 1 sub {|i|#+1
+        found () eq {
+            /p cands i get (/) concat name concat (.trx) concat local-def
+            p file-exists? { /found p store } if
+        } if
+    } for
+    found () ne { found } { cands 0 get (/) concat name concat (.trx) concat } if-else
+} def
+
+% (name) -load-font -- return the named font dict, requiring its file once.
+/-load-font {|name -- font|#+1
+    MASK-FONTS name known? not {
+        /path name -font-path local-def
+        path file-exists? not {
+            (amazing: font not found: ) print name print ( (looked in ) print path print
+            (); use --font-dir, or run from the repo root) print nl
+            (font not found) false assert
+        } if
+        path require
+    } if
+    MASK-FONTS name get
+} def
+
+% (m) mask-trim -- crop the mask to its in-mask bounding box (drops the empty
+%   margins a glyph box leaves -- e.g. the descender band when a word has none).
+/mask-trim {|m -- m'|#+10
+    /w m mask-w local-def
+    /h m mask-h local-def
+    /minx w local-def  /miny h local-def  /maxx -1 local-def  /maxy -1 local-def
+    0 1 h 1 sub {|y|#+3
+        0 1 w 1 sub {|x|#+2
+            m x y mask-in? {
+                x minx lt { /minx x store } if   x maxx gt { /maxx x store } if
+                y miny lt { /miny y store } if   y maxy gt { /maxy y store } if
             } if
         } for
     } for
-    m
+    maxx 0 lt { m } {
+        /nw maxx minx sub 1 add local-def
+        /nh maxy miny sub 1 add local-def
+        /m2 nw nh make-mask local-def
+        0 1 nh 1 sub {|y|#+1
+            0 1 nw 1 sub {|x|  m x minx add y miny add mask-in? { m2 x y 1b mask-set } if} for
+        } for
+        m2
+    } if-else
 } def
 
-% (opt) -mask-scale-for -- resolve the cells-per-pixel scale (--mask-scale,
-%   else a shape default of 4 -- enough room for a maze in each stroke).
-/-mask-scale-for {| -- scale|  opt-mask-scale 0 gt { opt-mask-scale } { 4 } if-else} def
+% (word font scale) mask-text-bitmap -- lay a word out from a bitmap atlas on
+%   the font's common baseline (proportional advance widths -- correct spacing
+%   minus pair kerning, which is sub-cell here), each font pixel a scale x scale
+%   block, then trim to the word's ink.
+/mask-text-bitmap {|word font scale -- mask|#+12
+    /h font (h) get local-def
+    /glyphs font (glyphs) get local-def
+    /sp glyphs ( ) get 0 get local-def              % space advance (fallback)
+    /nw word length local-def
+    /totw 0 local-def
+    0 1 nw 1 sub {|i|#+2
+        /c word i 1 get-interval local-def
+        glyphs c known? { /totw totw  glyphs c get 0 get  add store } { /totw totw sp add store } if-else
+    } for
+    /m  totw scale mul  h scale mul  make-mask local-def
+    /pen 0 local-def
+    0 1 nw 1 sub {|i|#+8
+        /c word i 1 get-interval local-def
+        glyphs c known? {
+            /g glyphs c get local-def
+            /adv g 0 get local-def
+            /bits g 1 get local-def
+            /rb adv 7 add 8 div local-def
+            0 1 h 1 sub {|gy|#+6
+                /rowoff gy rb mul local-def
+                0 1 adv 1 sub {|gx|#+4
+                    bits  rowoff gx 8 div add  get /uinteger-type cast  7 gx 8 mod sub  shift-right  1u and  0u ne {
+                        /bx pen gx add scale mul local-def
+                        /by gy scale mul local-def
+                        0 1 scale 1 sub {|sy|#+2
+                            0 1 scale 1 sub {|sx|#+1  m bx sx add by sy add 1b mask-set} for
+                        } for
+                    } if
+                } for
+            } for
+            /pen pen adv add store
+        } { /pen pen sp add store } if-else
+    } for
+    m mask-trim
+} def
+
+% ----- stroke fonts (Hershey, public domain) -------------------------------
+%   Hershey glyphs are polyline centerlines (kind=stroke).  We stroke each
+%   segment with a square pen of radius `pen` cells, so the corridors run ALONG
+%   the strokes (an engraved/wireframe look) and stay crisp at any size.
+
+% (m px py r) -mask-pen -- set the (2r+1)-square of mask cells centred at (px,py)
+/-mask-pen {|m px py r -- |#+1
+    /y0 py r sub local-def
+    0 1 r 2 mul {|j|#+1
+        /yy y0 j add local-def
+        0 1 r 2 mul {|k|  m  px r sub k add  yy  1b mask-set} for
+    } for
+} def
+
+% (m x0 y0 x1 y1 r) -mask-stroke-seg -- thick line: stamp the pen along the
+%   segment (parametric, one step per cell of the longer axis).
+/-mask-stroke-seg {|m x0 y0 x1 y1 r -- |#+6
+    /steps x1 x0 sub abs  y1 y0 sub abs  max  1 max local-def
+    /fx0 x0 /real-type cast local-def
+    /fy0 y0 /real-type cast local-def
+    /fdx x1 x0 sub /real-type cast local-def
+    /fdy y1 y0 sub /real-type cast local-def
+    /fs  steps /real-type cast local-def
+    0 1 steps {|s|#+1
+        /t s /real-type cast fs div local-def
+        m  fx0 fdx t mul add round /integer-type cast
+           fy0 fdy t mul add round /integer-type cast  r  -mask-pen
+    } for
+} def
+
+% (word font scale) mask-text-stroke -- lay a word out from a stroke font on the
+%   common baseline (proportional advances), stroke every polyline, trim to ink.
+/mask-text-stroke {|word font scale -- mask|#+12
+    /h font (h) get local-def
+    /pen font (pen) get scale mul local-def
+    /glyphs font (glyphs) get local-def
+    /sp glyphs ( ) get 0 get local-def
+    /nw word length local-def
+    /totw 0 local-def
+    0 1 nw 1 sub {|i|#+2
+        /c word i 1 get-interval local-def
+        glyphs c known? { /totw totw  glyphs c get 0 get  add store } { /totw totw sp add store } if-else
+    } for
+    /m  totw scale mul pen 2 mul add   h scale mul pen 2 mul add   make-mask local-def
+    /penx pen local-def
+    0 1 nw 1 sub {|i|#+8
+        /c word i 1 get-interval local-def
+        glyphs c known? {
+            /g glyphs c get local-def
+            /adv g 0 get local-def
+            /polys g 1 get local-def
+            0 1 polys length 1 sub {|p|#+3
+                /poly polys p get local-def
+                /np poly length 2 div local-def
+                np 1 eq {
+                    m  poly 0 get scale mul penx add  poly 1 get scale mul pen add  pen  -mask-pen
+                } {
+                    0 1 np 2 sub {|k|
+                        m
+                            poly 2 k mul       get scale mul penx add
+                            poly 2 k mul 1 add get scale mul pen  add
+                            poly 2 k 1 add mul       get scale mul penx add
+                            poly 2 k 1 add mul 1 add get scale mul pen  add
+                            pen  -mask-stroke-seg
+                    } for
+                } if-else
+            } for
+            /penx penx adv scale mul add store
+        } { /penx penx sp scale mul add store } if-else
+    } for
+    m mask-trim
+} def
+
+% (opt) -mask-scale-for -- resolve cells-per-pixel: --mask-scale if set, else a
+%   per-font default (5x7 block font wants 4 for room; hi-res faces are already
+%   tall enough at 1).
+/-mask-scale-for {| -- scale|
+    opt-mask-scale 0 gt { opt-mask-scale } { opt-font (5x7) eq { 4 } { 1 } if-else } if-else
+} def
+
+% (word) -build-text-mask -- render a word/logo through the selected --font.
+/-build-text-mask {|word -- mask|#+1
+    opt-font (5x7) eq
+        { word -mask-scale-for mask-text }
+        { /f opt-font -load-font local-def
+          f (kind) get (stroke) eq
+              { word f -mask-scale-for mask-text-stroke }
+              { word f -mask-scale-for mask-text-bitmap }
+              if-else }
+        if-else
+} def
 
 % (m margin) mask-pad -- embed mask m centred in a canvas with `margin` extra
 %   cells on every side (new cells out-of-mask).  Used by --mask-invert so the
@@ -5820,6 +5980,16 @@
         /edges dg dm -mask-edge-count local-def
         (mask-algo: disc is a perfect forest)  edges  cells comps sub  eq            expect
     } for
+
+    % hi-res fonts (mask-fonts/*.trx): bitmap + stroke build proper word masks
+    /fb (roboto-bold) -load-font local-def
+    (font: roboto-bold is a bitmap font)        fb (kind) get (bitmap) eq            expect
+    (font: roboto-bold Trix is non-empty)       (Trix) fb 1 mask-text-bitmap mask-count 0 gt  expect
+    (font: descenders make a word taller)
+        (Ag) fb 1 mask-text-bitmap mask-h   (A) fb 1 mask-text-bitmap mask-h   gt    expect
+    /fs (hershey-sans) -load-font local-def
+    (font: hershey-sans is a stroke font)       fs (kind) get (stroke) eq            expect
+    (font: hershey-sans Trix is non-empty)      (Trix) fs 1 mask-text-stroke mask-count 0 gt  expect
 } def
 
 % ============================================================================
@@ -5852,6 +6022,9 @@
 /opt-mask-word  ()        def         % the word for --mask-text
 /opt-mask-scale 0         def         % cells per font/logo pixel; 0 = shape default (4)
 /opt-mask-invert false     def         % punch the shape out of a full maze (inverse)
+/opt-mask-margin -1        def         % --mask-invert surround thickness in cells; -1 = auto
+/opt-font       (roboto-bold) def      % 5x7 | roboto-bold | roboto-mono-bold | hershey-* | <custom>
+/opt-font-dir   ()         def         % override dir for mask-fonts/*.trx (default examples/mask-fonts)
 
 % (--) print-help -- write usage to stdout and quit the interpreter.
 /print-help {
@@ -5898,12 +6071,19 @@ OPTIONS
                         stitch the panels into one image.
 
   Masking (square grid):  carve a maze in the shape of a word/logo/figure
-    --mask SHAPE        disc | ring | frame | logo
-                        (disc/ring/frame use --size; logo is the wordmark)
-    --mask-text WORD    carve a maze shaped like WORD (built-in 5x7 font)
-    --mask-scale N      cells per font/logo pixel (default 4)
+    --mask SHAPE        disc | ring | frame | logo  (logo = the "Trix" wordmark)
+                        (disc/ring/frame use --size)
+    --mask-text WORD    carve a maze shaped like WORD
+    --font NAME         font for --mask-text / --mask logo:
+                        5x7 (built-in block) | roboto-bold (default) |
+                        roboto-mono-bold | hershey-sans | hershey-serif |
+                        or any examples/mask-fonts/<name>.trx
+    --font-dir DIR      where to find the mask-fonts/*.trx (default auto)
+    --mask-scale N      cells per font pixel (default: 1 hi-res, 4 for 5x7)
     --mask-invert       Punch the shape out of a full maze (the inverse:
                         the maze fills around the shape, which becomes holes)
+    --mask-margin N     With --mask-invert, cells of surrounding maze on each
+                        side (default auto); large N = shape cut from a big maze
                         Works with any --algo and any --color; disconnected
                         shapes (letters) become one perfect maze per piece.
 
@@ -5978,6 +6158,9 @@ EXAMPLES
                     /opt-mask-word args i 1 add get store  /i i 2 add store }
     (--mask-scale){ /opt-mask-scale args i 1 add get to-number store  /i i 2 add store }
     (--mask-invert){ /opt-mask-invert true store  /i i 1 add store }
+    (--mask-margin){ /opt-mask-margin args i 1 add get to-number store  /i i 2 add store }
+    (--font)      { /opt-font args i 1 add get store  /i i 2 add store }
+    (--font-dir)  { /opt-font-dir args i 1 add get store  /i i 2 add store }
     (--quiet)     { /opt-quiet true store  /i i 1 add store }
 >> def
 
@@ -6387,8 +6570,8 @@ opt-self-test {
         % become one perfect maze per connected component (see Section 14).
         -effective-seed rand-seed
         /mask
-            opt-mask (text) eq { opt-mask-word -mask-scale-for mask-text }
-            { opt-mask (logo) eq { -mask-scale-for mask-logo }
+            opt-mask (text) eq { opt-mask-word -build-text-mask }
+            { opt-mask (logo) eq { (Trix) -build-text-mask }
             { opt-mask (disc) eq { opt-w opt-h mask-disc }
             { opt-mask (ring) eq { opt-w opt-h mask-ring }
             { opt-mask (frame) eq { opt-w opt-h mask-frame }
@@ -6400,7 +6583,15 @@ opt-self-test {
         % --mask-invert: pad the shape into a larger canvas and complement it,
         % so the maze fills AROUND the shape and the shape becomes holes.
         opt-mask-invert {
-            /mask  mask  mask mask-w  mask mask-h  min 4 div 4 max  mask-pad  mask-invert  store
+            % surround thickness: --mask-margin if given, else a shape-proportional
+            % auto value.  A large margin reads as "the shape cut out of a big maze".
+            /-marg
+                opt-mask-margin 0 ge
+                    { opt-mask-margin }
+                    { mask mask-w  mask mask-h  min 4 div 4 max }
+                    if-else
+                def
+            /mask  mask  -marg  mask-pad  mask-invert  store
         } if
         /opt-w mask mask-w store          % report the real (mask-derived) size
         /opt-h mask mask-h store

@@ -98,3 +98,6 @@ examples/sudoku-input.txt
 # clang-20 signed-char reproduction build dir (regenerable)
 build-c20/
 build-ci/
+
+# Python bytecode cache (tools/)
+__pycache__/

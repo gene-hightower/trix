@@ -483,27 +483,28 @@ over the other.
 Masking restricts the maze to a chosen subset of the square grid, so the
 corridors trace a **word, a logo, or an analytic figure** instead of filling a
 plain rectangle. It is the same idea as Walter Pullen's Daedalus mask images,
-but every mask here is generated in-process -- there are no bundled image files.
+but no bitmap images are bundled -- masks come from text rendered through a
+selectable font, or from analytic geometry.
 
 ```bash
-./trix --vm-size=64M examples/amazing.trx --mask-text MAZE --out word.png
+./trix --vm-size=64M examples/amazing.trx --mask-text 'Amazing!' --out word.png
 ./trix --vm-size=64M examples/amazing.trx --mask logo --color viridis --out logo.png
+./trix --vm-size=64M examples/amazing.trx --mask-text Trix --font hershey-serif --out hershey.png
 ./trix --vm-size=64M examples/amazing.trx --mask disc --size 28x28 --color inferno --out disc.png
-./trix --vm-size=64M examples/amazing.trx --mask-text TRIX --mask-invert --color magma --out punch.png
+./trix --vm-size=64M examples/amazing.trx --mask-text Trix --mask-invert --color magma --out punch.png
 ```
 
 ### 7.1 What a mask is
 
 A mask mirrors the grid: a `[w h rows]` triple whose `rows` is an array of
-`w`-byte strings, a byte `!= 0` meaning **in-mask**. Four built-in sources, all
-self-contained:
+`w`-byte strings, a byte `!= 0` meaning **in-mask**. The sources:
 
 | Source | Flag | How it is built |
 | --- | --- | --- |
-| **Text** | `--mask-text WORD` | the bundled 5×7 A–Z font ([§10.2](#102-the---compare-font)); each font pixel becomes a `--mask-scale` × `--mask-scale` block of cells |
-| **Logo** | `--mask logo` | the slash-art Trix wordmark from the source headers, rasterised character-by-character |
+| **Text** | `--mask-text WORD` | the word rendered through `--font` (see [§7.3](#73-fonts)); each font pixel becomes a `--mask-scale` × `--mask-scale` block of cells |
+| **Logo** | `--mask logo` | the word `Trix` rendered through the selected font |
 | **Analytic** | `--mask disc` / `ring` / `frame` | a circle / annulus / border band inscribed in the `--size` grid |
-| **Inverse** | add `--mask-invert` | the shape is padded into a larger canvas and complemented, so the maze fills *around* it and the shape becomes holes |
+| **Inverse** | add `--mask-invert` | the shape is padded into a larger canvas (`--mask-margin`) and complemented, so the maze fills *around* it and the shape becomes holes |
 
 So you get the figure two ways: by default the **corridors are the shape**; with
 `--mask-invert` the **shape is punched out** of a full maze.
@@ -537,6 +538,53 @@ certifies that no cell was left stranded. Masking composes with every `--color`
 (each component is shaded by its own internal BFS distance) and any `--algo`;
 `--solve`, `--braid`, and `--weave` are square-rectangle overlays and are skipped
 under a mask.
+
+### 7.3 Fonts
+
+`--mask-text` and `--mask logo` render through a selectable `--font`. Trix has no
+FreeType, so a font cannot be rasterised inside the VM; instead each font is
+pre-rendered by a host tool into a Trix data file under `examples/mask-fonts/`,
+which `amazing.trx` loads on first use (lazily; non-masking runs never touch
+them). `--font-dir` overrides where they are found.
+
+| `--font` | Kind | Source |
+| --- | --- | --- |
+| `5x7` | bitmap (built-in) | the inline 5×7 block font ([§10.2](#102-the---compare-font)); no file load |
+| `roboto-bold` *(default)* | bitmap atlas | Roboto Bold, **Apache-2.0** |
+| `roboto-mono-bold` | bitmap atlas | Roboto Mono Bold, **Apache-2.0** |
+| `hershey-sans` | stroke | Hershey Roman Simplex, **public domain** |
+| `hershey-serif` | stroke | Hershey Roman Triplex, **public domain** |
+| *(your atlas)* | bitmap / stroke | any `examples/mask-fonts/<name>.trx` |
+
+Two **kinds** of font, both producing the same in/out mask:
+
+- **Bitmap atlas** (`roboto-*`): a per-glyph packed bitmap on a common baseline.
+  Glyphs are laid out by proportional advance width (correct spacing; pair
+  kerning is omitted -- sub-cell here), each font pixel a `--mask-scale` block,
+  and the finished word is trimmed to its ink (so `Trix` loses the empty
+  descender band but `Amazing!` keeps the `g`). Filled letterforms.
+- **Stroke font** (`hershey-*`): polyline centerlines rendered in **pure Trix** by
+  stroking each segment with a square pen -- vector, so crisp at any size, with
+  an engraved/wireframe look. No host renderer needed at run time.
+
+**Regenerating / adding fonts.** Two host tools (needed only to regenerate, not
+to run): `tools/gen_mask_font.py` (Pillow + NumPy) downloads Roboto and emits the
+bitmap atlases; `tools/gen_hershey_font.py` (standard library) re-encodes the
+public-domain Hershey coordinates. To use *any* font for your own local mazes:
+
+```bash
+tools/gen_mask_font.py --ttf /path/to/Some-Bold.ttf --name some-bold
+./trix examples/amazing.trx --mask-text Hello --font some-bold --out hi.png
+```
+
+A note on licensing (informational, not legal advice): in the US a typeface
+*design* -- and the pixels it renders -- is not copyrightable; only the font
+*program* is, and the font *name* may be a trademark. Rendering glyphs for your
+own output is unencumbered regardless of the source font's license. The license
+only matters if you intend to *commit / redistribute* the generated atlas. This
+project therefore bundles only **Apache-2.0** (Roboto) and **public-domain**
+(Hershey) glyph data; see `tools/gen_mask_font.py` for a license-by-font table
+and the root `NOTICE.md` for attribution.
 
 ---
 
@@ -613,9 +661,12 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--weave` | -- | Buck-style overpasses (square + backtrack only) | off |
 | `--compare` | `A,B,C` | Side-by-side mono panels of several algorithms | -- |
 | `--mask` | name | Carve the maze into a shape: `disc` / `ring` / `frame` / `logo` ([§7](#7-masking-shape-carved-mazes), square grid) | -- |
-| `--mask-text` | `WORD` | Carve the maze into a word using the built-in 5×7 font | -- |
-| `--mask-scale` | int | Cells per font/logo pixel | `4` |
+| `--mask-text` | `WORD` | Carve the maze into a word, rendered through `--font` | -- |
+| `--font` | name | Font for `--mask-text` / `--mask logo` ([§7.3](#73-fonts)): `5x7` / `roboto-bold` / `roboto-mono-bold` / `hershey-sans` / `hershey-serif` / custom | `roboto-bold` |
+| `--font-dir` | dir | Where to find `mask-fonts/*.trx` | auto |
+| `--mask-scale` | int | Cells per font pixel | `1` hi-res, `4` for `5x7` |
 | `--mask-invert` | -- | Punch the shape out of a full maze (the inverse) | off |
+| `--mask-margin` | int | With `--mask-invert`, surrounding-maze thickness | auto |
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
 | `--bench` | -- | Time all eleven algorithms; write no PNG | off |

@@ -31,10 +31,12 @@ examples/gallery.sh
 | [`color-turbo.png`](color-turbo.png) | **turbo** colormap (perceptually-ordered rainbow) on a Kruskal maze |
 | [`color-cubehelix.png`](color-cubehelix.png) | **cubehelix** colormap (grayscale-safe monotone luminance) on a Kruskal maze |
 | [`color-grayscale.png`](color-grayscale.png) | **grayscale** colormap (smooth black→white ramp) on a Kruskal maze |
-| [`mask-logo.png`](mask-logo.png) | **Masking** — the Trix wordmark (`--mask logo`) carved as maze corridors |
-| [`mask-text-amazing.png`](mask-text-amazing.png) | **Text mask** — `--mask-text AMAZING`, each letter its own perfect maze (built-in 5×7 font), viridis |
+| [`mask-logo.png`](mask-logo.png) | **Masking** — the `Trix` wordmark (`--mask logo`, Roboto Bold), each letter its own perfect maze |
+| [`mask-text-amazing.png`](mask-text-amazing.png) | **Text mask** — `--mask-text 'Amazing!'` (Roboto Bold, default font), inferno; mixed case + punctuation, descenders honored |
+| [`mask-font-roboto.png`](mask-font-roboto.png) | **Font select** — `--mask-text Trix --font roboto-mono-bold`, turbo (Apache-2.0 bitmap atlas) |
+| [`mask-font-hershey.png`](mask-font-hershey.png) | **Stroke font** — `--mask-text Trix --font hershey-serif`, viridis (public-domain Hershey, rendered in pure Trix) |
 | [`mask-disc.png`](mask-disc.png) | **Analytic mask** — `--mask disc`, a circular maze with an inferno distance heatmap |
-| [`mask-trix-invert.png`](mask-trix-invert.png) | **Inverse mask** — `--mask-text TRIX --mask-invert`: the letters are punched out of a full magma maze |
+| [`mask-trix-invert.png`](mask-trix-invert.png) | **Inverse mask** — `--mask-text Trix --mask-invert`: the letters punched out of a full magma maze |
 
 Algorithms: recursive-backtracker, Kruskal, Wilson, Eller, binary-tree,
 sidewinder, Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
