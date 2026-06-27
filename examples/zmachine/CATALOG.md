@@ -115,9 +115,9 @@ freely-distributable per their authors.
 | `LostPig.z8` | V8 | 2 : 080406 | Lost Pig | Admiral Jota | 2007 | PLAY |
 | `Mulldoon.z8` | V8 | 6 : 000724 | The Mulldoon Legacy | Jon Ingold | 1999 | PLAY |
 | `Mullmurd.z5` | V5 | 3 : 020214 | The Mulldoon Murders | Jon Ingold | 2002 | PLAY |
-| `curves.z8` | V8 | 9 : 010613 | All Things Devours | half sick of shadows | 2004 | PLAY |
+| `curves.z8` | V8 | 9 : 010613 | Dangerous Curves | Irene Callaci | 2000 | PLAY |
 | `christminster.z5` | V5 | 4 : 961117 | Christminster -- An Interactive Conspiracy | Gareth Rees | 1995 | PLAY |
-| `jigsaw.z5` | V5 | 3 : 951129 | Jigsaw | Graham Nelson | 1995 | PLAY |
+| `jigsaw.z8` | V8 | 3 : 951129 | Jigsaw | Graham Nelson | 1995 | PLAY |
 | `theatre.z5` | V5 | 2 : 951203 | Theatre | Brendon Wyber | 1995 | PLAY |
 | `sofar.z8` | V8 | 6 : 961218 | So Far | Andrew Plotkin | 1996 | PLAY |
 | `edifice.z5` | V5 | 2 : 980206 | The Edifice | Lucian Smith | 1997 | PLAY |
@@ -165,6 +165,17 @@ freely-distributable per their authors.
 | `heroes.z5` | V5 | 1 : 010928 | Heroes | Sean Barrett | 2001 | PLAY |
 | `Adventureland.z5` | V5 | 4 : 970902 | Adventureland (Scott Adams 1978) | Scott Adams, Inform port by Stuart Moore | 1978/1997 | PLAY (one of the first commercial text adventures) |
 | `zorkian1.z8` | V8 | 1 : 121014 | Zorkian Stories 1: G.U.E. | Andrew R. Pontious | 2012 | PLAY (extracted from `ZorkianStories1-GUE.zblorb`) |
+| `adverbum.z5` | V5 | 11 : 060905 | Ad Verbum | Nick Montfort | 2000 | PLAY (a wordplay game) |
+| `devours.z5` | V5 | 3 : 050325 | All Things Devours | half sick of shadows | 2004 | PLAY (a time-travel puzzle) |
+| `balances.z5` | V5 | 5 : 961216 | Balances | Graham Nelson | 1994 | PLAY (the Inform "Enchanter"-style demo) |
+| `gostak.z5` | V5 | 2 : 020305 | The Gostak | Carl Muckenhoupt | 2001 | PLAY (written in an invented language) |
+| `shade.z5` | V5 | 3 : 001127 | Shade | Andrew Plotkin | 2000 | PLAY (single-room minimalist) |
+| `aug4.z8` | V8 | 4 : 200401 | Augmented Fourth | Brian Uri | 2000 | PLAY (musical comedy) |
+| `misdirection.z5` | V5 | 6 : 060304 | An Act of Misdirection | Callico Harrison | 2004 | PLAY (stage magic) |
+| `weapon.z5` | V5 | 1 : 010706 | The Weapon | Sean Barrett | 2001 | PLAY |
+| `childsplay.z8` | V8 | 4 : 080129 | Child's Play | Stephen Granade | 2007 | PLAY (Inform 7 -> z8; extracted from `ChildsPlay.zblorb`) |
+| `forachange.z5` | V5 | 1 : 990930 | For a Change | Dan Schmidt | 1999 | PLAY (surreal IFComp 1999) |
+| `actofmurder.z8` | V8 | 1 : 070927 | An Act of Murder | Christopher Huang | 2007 | PLAY (randomized whodunit) |
 
 ## Crowther/Woods / Adventure ports
 
@@ -260,6 +271,33 @@ category in one go.
 | File | V | Notes |
 | --- | --- | --- |
 | `advent.z6` | V6 | V6 is the graphical Z-machine.  Pictures, mouse, fonts, windowed UI -- a different surface from V1-V5/V7/V8 prose interpreters.  Out of scope for this showcase. |
+
+### Glulx titles (a different VM -- not runnable here)
+
+Several frequently-requested modern games are **Glulx**, not Z-code.  Glulx
+is a separate 32-bit VM (Inform 7's default compile target, used when a game
+outgrows the Z-machine's 512 KB limit); it has its own instruction set and
+delegates all I/O to the Glk library, so a Z-machine interpreter cannot run it.
+These are listed here so the next person does not go looking for a Z-code build
+that does not exist -- they would need a Glulx interpreter (see
+`blorb-extract.py`, which reports `GLUL` exec chunks):
+
+| Title | Author | Why |
+| --- | --- | --- |
+| Counterfeit Monkey | Emily Short | Glulx (Inform 7) |
+| Coloratura | Lynnea Glasser | Glulx (Inform 7) |
+| Sub Rosa | Joey Jones & Melvin Rangasamy | Glulx (Inform 7) |
+| Superluminal Vagrant Twin | C.E.J. Pacian | Glulx (Inform 7) |
+| The Impossible Bottle | Linus Akesson | Glulx (Inform 7) |
+| Violet | Jeremy Freese | Glulx (Inform 7) |
+| The Wizard Sniffer | Buster Hudson | Glulx (Inform 7) |
+| The Mary Jane of Tomorrow | Emily Short | Glulx (Inform 7) |
+| Dual Transform | Andrew Plotkin | Glulx (Inform 7) |
+| And Then You Come to a House Not Unlike the Previous One | B.J. Best | Glulx (Inform 7) |
+| The Magpie Takes the Train | Mathbrush | Glulx (Inform 7) |
+| The Song of the Mockingbird | Mike Carletta | Glulx (Inform 7) |
+| Take | Katherine Morayati | Glulx (Inform 7) |
+| Foo Foo | -- | no Z-code build exists (the only IF Archive "Foo Foo" is a different, Glulx game) |
 
 ## Where to get the files
 

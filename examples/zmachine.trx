@@ -7406,7 +7406,7 @@ known-games (5:990206)   (Anchorhead -- by Michael S. Gentry)     put
 known-games (2:080406)   (Lost Pig -- by Admiral Jota)            put
 known-games (6:000724)   (The Mulldoon Legacy -- by Jon Ingold)   put
 known-games (3:020214)   (The Mulldoon Murders -- by Jon Ingold)  put
-known-games (9:010613)   (All Things Devours -- by half sick of shadows) put
+known-games (9:010613)   (Dangerous Curves -- by Irene Callaci)    put
 known-games (1:151001)   (Adventure -- Crowther/Woods, V3 port)   put
 known-games (9:060321)   (Adventure -- Crowther/Woods, V5 port)   put
 known-games (1:160307)   (Adventure -- Crowther/Woods, V8 port)   put
@@ -7470,6 +7470,21 @@ known-games (2:961216)   (The Meteor, the Stone and a Long Glass of Sherbet -- b
 known-games (1:010928)   (Heroes -- by Sean Barrett)             put
 known-games (4:970902)   (Adventureland -- by Scott Adams 1978, Inform port) put
 known-games (1:121014)   (Zorkian Stories 1: G.U.E. -- by Andrew R. Pontious) put
+
+% User-requested Z-code classics (added 2026-06-27; see CATALOG.md).  NOTE: the
+% Dangerous Curves entry above (9:010613) had been mislabeled as All Things
+% Devours -- corrected here; the real All Things Devours is 3:050325, below.
+known-games (11:060905)  (Ad Verbum -- by Nick Montfort)         put
+known-games (3:050325)   (All Things Devours -- by half sick of shadows) put
+known-games (5:961216)   (Balances -- by Graham Nelson)          put
+known-games (2:020305)   (The Gostak -- by Carl Muckenhoupt)     put
+known-games (3:001127)   (Shade -- by Andrew Plotkin)            put
+known-games (4:200401)   (Augmented Fourth -- by Brian Uri)      put
+known-games (6:060304)   (An Act of Misdirection -- by Callico Harrison) put
+known-games (1:010706)   (The Weapon -- by Sean Barrett)         put
+known-games (4:080129)   (Child's Play -- by Stephen Granade)    put
+known-games (1:990930)   (For a Change -- by Dan Schmidt)        put
+known-games (1:070927)   (An Act of Murder -- by Christopher Huang) put
 
 % z-game-key -- "rel:serial" key for known-games lookup
 /z-game-key { ||#+1
