@@ -29,6 +29,9 @@ examples/gallery.sh
 | [`flow-image-logo.png`](flow-image-logo.png) | **Image flow field** — `--flow-image logo`, the same weighted Kruskal steered by an IMAGE (the bundled `logo`, sampled from `assets/trix-logo.svg` by `tools/gen_flow_field.py`); the corridors trace the wordmark while Kruskal still punches a perfect maze |
 | [`flow-image-cat.png`](flow-image-cat.png) | **Image flow field (silhouette)** — `--flow-image cat`, a bold silhouette field (drawn by `tools/gen_flow_field.py`); its broad tonal masses steer the flow so the maze drapes over the figure |
 | [`grid-hex-solve.png`](grid-hex-solve.png) | Hex maze with the solution path overlaid in red |
+| [`solve-dead-end-fill.png`](solve-dead-end-fill.png) | **Solver: dead-end-fill** (`--solver dead-end-fill`) — every dead-end iteratively filled (grey), leaving only the start→end solution corridor + red ribbon (the "drained" maze) |
+| [`solve-astar.png`](solve-astar.png) | **Solver: A\*** (`--solver astar`) — the cells A\* expanded tinted blue: a focused frontier toward the goal vs BFS's full flood (same maze/seed as the others) |
+| [`solve-wall-follower.png`](solve-wall-follower.png) | **Solver: wall-follower** (`--solver wall-follower`, square) — the left-hand-rule walk, with its dead-end excursions; finds *a* path, not the shortest |
 | [`monster-magma.png`](monster-magma.png) | **Monster** heatmap — a 400×400 maze (160k cells) in magma distance shading |
 | [`monster-division-rainbow.png`](monster-division-rainbow.png) | **Monster recursive-division** — 400×400 (160k cells), rainbow heatmap; the color blocks expose the recursive partition hierarchy |
 | [`color-cividis.png`](color-cividis.png) | **cividis** colormap (colorblind-friendly perceptual) on a Kruskal maze |

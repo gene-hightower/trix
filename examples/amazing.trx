@@ -3023,6 +3023,226 @@
 } def
 
 % ============================================================================
+%  Section 7H: Solver zoo (dead-end-fill, A*, wall-follower)
+% ============================================================================
+%   These SOLVE an already-generated maze, each with a characteristic
+%   exploration that the --solver flag visualises.  On a perfect maze all three
+%   recover the same unique solution (the ribbon uses bfs-solve); what differs is
+%   HOW: dead-end-fill drains every dead-end until only the solution corridor
+%   remains, A* expands a focused frontier toward the goal, and the wall-follower
+%   traces a hand-on-wall walk.  dead-end-fill and A* ride the descriptor
+%   (neighbors + open?) so they run on every grid; the wall-follower needs a
+%   clean turn order and is square-only.
+
+% (desc g sx sy ex ey) dead-end-fill -- filled fcount
+%   Iteratively fill every degree-1 cell that is not the start/end, decrementing
+%   its surviving neighbour, until none remain.  On a perfect maze the unfilled
+%   cells are exactly the start->end solution.  `filled` is a w*h byte map
+%   (1 = filled); fcount = how many were filled.
+/dead-end-fill {|desc g sx sy ex ey -- filled fcount|#+15
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /sidx sy w mul sx add local-def
+    /eidx ey w mul ex add local-def
+    /scratch 24 array local-def
+    /deg    n chunked-array local-def
+    /filled n chunked-array local-def
+    /q      n chunked-array local-def
+    /qh 0 local-def
+    /qt 0 local-def
+
+    % open-degree of every cell; seed the queue with degree-1 non-endpoints
+    0 1 n 1 sub {|i|#+5
+        /cx i w mod local-def
+        /cy i w div local-def
+        /cnt g cx cy scratch nbrs local-def
+        /d 0 local-def
+        0 1 cnt 1 sub {|k| g cx cy scratch 3 k mul 2 add get opn { /d d 1 add store } if} for
+        deg i d chunked-put
+        filled i 0b chunked-put
+        d 1 eq  i sidx ne  and  i eidx ne  and {
+            q qt i chunked-put  /qt qt 1 add store
+        } if
+    } for
+
+    /fcount 0 local-def
+    { qh qt lt } {||#+8
+        /c q qh chunked-get local-def  /qh qh 1 add store
+        filled c chunked-get 0b eq  deg c chunked-get 1 eq  and
+        c sidx ne  and  c eidx ne  and {
+            filled c 1b chunked-put
+            /fcount fcount 1 add store
+            /cx c w mod local-def
+            /cy c w div local-def
+            /cnt g cx cy scratch nbrs local-def
+            0 1 cnt 1 sub {|k|#+3
+                /d scratch 3 k mul 2 add get local-def
+                g cx cy d opn {
+                    /m scratch 3 k mul 1 add get  w mul  scratch 3 k mul get  add local-def
+                    filled m chunked-get 0b eq {
+                        deg m  deg m chunked-get 1 sub  chunked-put
+                        deg m chunked-get 1 eq  m sidx ne  and  m eidx ne  and {
+                            q qt m chunked-put  /qt qt 1 add store
+                        } if
+                    } if
+                } if
+            } for
+        } if
+    } while
+    filled fcount
+} def
+
+% (desc g sx sy ex ey) astar-solve -- explored ecount
+%   A* from (sx,sy) to (ex,ey) over a binary min-heap keyed by f = g + h, with a
+%   grid-index Manhattan heuristic.  `explored` is a w*h byte map (1 = expanded);
+%   ecount = cells expanded.  On a perfect maze the path is unique (the ribbon
+%   uses bfs-solve); A*'s value here is the focused frontier it expands vs BFS's
+%   full flood.  The heap may hold a cell more than once (lazy decrease-key);
+%   stale pops are skipped via the `closed` map.
+/astar-solve {|desc g sx sy ex ey -- explored ecount|#+18
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /eidx ey w mul ex add local-def
+    /scratch 24 array local-def
+    /BIG 16#7FFFFFFF# local-def
+    /gsc    n chunked-array local-def
+    /closed n chunked-array local-def
+    /hcell 4 n mul 8 add chunked-array local-def
+    /hf    4 n mul 8 add chunked-array local-def
+    /hsize 0 local-def
+    0 1 n 1 sub {|i| gsc i BIG chunked-put  closed i 0b chunked-put} for
+
+    gsc sy w mul sx add 0 chunked-put
+    hcell 0  sy w mul sx add  chunked-put
+    hf 0  sx ex sub abs  sy ey sub abs  add  chunked-put
+    /hsize 1 store
+
+    /ecount 0 local-def
+    /done false local-def
+    { hsize 0 gt  done not  and } {||#+12
+        /c hcell 0 chunked-get local-def
+        /hsize hsize 1 sub store
+        hsize 0 gt {
+            hcell 0 hcell hsize chunked-get chunked-put
+            hf    0 hf    hsize chunked-get chunked-put
+            /pi 0 local-def
+            { true } {||#+6
+                /li 2 pi mul 1 add local-def
+                /ri li 1 add local-def
+                /sm pi local-def
+                li hsize lt { hf li chunked-get hf sm chunked-get lt { /sm li store } if } if
+                ri hsize lt { hf ri chunked-get hf sm chunked-get lt { /sm ri store } if } if
+                sm pi eq { exit } if
+                /tc hcell pi chunked-get local-def  /tf hf pi chunked-get local-def
+                hcell pi hcell sm chunked-get chunked-put  hf pi hf sm chunked-get chunked-put
+                hcell sm tc chunked-put  hf sm tf chunked-put
+                /pi sm store
+            } while
+        } if
+        closed c chunked-get 0b eq {
+            closed c 1b chunked-put
+            /ecount ecount 1 add store
+            c eidx eq { /done true store } {
+                /cx c w mod local-def
+                /cy c w div local-def
+                /cnt g cx cy scratch nbrs local-def
+                0 1 cnt 1 sub {|k|#+6
+                    /d scratch 3 k mul 2 add get local-def
+                    g cx cy d opn {
+                        /m scratch 3 k mul 1 add get  w mul  scratch 3 k mul get  add local-def
+                        closed m chunked-get 0b eq {
+                            /ng gsc c chunked-get 1 add local-def
+                            ng gsc m chunked-get lt {
+                                gsc m ng chunked-put
+                                hcell hsize m chunked-put
+                                hf hsize  ng  m w mod ex sub abs add  m w div ey sub abs add  chunked-put
+                                /hsize hsize 1 add store
+                                /ci hsize 1 sub local-def
+                                { ci 0 gt } {||#+4
+                                    /par ci 1 sub 2 div local-def
+                                    hf ci chunked-get hf par chunked-get lt {
+                                        /tc hcell ci chunked-get local-def  /tf hf ci chunked-get local-def
+                                        hcell ci hcell par chunked-get chunked-put  hf ci hf par chunked-get chunked-put
+                                        hcell par tc chunked-put  hf par tf chunked-put
+                                        /ci par store
+                                    } { exit } if-else
+                                } while
+                            } if
+                        } if
+                    } if
+                } for
+            } if-else
+        } if
+    } while
+    closed ecount
+} def
+
+% (g sx sy ex ey) wall-follow -- walk
+%   Left-hand rule on the SQUARE grid (DIRS order N E S W): try to turn left,
+%   else go straight, else right, else back; record every cell stepped through
+%   (with repeats, since it backs out of dead-ends).  Stops on reaching (ex,ey)
+%   or a 4*n step cap (clamped under the 65535 array limit).  Returns the ordered
+%   [x y] walk; on a connected maze the left hand always reaches the exit.
+/wall-follow {|g sx sy ex ey -- walk|#+14
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /cap 4 n mul 60000 min local-def
+    /walk cap array local-def
+    /cx sx local-def
+    /cy sy local-def
+    /head 1 local-def                       % initial heading E
+    /turns [ 3 0 1 2 ] local-def            % left, straight, right, back
+    /st0 2 array local-def  st0 0 cx put  st0 1 cy put  walk 0 st0 put
+    /wi 1 local-def
+    { cx ex eq  cy ey eq  and  not   wi cap lt  and } {||#+6
+        /moved false local-def
+        0 1 3 {|t|#+4
+            moved not {
+                /try turns t get  head add  4 mod local-def
+                g cx cy try square-open? {
+                    /info DIRS try get local-def
+                    /cx cx info 0 get add store
+                    /cy cy info 1 get add store
+                    /head try store
+                    /moved true store
+                } if
+            } if
+        } for
+        moved {
+            /stp 2 array local-def  stp 0 cx put  stp 1 cy put
+            walk wi stp put  /wi wi 1 add store
+        } { exit } if-else
+    } while
+    /out wi array local-def
+    0 1 wi 1 sub {|j| out j  walk j get  put} for
+    out
+} def
+
+% (rows cells w h cell-px wall-px r g b) tint-cells-square --
+%   Fill each marked (cells[cy*w+cx] != 0) square cell's interior with (r,g,b),
+%   so a solver's work-set (filled dead-ends / A* frontier) shows under the
+%   ribbon.  Same cell geometry as the square renderers; walls stay untouched.
+/tint-cells-square {|rows cells w h cell-px wall-px r g b|#+9
+    /step cell-px wall-px add local-def
+    0 1 h 1 sub {|cy|#+5
+        0 1 w 1 sub {|cx|#+4
+            cells cy w mul cx add chunked-get 0b ne {
+                /x0 cx step mul wall-px add local-def
+                /y0 cy step mul wall-px add local-def
+                rows x0 y0  x0 cell-px add 1 sub  y0 cell-px add 1 sub  r g b fill-rect
+            } if
+        } for
+    } for
+} def
+
+% ============================================================================
 %  Section 8: Pixel buffer + rendering helpers
 % ============================================================================
 
@@ -5610,6 +5830,34 @@
     (origin-shift: spanning-tree edges) edges  ow oh mul 1 sub  eq     expect
 } def
 
+% ----- solver zoo (dead-end-fill, A*, wall-follower) ---------------------
+%   On a perfect maze all three recover the unique solution; the tests pin each
+%   method's invariant.  dead-end-fill must leave EXACTLY the solution (so the
+%   filled count = cells - path length); A* must reach + expand the goal within
+%   [path, cells]; the wall-follower's left hand must arrive at the exit.
+/test-solvers {||#+15
+    1ul rand-seed
+    /gs 8 8 make-grid local-def   gs 0 0 recursive-backtracker
+    /sn 64 local-def
+    /pathlen gs 0 0 7 7 bfs-solve length local-def
+
+    square-desc gs 0 0 7 7 dead-end-fill
+    [ /defilled /defc ] bind-locals
+    (solver: dead-end-fill leaves the solution) defc  sn pathlen sub  eq        expect
+    (solver: dead-end-fill keeps start)         defilled 0  chunked-get 0b eq    expect
+    (solver: dead-end-fill keeps end)           defilled 63 chunked-get 0b eq    expect
+
+    square-desc gs 0 0 7 7 astar-solve
+    [ /aexpl /aec ] bind-locals
+    (solver: astar reached the goal)  aexpl 63 chunked-get 0b ne   expect
+    (solver: astar expanded >= path)  aec pathlen ge               expect
+    (solver: astar expanded <= cells) aec sn le                    expect
+
+    /walk gs 0 0 7 7 wall-follow local-def
+    /wlast walk  walk length 1 sub  get local-def
+    (solver: wall-follower reaches end)  wlast 0 get 7 eq  wlast 1 get 7 eq  and  expect
+} def
+
 % ----- Colormap endpoint sanity (Phase 3) --------------------------------
 %   At t=0 the lookup must hit stop[0]; at t=1 it must hit stop[N-1].
 
@@ -6334,6 +6582,7 @@
 /opt-end-x    -1          def         % -1 = (w-1)
 /opt-end-y    -1          def         % -1 = (h-1)
 /opt-solve    false       def
+/opt-solver   (bfs)        def         % bfs | dead-end-fill | wall-follower | astar (the --solve method)
 /opt-hardest  false       def         % place start/end at the maze's diameter (square)
 /opt-braid    0.0r        def         % 0.0..1.0 fraction of dead-ends to braid
 /opt-weave    false       def         % enable Buck-style overpasses (backtrack only)
@@ -6401,6 +6650,11 @@ OPTIONS
 
   Solving / loops:
     --solve             Draw red ribbon overlay along shortest path
+    --solver NAME       Solve method (implies --solve): bfs (default) |
+                        dead-end-fill | astar | wall-follower.  dead-end-fill
+                        and astar tint their work-set on the square render
+                        (filled dead-ends / expanded frontier) and report a
+                        count on any grid; wall-follower is square-only.
     --hardest           Place start/end at the maze's two most distant
                         cells (graph diameter) and solve it (square grid)
     --start X,Y         Path start cell (default 0,0)
@@ -6498,6 +6752,7 @@ EXAMPLES
                     /opt-end-x eparts 0 get to-number store
                     /opt-end-y eparts 1 get to-number store  /i i 2 add store }
     (--solve)     { /opt-solve   true store  /i i 1 add store }
+    (--solver)    { /opt-solver args i 1 add get store  /opt-solve true store  /i i 2 add store }
     (--hardest)   { /opt-hardest true store  /i i 1 add store }
     (--braid)     { /opt-braid args i 1 add get to-number /real-type cast store
                     /i i 2 add store }
@@ -6892,6 +7147,7 @@ opt-self-test {
     test-algo-connectivity
     test-recursive-division
     test-origin-shift
+    test-solvers
     test-td-matrix
     test-metrics
     test-td-metrics
@@ -7125,15 +7381,40 @@ opt-self-test {
     /img-h pic 1 get def
     /rows  pic 2 get def
 
-    % Optional solve overlay: red ribbon along the shortest path from
-    % --start to --end.  Per-grid topology dispatch -- each grid's
-    % bfs-solve and draw-path-overlay use that topology's neighbor
-    % rules and cell-center geometry.  Hex/theta default --end is
-    % already resolved above for square; recompute for non-square.
+    % Optional solve overlay.  --solver picks the method: bfs (default) draws the
+    % red shortest-path ribbon; dead-end-fill and A* draw the same solution ribbon
+    % but FIRST tint their work-set on the square render (filled dead-ends / the
+    % expanded frontier) and report a count; wall-follower (square only) traces a
+    % left-hand walk as the ribbon.  dead-end-fill / A* ride the descriptor so the
+    % stat is computed on every grid; the tint is square-only.
     opt-solve  opt-mask () eq  and {
         opt-end-x 0 lt { /opt-end-x opt-w 1 sub store } if
         opt-end-y 0 lt { /opt-end-y opt-h 1 sub store } if
         /ribbon-px 2 opt-cell-px 4 div max def
+        /sq opt-grid (square) eq def
+        % wall-follower needs a clean turn order -> square only; warn + fall back.
+        opt-solver (wall-follower) eq  sq not  and {
+            stderr (amazing: --solver wall-follower is square-only; drawing the bfs ribbon on ) write-string
+            stderr opt-grid write-string  stderr (\n) write-string  stderr flush-stream
+            /opt-solver (bfs) store
+        } if
+    opt-solver (wall-follower) eq {
+        /walk grid opt-start-x opt-start-y opt-end-x opt-end-y wall-follow def
+        rows walk opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b draw-path-overlay
+        (solver wall-follower (left-hand): {0}-step walk\n) mark walk length 1 sub print-fmt pop pop
+    } {
+        % dead-end-fill / astar / bfs: tint the work-set (square) then ribbon.
+        /sdesc opt-grid td-descriptor-for def
+        opt-solver (dead-end-fill) eq {
+            sdesc grid opt-start-x opt-start-y opt-end-x opt-end-y dead-end-fill
+            /de-fc exch def  /de-filled exch def
+            sq { rows de-filled opt-w opt-h opt-cell-px opt-wall-px 16#C0#b 16#C4#b 16#C8#b tint-cells-square } if
+        } if
+        opt-solver (astar) eq {
+            sdesc grid opt-start-x opt-start-y opt-end-x opt-end-y astar-solve
+            /as-ec exch def  /as-expl exch def
+            sq { rows as-expl opt-w opt-h opt-cell-px opt-wall-px 16#A8#b 16#C0#b 16#F0#b tint-cells-square } if
+        } if
         opt-grid (square) eq {
             /path grid opt-start-x opt-start-y opt-end-x opt-end-y bfs-solve def
             rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b draw-path-overlay
@@ -7150,6 +7431,17 @@ opt-self-test {
             /path grid opt-start-x opt-start-y opt-end-x opt-end-y upsilon-bfs-solve def
             rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b upsilon-draw-path-overlay
         } if } if-else } if-else } if-else } if-else
+        % report the method's distinctive count (the solution ribbon is drawn)
+        opt-solver (dead-end-fill) eq {
+            (solver dead-end-fill: filled {0} of {1} cells, solution {2}\n)
+                mark de-fc  opt-w opt-h mul  path length  print-fmt pop pop
+        } { opt-solver (astar) eq {
+            (solver astar: expanded {0} cells, solution {1}\n)
+                mark as-ec  path length  print-fmt pop pop
+        } {
+            (solver bfs: solution {0} cells\n) mark path length print-fmt pop pop
+        } if-else } if-else
+    } if-else
     } if
 
     % Encode.

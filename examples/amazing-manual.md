@@ -509,7 +509,37 @@ on the non-square grids it is drawn as a real Bresenham polyline between cell
 centers. If `--braid` has disconnected the end from the start, the solver returns
 an empty path.
 
-### 6.2 `--braid P` -- knocking out dead-ends
+### 6.2 `--solver NAME` -- a zoo of solving methods
+
+`--solver` (which implies `--solve`) picks *how* the maze is solved, and
+visualises the method. On a **perfect** maze all of them recover the same unique
+solution, so the red ribbon is identical -- what differs is the work each does to
+get there, which is the point of the showcase:
+
+- **`bfs`** (default) -- the shortest-path ribbon above; reports its length.
+- **`dead-end-fill`** -- iteratively fills every degree-1 cell that isn't the
+  start or end, decrementing each filled cell's surviving neighbour, until none
+  remain. On a perfect maze the cells left standing are *exactly* the solution
+  corridor. On the square render the filled cells are tinted grey -- the maze
+  "drained" of all its dead-ends. Generic (rides the descriptor's `open?`), so
+  the fill **count** reports on every grid; the tint is square-only.
+- **`astar`** -- A\* from start to end over a binary min-heap keyed by
+  `f = g + h` (grid-Manhattan heuristic). The unique path is the same as BFS's,
+  but A\* **expands far fewer cells** -- a focused frontier biased toward the
+  goal instead of BFS's even flood. The expanded cells are tinted blue (square);
+  the expanded **count** reports everywhere. (On a perfect maze the path is
+  unique regardless of the heuristic; on a braided maze A\* returns a short path.)
+- **`wall-follower`** -- the classic left-hand rule (keep one hand on the wall):
+  at each cell try to turn left, else go straight, else right, else back. It
+  finds *a* path, not the shortest, wandering into and back out of dead-ends, so
+  the ribbon traces the whole winding walk. It needs a clean per-cell turn order
+  (the `N E S W` cycle), so it is **square-only** -- on a non-square `--grid` it
+  warns and falls back to the BFS ribbon.
+
+Each method prints a one-line stat (path length, cells filled / expanded, or walk
+length) so the methods are comparable on the same maze and seed.
+
+### 6.3 `--braid P` -- knocking out dead-ends
 
 A perfect maze is all dead-ends; a **braided** maze removes some, creating loops.
 `--braid P` walks the grid and, for each dead-end, with probability `P` knocks
@@ -520,7 +550,7 @@ theta = 3 of 4, triangle = 2 of 3. Braiding **breaks the spanning-tree property*
 on purpose, which is why a braided maze can have more than one solution (and why
 the solver can come up empty if a region is cut off). Not supported on upsilon.
 
-### 6.3 `--weave` -- bridges and underpasses
+### 6.4 `--weave` -- bridges and underpasses
 
 The flashiest overlay, and **square + backtracker only**. A *weave* maze lets one
 passage cross *over* another. During the backtracker carve, when the next cell
@@ -760,6 +790,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--start` | `X,Y` | Path/heatmap start cell | `0,0` |
 | `--end` | `X,Y` | Path end cell; `-1,-1` = far corner | `-1,-1` |
 | `--solve` | -- | Overlay the shortest-path ribbon in red | off |
+| `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
 | `--braid` | float `0..1` | Fraction of dead-ends to remove | `0.0` |
 | `--weave` | -- | Buck-style overpasses (square + backtrack only) | off |
 | `--compare` | `A,B,C` | Side-by-side mono panels of several algorithms | -- |

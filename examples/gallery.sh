@@ -102,6 +102,15 @@ run "feature-braid-0.5.png"  --algo backtrack --braid 0.5 --size 20x20
 run "feature-braid-1.0.png"  --algo backtrack --braid 1.0 --size 20x20
 run "feature-weave.png"      --algo backtrack --weave --size 25x25 --cell-px 18
 
+# Solver zoo: same maze + same seed, three solving methods.  dead-end-fill
+# drains every dead-end (grey) leaving the solution; A* tints the cells it
+# expanded (blue) -- a focused frontier vs BFS's flood; wall-follower traces
+# the left-hand walk (square only).  All three find the same solution ribbon.
+[[ "$QUIET" -eq 0 ]] && echo "Solver zoo (--solver, square):"
+run "solve-dead-end-fill.png" --solver dead-end-fill --size 25x25 --cell-px 16 --wall-px 2 --seed 42
+run "solve-astar.png"         --solver astar         --size 25x25 --cell-px 16 --wall-px 2 --seed 42
+run "solve-wall-follower.png" --solver wall-follower --size 25x25 --cell-px 16 --wall-px 2 --seed 42
+
 [[ "$QUIET" -eq 0 ]] && echo "Grids:"
 run "grid-square.png"     --algo backtrack --size 20x20
 run "grid-hex.png"        --grid hex --size 16x16 --cell-px 14

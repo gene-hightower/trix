@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: `--solver` zoo (dead-end-fill, A\*, wall-follower).** `--solver NAME`
+  (implies `--solve`) picks how the maze is solved and visualises the method. On a perfect maze all
+  recover the same solution ribbon; what differs is the work: `dead-end-fill` iteratively fills every
+  dead-end until only the solution corridor stands (tinted grey on square -- the "drained" maze),
+  `astar` expands a focused frontier toward the goal over a binary-heap A\* (tinted blue, far fewer
+  cells than BFS's flood), and `wall-follower` traces the left-hand-rule walk (square only; warns and
+  falls back to BFS elsewhere). dead-end-fill and A\* ride the descriptor, so their counts report on
+  every grid; each method prints a one-line stat. Self-test +7 (215).
 - **`examples/amazing.trx`: `--algo origin-shift` (Origin Shift, CaptainLuma 2023).** A
   twelfth maze algorithm, and the only one that doesn't carve or add walls: the maze is
   kept as a directed spanning tree of parent pointers, and each step re-roots it at a

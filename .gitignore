@@ -74,6 +74,9 @@ examples/maze-gallery/*
 !examples/maze-gallery/monster-division-rainbow.png
 !examples/maze-gallery/algo-division-grayscale.png
 !examples/maze-gallery/algo-origin-shift-turbo.png
+!examples/maze-gallery/solve-dead-end-fill.png
+!examples/maze-gallery/solve-astar.png
+!examples/maze-gallery/solve-wall-follower.png
 !examples/maze-gallery/flow-spiral-turbo.png
 !examples/maze-gallery/flow-image-logo.png
 !examples/maze-gallery/flow-image-cat.png
