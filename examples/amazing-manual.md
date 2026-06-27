@@ -21,13 +21,13 @@ limitations under the License.
 # Maze Generation Manual
 
 A teaching reference for the maze zoo built by
-[`examples/amazing.trx`](amazing.trx) -- ten classic maze-generation
+[`examples/amazing.trx`](amazing.trx) -- eleven classic maze-generation
 algorithms, five grid topologies, distance-field heatmaps, and a PNG encoder
 whose file format is assembled in Trix.
 
 This manual is self-contained: read it end to end and you will come away
 understanding how each maze algorithm works, what kind of maze it produces and
-why, how those algorithms generalize off the square grid, and how ~5,200 lines
+why, how those algorithms generalize off the square grid, and how ~5,400 lines
 of Trix turn the result into a real `.png` on disk. No prior background assumed;
 the only Trix-specific idea you need is the [save/restore arena and global
 VM](../docs/local-global-vm.md), which shows up where the hot loops touch a
@@ -44,7 +44,8 @@ on the 128K Macintosh in 1984.
    - [3.1 Carving family (DFS)](#31-carving-family-dfs)
    - [3.2 Spanning-tree family](#32-spanning-tree-family)
    - [3.3 Row-wise family](#33-row-wise-family)
-   - [3.4 Bias at a glance](#34-bias-at-a-glance)
+   - [3.4 Wall-adding family](#34-wall-adding-family)
+   - [3.5 Bias at a glance](#35-bias-at-a-glance)
 4. [Grid Topologies](#4-grid-topologies)
 5. [Distance Fields and Colormaps](#5-distance-fields-and-colormaps)
 6. [Overlays: Solve, Braid, Weave](#6-overlays-solve-braid-weave)
@@ -149,7 +150,7 @@ watch for it in the per-algorithm notes.
 All eleven algorithms below run on the **square** grid. (The four non-square grids
 are backtracker-only -- see [§4](#4-grid-topologies).) Select one with
 `--algo NAME`; the default is `backtrack`. Dispatch is a string-keyed table
-(`algo-dispatch` / `dispatch-algo`, lines 5098-5119).
+(`algo-dispatch` / `dispatch-algo`, lines 5173-5194).
 
 Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
 `binary-tree`, `sidewinder`, `division`); the other six begin carving from
@@ -385,21 +386,25 @@ the unique path length; the field also records `max-d`, the eccentricity used to
 normalize colors. Every topology has its own BFS variant with the same shape but
 the right neighbor set.
 
-**The colormaps** (`--color NAME`, Section 9B, lines 2831-2937). Six are
+**The colormaps** (`--color NAME`, Section 9B, lines 2833-2929). Ten are
 available; the default is `mono` (plain black/white, no distance field computed):
 
-| Name       | Stops | Source                               |
-| ---------- | ----- | ------------------------------------ |
-| `viridis`  | 32    | matplotlib viridis, sampled to 8-bit |
-| `magma`    | 32    | matplotlib magma                     |
-| `inferno`  | 32    | matplotlib inferno                   |
-| `plasma`   | 32    | matplotlib plasma                    |
-| `rainbow`  | 32    | computed HSV cycle (hue = i·360/32)  |
-| `two-tone` | 2     | blue → orange ramp                   |
+| Name        | Stops | Source                                    |
+| ----------- | ----- | ----------------------------------------- |
+| `viridis`   | 32    | matplotlib viridis, sampled to 8-bit      |
+| `magma`     | 32    | matplotlib magma                          |
+| `inferno`   | 32    | matplotlib inferno                        |
+| `plasma`    | 32    | matplotlib plasma                         |
+| `cividis`   | 32    | matplotlib cividis (colorblind-optimized) |
+| `turbo`     | 32    | matplotlib turbo (perceptual rainbow)     |
+| `rainbow`   | 32    | computed HSV cycle (hue = i·360/32)       |
+| `cubehelix` | 32    | matplotlib cubehelix (grayscale-safe)     |
+| `grayscale` | 2     | black → white luminance ramp              |
+| `two-tone`  | 2     | blue → orange ramp                        |
 
 A cell's color is found by normalizing `t = dist / max-d` into `[0,1]`, scaling
 to the stop range, and **linearly interpolating** each RGB channel between the
-two bracketing stops (`cmap-color` / `-lerp-byte`, lines 2887-2913). The polar
+two bracketing stops (`cmap-color` / `-lerp-byte`, lines 2931-2959). The polar
 and octagon renderers precompute one color per cell so the per-pixel inner loop
 stays a pure byte lookup.
 
@@ -501,7 +506,7 @@ This is why `--monster` (a 1001×1001 PNG) works at all.
 ## 8. Command-Line Reference
 
 Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table
-(lines 5001-5057). A bare non-flag argument is taken as the output filename.
+(lines 5076-5132). A bare non-flag argument is taken as the output filename.
 
 | Flag | Argument | Effect | Default |
 | --- | --- | --- | --- |
@@ -610,12 +615,12 @@ The file is organized into numbered `Section N` headers (grep `^%  Section`):
 ### 9.2 The `--compare` font
 
 `--compare` labels each panel using a tiny built-in **5×7 bitmap font** (Section
-12, lines 3978-4001): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
+12, lines 4033-4056): 26 glyphs (A-Z), 7 bytes each, **182 bytes** total, with
 lowercase folded to uppercase and unknown characters rendered blank.
 
 ### 9.3 Self-test
 
-`--self-test` runs **101 assertions** across 27 test procedures (lines 5151-5181):
+`--self-test` runs **109 assertions** across 27 test procedures (lines 5226-5256):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
 fully connected spanning tree), the recursive-division perfect-maze check (connected

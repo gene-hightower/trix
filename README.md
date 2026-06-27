@@ -32,10 +32,10 @@ C++23 | Single-Header | ASan/UBSan clean | Apache 2.0
 grid topologies. <a href="examples/maze-gallery/">More in the gallery.</a></em></p>
 
 <p align="center">
-  <img src="examples/maze-gallery/algo-division-rainbow.png" alt="A 100x100 recursive-division maze rendered as a rainbow distance heatmap by examples/amazing.trx" width="400">
+  <img src="examples/maze-gallery/algo-division-turbo.png" alt="A 100x100 recursive-division maze rendered as a turbo distance heatmap by examples/amazing.trx" width="400">
 </p>
 
-<p align="center"><em>Recursive division as a rainbow distance field &mdash; the color
+<p align="center"><em>Recursive division as a turbo distance field &mdash; the color
 blocks trace the algorithm's nested-room subdivision (a 100&times;100 maze).</em></p>
 
 <p align="center">

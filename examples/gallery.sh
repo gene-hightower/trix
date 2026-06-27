@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 46 PNGs
+#   examples/gallery.sh              Default: 50 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -70,12 +70,12 @@ done
 
 # Curated colored showcase: recursive-division's nested-room structure is
 # most legible as a distance heatmap (the bands trace the subdivision).
-[[ "$QUIET" -eq 0 ]] && echo "Recursive-division showcase (magma + rainbow heatmaps):"
-run "algo-division-magma.png"   --algo division --color magma   --size 30x30  --cell-px 16
-run "algo-division-rainbow.png" --algo division --color rainbow --size 100x100 --cell-px 6 --wall-px 1
+[[ "$QUIET" -eq 0 ]] && echo "Recursive-division showcase (magma + turbo heatmaps):"
+run "algo-division-magma.png" --algo division --color magma --size 30x30  --cell-px 16
+run "algo-division-turbo.png" --algo division --color turbo --size 100x100 --cell-px 6 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Colormaps (kruskal, square 30x30):"
-for color in viridis magma inferno plasma rainbow two-tone; do
+for color in viridis magma inferno plasma cividis turbo rainbow cubehelix grayscale two-tone; do
     run "color-${color}.png" --algo kruskal --color "$color" --size 30x30
 done
 

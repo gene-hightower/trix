@@ -24,8 +24,9 @@
 %   Grids (5):        square, hex (pointy-top, odd-r offset), theta
 %                     (concentric polar rings), triangle (alternating
 %                     up/down by parity), upsilon (octagon + square).
-%   Colormaps (6):    viridis, magma, inferno, plasma, rainbow, two-tone
-%                     (plus mono).  All work on every grid topology.
+%   Colormaps (10):   viridis, magma, inferno, plasma, cividis, turbo,
+%                     rainbow, cubehelix, grayscale, two-tone (plus the
+%                     mono outline).  All work on every grid topology.
 %   Overlays:         Buck-style weave (overpasses with shoulder tint
 %                     + tunnel-wall stubs + drop shadow; square +
 %                     backtracker only); BFS solve ribbon; braid
@@ -2818,15 +2819,17 @@
 } def
 
 % ============================================================================
-%  Section 9B: Colormaps -- inline 32-stop viridis + magma + 2-stop two-tone
+%  Section 9B: Colormaps -- ten ramps (viridis/magma/inferno/plasma/cividis +
+%              turbo/rainbow + cubehelix + grayscale + two-tone)
 % ============================================================================
 %
 %  Each colormap is a hex string of length stops*3, packed RGB-RGB-...  We
-%  linearly interpolate between adjacent stops based on the cell's BFS
-%  distance normalized to [0, 1].  Stops were sampled from matplotlib's
-%  viridis_data / magma_data at evenly spaced indices and rounded to the
-%  nearest 8-bit RGB; the gradient is faithful enough that side-by-side
-%  comparisons with matplotlib look identical at maze sizes <= 100x100.
+%  linearly interpolate between adjacent stops based on the cell's BFS distance
+%  normalized to [0, 1].  Provenance: viridis/magma/inferno/plasma/cividis/turbo
+%  and cubehelix are sampled from matplotlib's colormaps at 32 evenly spaced
+%  indices; rainbow is a computed HSV cycle; grayscale + two-tone are 2-stop
+%  ramps.  All are rounded to 8-bit RGB; the gradients are faithful to matplotlib
+%  at maze sizes <= 100x100.
 
 /viridis-cmap <
     44 01 54   46 0A 5C   47 13 65   48 1D 6E   48 28 76   48 33 7C   46 3E 81   43 4A 86
@@ -2883,6 +2886,48 @@
 > def
 /rainbow-stops 32 def
 
+% Cividis: a colorblind-optimized (deuteranopia) perceptual-uniform sequential
+% map -- dark blue -> slate gray -> yellow.  Completes the viridis/magma/
+% inferno/plasma family with an accessibility-first option.  32 stops from
+% matplotlib's cividis at evenly spaced indices.
+/cividis-cmap <
+    00 22 4E   00 28 5B   00 2E 6A   05 33 71   1C 39 6F   29 3F 6E   33 44 6D   3C 4A 6C
+    45 50 6C   4D 55 6C   55 5B 6D   5C 61 6E   64 67 70   6B 6D 72   72 72 74   78 78 77
+    80 7F 78   88 85 78   90 8B 78   97 91 77   A0 98 75   A8 9E 73   B0 A5 71   B9 AB 6D
+    C2 B3 69   CB B9 65   D3 C0 5F   DC C8 59   E6 D0 51   EF D7 48   F8 DF 3C   FE E8 38
+> def
+/cividis-stops 32 def
+
+% Turbo: a perceptually-ordered rainbow (Google's jet replacement) -- as vivid
+% as `rainbow` but with smooth luminance and no harsh banding, so distance bands
+% with many peers stay legible.  32 stops from matplotlib's turbo.
+/turbo-cmap <
+    30 12 3B   39 2A 73   40 40 A2   44 56 C7   47 6E E6   46 82 F8   41 96 FF   35 AB F8
+    25 C0 E7   1A D2 D2   18 E0 BD   22 EB AA   3C F5 8E   59 FB 73   79 FE 59   96 FE 44
+    AF FA 37   C3 F1 34   D7 E5 35   E7 D7 39   F5 C5 3A   FC B3 36   FE 9E 2F   FC 87 25
+    F6 6C 19   ED 55 10   E2 43 0A   D4 33 05   C1 23 02   AC 17 01   95 0D 01   7A 04 03
+> def
+/turbo-stops 32 def
+
+% Cubehelix (D. A. Green): the luminance rises monotonically across the whole
+% ramp, so the maze stays readable even printed or photocopied in grayscale.
+% black -> purple -> teal -> tan -> pink -> white.  32 stops from matplotlib's
+% default cubehelix (the classic helix: start=0.5, rotations=-1.5, hue=1.0).
+/cubehelix-cmap <
+    00 00 00   0C 05 0E   15 0B 1D   19 13 2D   1B 1F 3D   19 2C 47   16 39 4D   15 47 4E
+    16 57 4B   1C 63 44   26 6C 3C   35 74 35   4C 79 2F   63 7A 2F   7B 7A 35   93 7A 40
+    AC 79 54   BE 79 6A   CA 7C 83   D2 80 9C   D5 89 B8   D2 94 CE   CE A1 DF   C8 AF EA
+    C3 BF F2   C1 CD F3   C3 DA F2   C9 E5 F0   D4 EF EF   E2 F6 F0   F0 FB F5   FF FF FF
+> def
+/cubehelix-stops 32 def
+
+% Grayscale: a smooth black -> white luminance ramp, distinct from the binary
+% `mono` outline render.  Just two stops -- the lerp fills the gradient.
+/grayscale-cmap <
+    00 00 00   FF FF FF
+> def
+/grayscale-stops 2 def
+
 % (a b t) -lerp-byte -- byte    (a, b are Byte; t is Real in [0, 1])
 /-lerp-byte {|a b t -- byte|#+1
     /v  a /real-type cast  b /real-type cast  t  lerp  round /integer-type cast local-def
@@ -2912,18 +2957,28 @@
     cmap off0 2 add get  cmap off1 2 add get  frac -lerp-byte
 } def
 
+% Colormap dispatch table.  Each handler pushes the map's (buffer stops) pair;
+% adding a colormap is one entry here (plus a test-cmap-endpoints check).
+/cmap-dispatch <<
+    (viridis)   { viridis-cmap   viridis-stops   }
+    (magma)     { magma-cmap     magma-stops     }
+    (inferno)   { inferno-cmap   inferno-stops   }
+    (plasma)    { plasma-cmap    plasma-stops    }
+    (cividis)   { cividis-cmap   cividis-stops   }
+    (turbo)     { turbo-cmap     turbo-stops     }
+    (rainbow)   { rainbow-cmap   rainbow-stops   }
+    (cubehelix) { cubehelix-cmap cubehelix-stops }
+    (grayscale) { grayscale-cmap grayscale-stops }
+    (two-tone)  { two-tone-cmap  two-tone-stops  }
+>> def
+
 % (name) get-cmap -- cmap stops    (raises assert on unknown name)
 /get-cmap {|name|
-    name (viridis)  eq { viridis-cmap  viridis-stops  } {
-    name (magma)    eq { magma-cmap    magma-stops    } {
-    name (inferno)  eq { inferno-cmap  inferno-stops  } {
-    name (plasma)   eq { plasma-cmap   plasma-stops   } {
-    name (rainbow)  eq { rainbow-cmap  rainbow-stops  } {
-    name (two-tone) eq { two-tone-cmap two-tone-stops } {
+    cmap-dispatch name known-get { exec } {
         (Unknown --color: ) print name print nl
-        (Valid: mono | viridis | magma | inferno | plasma | rainbow | two-tone) print nl
+        (Valid: mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone) print nl
         (unknown colormap) false assert
-    } if-else } if-else } if-else } if-else } if-else } if-else
+    } if-else
 } def
 
 % ============================================================================
@@ -4313,6 +4368,14 @@
 % ----- Colormap endpoint sanity (Phase 3) --------------------------------
 %   At t=0 the lookup must hit stop[0]; at t=1 it must hit stop[N-1].
 
+% (label cmap stops dist max-d er eg eb) -expect-cmap -- assert the lerped
+%   color equals (er,eg,eb).  Own frame, so callers spend no locals per check.
+/-expect-cmap {|label cmap stops dist max-d er eg eb|#+4
+    cmap stops dist max-d cmap-color
+    [ /got-r /got-g /got-b ] bind-locals
+    label  got-r er eq  got-g eg eq  and  got-b eb eq  and  expect
+} def
+
 /test-cmap-endpoints {||#+18
     viridis-cmap viridis-stops 0u 10u cmap-color
     [ /vr0 /vg0 /vb0 ] bind-locals
@@ -4344,6 +4407,17 @@
     [ /rr0 /rg0 /rb0 ] bind-locals
     (cmap rainbow t=0 = pure-red)
         rr0 16#FF#b eq  rg0 16#00#b eq  and  rb0 16#00#b eq  and  expect
+
+    % New ramps (cividis/turbo/cubehelix from matplotlib, grayscale a 2-stop
+    % ramp): both endpoints, via the -expect-cmap helper.
+    (cmap cividis   t=0 = dark blue)  cividis-cmap   cividis-stops   0u 10u  0b      16#22#b 16#4E#b  -expect-cmap
+    (cmap cividis   t=1 = yellow)     cividis-cmap   cividis-stops  10u 10u  16#FE#b 16#E8#b 16#38#b  -expect-cmap
+    (cmap turbo     t=0 = dark blue)  turbo-cmap     turbo-stops     0u 10u  16#30#b 16#12#b 16#3B#b  -expect-cmap
+    (cmap turbo     t=1 = dark red)   turbo-cmap     turbo-stops    10u 10u  16#7A#b 16#04#b 16#03#b  -expect-cmap
+    (cmap cubehelix t=0 = black)      cubehelix-cmap cubehelix-stops 0u 10u  0b      0b      0b       -expect-cmap
+    (cmap cubehelix t=1 = white)      cubehelix-cmap cubehelix-stops 10u 10u 16#FF#b 16#FF#b 16#FF#b  -expect-cmap
+    (cmap grayscale t=0 = black)      grayscale-cmap grayscale-stops 0u 2u   0b      0b      0b       -expect-cmap
+    (cmap grayscale t=1 = white)      grayscale-cmap grayscale-stops 2u 2u   16#FF#b 16#FF#b 16#FF#b  -expect-cmap
 } def
 
 % ----- color-render end-to-end (Phase 3) ---------------------------------
@@ -4915,7 +4989,7 @@
 /opt-seed     0u          def         % 0 = clock-seeded
 /opt-grid     (square)    def         % square | hex | theta | triangle | upsilon
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
-/opt-color    (mono)      def         % mono | viridis | magma | two-tone
+/opt-color    (mono)      def         % mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone
 /opt-start-x  0           def
 /opt-start-y  0           def
 /opt-end-x    -1          def         % -1 = (w-1)
@@ -4953,8 +5027,9 @@ OPTIONS
                         Non-square grids only support backtrack.
 
   Rendering:
-    --color NAME        mono | viridis | magma | inferno | plasma |
-                        rainbow | two-tone (default mono)
+    --color NAME        mono | viridis | magma | inferno | plasma | cividis |
+                        turbo | rainbow | cubehelix | grayscale | two-tone
+                        (default mono)
     --weave             Buck-style overpasses (square + backtrack only)
 
   Solving / loops:
@@ -5294,8 +5369,8 @@ opt-self-test {
         opt-end-x 0 lt { /opt-end-x opt-w 1 sub store } if
         opt-end-y 0 lt { /opt-end-y opt-h 1 sub store } if
 
-        % Render.  Mono is its own fast path; viridis / magma / two-tone all
-        % go through BFS + cmap-color.
+        % Render.  Mono is its own fast path; every other colormap goes
+        % through BFS + cmap-color.
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px mono-render def
         } {
