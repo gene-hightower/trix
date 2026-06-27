@@ -85,6 +85,7 @@ declare -A SKIP_REASON=(
     [test_gc_stress_continuation.trx]="GC-stress phase -- run via tests/run_gc_stress_tests.sh (debug-only vm-gc-stress / TRIX_DEBUGGER, cannot run under ./trix.opt)"
     [test_gc_stress_logic.trx]="GC-stress phase -- run via tests/run_gc_stress_tests.sh (debug-only vm-gc-stress / TRIX_DEBUGGER, cannot run under ./trix.opt)"
     [test_gc_stress_r6_clone.trx]="GC-stress phase -- run via tests/run_gc_stress_tests.sh (debug-only vm-gc-stress / TRIX_DEBUGGER, cannot run under ./trix.opt)"
+    [test_gc_stress_localdict.trx]="GC-stress phase -- run via tests/run_gc_stress_tests.sh (debug-only vm-gc-stress / TRIX_DEBUGGER, cannot run under ./trix.opt)"
     [test_command_line_args_helper.trx]="helper file (invoked by test_command_line_args.trx)"
     [test_interactive.trx]="needs interactive REPL stdin"
     [test_raw_mode_sandbox.trx]="needs a tty (raw-mode requires it)"

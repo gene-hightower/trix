@@ -183,8 +183,7 @@ static_assert(alignof(RecordInstance) == alignof(Object));
 // a single call (a global field reference in a LOCAL record means localdict, once the
 // record is def'd into it, transitively owns global VM).  No-op for a global record
 // or for all-local fields.  See Save::note_global_into_local.
-static void note_record_fields_barrier(Trix *trx, vm_offset_t instance_offset, const RecordInstance *inst,
-                                       length_t field_count) {
+static void note_record_fields_barrier(Trix *trx, vm_offset_t instance_offset, const RecordInstance *inst, length_t field_count) {
     auto inst_is_global = trx->is_global(instance_offset);
     for (length_t i = 0; i < field_count; ++i) {
         Save::note_global_into_local(trx, inst_is_global, inst->m_fields[i]);

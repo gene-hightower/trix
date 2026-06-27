@@ -1285,12 +1285,12 @@ static constexpr uint8_t ROOT_OBJECT_COUNT{+RootObject::PendingErrorData + 1};
 // exist in every build -- but the accumulators it feeds live only under
 // TRIX_DEBUGGER (member_vars.inl).
 enum struct GcProfileSection : uint8_t {
-    Stacks,       // section 1: running-coroutine hot stacks
-    Coroutines,   // section 2 + 2b: coroutine registry + main context
-    Names,        // section 3: global Name buckets (mask-gated)
-    ObjTables,    // section 4: well-known cache + root-objects array
-    NamedDicts,   // section 5: systemdict / localdict / errordict / handlers / protocol
-    Eqref,        // section 6: eqref tables (eqdict / eqset / eqproc storage)
+    Stacks,         // section 1: running-coroutine hot stacks
+    Coroutines,     // section 2 + 2b: coroutine registry + main context
+    Names,          // section 3: global Name buckets (mask-gated)
+    ObjTables,      // section 4: well-known cache + root-objects array
+    NamedDicts,     // section 5: systemdict / localdict / errordict / handlers / protocol
+    Eqref,          // section 6: eqref tables (eqdict / eqset / eqproc storage)
     SaveJournal,    // section 7: per-save-level journal chains
     RootTail,       // sections 8-11: last-error, misc cells, reactive batch, debugger
     LocalDictScan,  // phase B pre-pass: isolated localdict-closure mark (skip-or-clear)
