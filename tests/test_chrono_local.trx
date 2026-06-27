@@ -83,6 +83,24 @@ rt-fails 0 16#0#b put
 =string ({0:Il%H}) mark 1700000000000ul sprint-fmt pop
 deep-eq not                                             (s5: :I != :Il for NYC)        rt-ok
 
+% %Z / %z need the zone, so :Il formats via the zoned_time (a bare
+% local_time carries none and raised /invalid-format-string).  EST/EDT
+% per the New-York vectors above.
+=string ({0:Il%Z}) mark 1700000000000ul sprint-fmt pop
+(EST) deep-eq                                           (s5: :Il %Z winter EST)        rt-ok
+
+=string ({0:Il%z}) mark 1700000000000ul sprint-fmt pop
+(-0500) deep-eq                                         (s5: :Il %z winter -0500)      rt-ok
+
+=string ({0:Il%Z}) mark 1689422400000ul sprint-fmt pop
+(EDT) deep-eq                                           (s5: :Il %Z summer EDT)        rt-ok
+
+=string ({0:Il%z}) mark 1689422400000ul sprint-fmt pop
+(-0400) deep-eq                                         (s5: :Il %z summer -0400)      rt-ok
+
+=string ({0:Il%H:%M:%S %Z}) mark 1700000000000ul sprint-fmt pop
+(17:13:20 EST) deep-eq                                  (s5: :Il %H:%M:%S %Z combined) rt-ok
+
 % ====================================================================
 % SECTION 6: ScanFmt :Il -- parse local-zone input
 % ====================================================================

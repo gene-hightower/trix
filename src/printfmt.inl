@@ -1659,8 +1659,13 @@ private:
                 if (m_chrono_local) {
                     const auto *zone = m_trx->current_local_zone_or_raise();
                     const zoned_time<seconds> zt{zone, utc_tp};
-                    auto local_tp = zt.get_local_time();
-                    std::vformat_to(std::back_inserter(sink), spec, std::make_format_args(local_tp));
+                    // Format the zoned_time itself, not its bare local_time: a
+                    // local_time carries no zone, so a template with %Z / %z
+                    // raises format_error ("argument does not contain the
+                    // information required by the chrono-specs").  The zoned_time
+                    // supplies the zone abbreviation / offset and yields identical
+                    // output for every other conversion spec.
+                    std::vformat_to(std::back_inserter(sink), spec, std::make_format_args(zt));
                 } else {
                     std::vformat_to(std::back_inserter(sink), spec, std::make_format_args(utc_tp));
                 }

@@ -79,6 +79,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-clear flag. The path-stack workspace offset is added to the snapshot
   header, bumping the format to **v185** (the current snapshot format).
 
+### Fixed
+- **`print-fmt` / `sprint-fmt`: the local-zone instant spec (`:Il…`) now
+  supports the `%Z` and `%z` conversions.** A template such as
+  `{0:Il%H:%M:%S %Z}` previously raised `/invalid-format-string` ("format
+  argument does not contain the information required by the chrono-specs"):
+  the local path formatted a bare `std::chrono::local_time`, which carries no
+  zone, so libstdc++ rejected `%Z` / `%z`. It now formats the `zoned_time`
+  directly, so `%Z` prints the zone abbreviation (`EST` / `EDT`) and `%z` the
+  offset (`-0500`); every other conversion is byte-identical. Surfaced by
+  `examples/log-timestamp.trx`.
+
 ## [0.11.0] - 2026-06-24
 
 ### Added
