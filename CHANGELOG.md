@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the passage/background color are now configurable as `RRGGBB` hex (default black
   lines on a white background), honored across every grid topology and both mono and
   distance-heatmap renders.
+- **`examples/amazing.trx`: `--flow` flow-field mazes.** `--flow radial|linear|spiral|sine`
+  turns Kruskal into a minimum spanning tree over a scalar field -- walls are weighted by
+  the field at their grid midpoint and carved low-weight-first (O(n) counting sort), so the
+  corridors flow along it while staying a perfect maze. Works on every grid and composes
+  with `--color`; `--flow-jitter N` dials the field bias from strict "flow art" (`0`) to a
+  twisty ordinary Kruskal maze.
 - **`globaldict` -- a second user dictionary implementing a PostScript-style
   local/global definition split.** A fixed-capacity dictionary pre-allocated in local
   VM and placed on the dict stack directly below `localdict`, pushed by the new

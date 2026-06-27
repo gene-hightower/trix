@@ -24,6 +24,7 @@ examples/gallery.sh
 | [`compare-4-algos.png`](compare-4-algos.png) | Four algorithms side by side (backtracker, Kruskal, Wilson, Eller) |
 | [`algo-division-magma.png`](algo-division-magma.png) | **Recursive division** (wall-adding), magma heatmap — the color bands trace its nested-room subdivision |
 | [`algo-division-grayscale.png`](algo-division-grayscale.png) | **Recursive division** (wall-adding), grayscale heatmap — the README algorithm hero; nested gray blocks trace the subdivision |
+| [`flow-spiral-turbo.png`](flow-spiral-turbo.png) | **Flow field** — `--flow spiral`, a weighted-Kruskal maze whose corridors follow a scalar field; still a perfect maze (`--flow-jitter` dials art ↔ twisty) |
 | [`grid-hex-solve.png`](grid-hex-solve.png) | Hex maze with the solution path overlaid in red |
 | [`monster-magma.png`](monster-magma.png) | **Monster** heatmap — a 400×400 maze (160k cells) in magma distance shading |
 | [`monster-division-rainbow.png`](monster-division-rainbow.png) | **Monster recursive-division** — 400×400 (160k cells), rainbow heatmap; the color blocks expose the recursive partition hierarchy |

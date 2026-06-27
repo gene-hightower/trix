@@ -2164,10 +2164,74 @@
     } while
 } def
 
+% ----- flow fields (weighted-Kruskal ordering) ------------------------------
+%   --flow FIELD turns Kruskal into a minimum spanning tree over a scalar field:
+%   each wall is weighted by FIELD at the wall's normalized grid midpoint and
+%   walls are carved LOW-weight-first, so the maze texture follows the field
+%   (radial rings / linear gradient / spiral / sine bands).  Works on every grid
+%   (g-kruskal is topology-generic; the field reads logical cell coords).  A
+%   small random dither breaks ties so equal-field bands stay organic.
+
+% (mx my field) -flow-field-val -- scalar ~[0,1] at normalized midpoint (mx,my)
+/-flow-field-val {|mx my field -- v|#+3
+    /dx mx 0.5r sub local-def
+    /dy my 0.5r sub local-def
+    field (radial) eq { dx dy hypot 0.70711r div }
+    { field (linear) eq { mx my add 2.0r div }
+    { field (spiral) eq {
+        /sv  dy dx atan2 6.2831853r div 0.5r add  dx dy hypot 4.0r mul  add local-def
+        sv  sv floor  sub }
+    { field (sine) eq { mx my add 9.42478r mul sin 1.0r add 2.0r div }
+    { mx my add 2.0r div }
+    if-else } if-else } if-else } if-else
+} def
+
+% (ci ni field gw gh) -flow-bucket -- 0..255 weight bucket for the edge ci-ni
+/-flow-bucket {|ci ni field gw gh -- bk|#+3
+    /mx ci gw mod  ni gw mod  add /real-type cast 2.0r div  gw 1 sub 1 max /real-type cast div local-def
+    /my ci gw div  ni gw div  add /real-type cast 2.0r div  gh 1 sub 1 max /real-type cast div local-def
+    /bk mx my field -flow-field-val 255.0r mul /integer-type cast local-def
+    % tie-break dither in [-J, +J] buckets (J = --flow-jitter): 0 = strict field
+    % (pure "flow art"), larger J randomizes toward an ordinary Kruskal maze.
+    /bk bk 0 max 255 min
+         opt-flow-jitter 2 mul 1 add rand-bound-int  opt-flow-jitter sub  add
+         0 max 255 min  store
+    bk
+} def
+
+% (edges nedges field gw gh) -flow-sort -- reorder the (ci,ni,d) triples in
+%   place, low field-weight first (O(n) counting sort over 256 buckets).
+/-flow-sort {|edges nedges field gw gh|#+6
+    /K 256 local-def
+    /ebkt nedges chunked-array local-def
+    /bcount K array local-def
+    0 1 K 1 sub {|i| bcount i 0 put} for
+    0 1 nedges 1 sub {|e|#+2
+        /ea 3 e mul local-def
+        /bk edges ea chunked-get  edges ea 1 add chunked-get  field gw gh -flow-bucket local-def
+        ebkt e bk chunked-put
+        bcount bk  bcount bk get 1 add  put
+    } for
+    /acc 0 local-def
+    0 1 K 1 sub {|i|#+1  /t bcount i get local-def  bcount i acc put  /acc acc t add store} for
+    /out nedges 3 mul chunked-array local-def
+    0 1 nedges 1 sub {|e|#+4
+        /bk ebkt e chunked-get local-def
+        /pos bcount bk get local-def
+        bcount bk pos 1 add put
+        /ea 3 e mul local-def
+        /oa 3 pos mul local-def
+        out oa        edges ea chunked-get        chunked-put
+        out oa 1 add  edges ea 1 add chunked-get  chunked-put
+        out oa 2 add  edges ea 2 add chunked-get  chunked-put
+    } for
+    0 1 nedges 3 mul 1 sub {|k| edges k  out k chunked-get  chunked-put} for
+} def
+
 % ----- generic Kruskal (path-compressed union-find over walls) -------------
 %   Lists each undirected wall once (forward neighbor only, neighborIdx >
-%   cellIdx), shuffles it, and carves a wall iff its two cells are in
-%   different sets.  Reuses -uf-find.
+%   cellIdx), orders it (shuffled, or --flow field-weighted), and carves a wall
+%   iff its two cells are in different sets.  Reuses -uf-find.
 /g-kruskal {|desc g|#+12
     /nbrs desc (neighbors) get local-def
     /lnk  desc (link)      get local-def
@@ -2209,17 +2273,22 @@
         } for
     } for
 
-    % Shuffle the triples (forward Fisher-Yates).
-    0 1 nedges 2 sub {|e|#+4
-        /j  e  nedges e sub rand-bound-int  add local-def
-        /ea 3 e mul local-def
-        /ja 3 j mul local-def
-        0 1 2 {|t|#+1
-            /tmp edges ea t add chunked-get local-def
-            edges ea t add  edges ja t add chunked-get  chunked-put
-            edges ja t add  tmp chunked-put
+    % Order the triples: --flow weights them by a scalar field (low-first);
+    % otherwise a uniform forward Fisher-Yates shuffle.
+    opt-flow () ne {
+        edges nedges opt-flow w h -flow-sort
+    } {
+        0 1 nedges 2 sub {|e|#+4
+            /j  e  nedges e sub rand-bound-int  add local-def
+            /ea 3 e mul local-def
+            /ja 3 j mul local-def
+            0 1 2 {|t|#+1
+                /tmp edges ea t add chunked-get local-def
+                edges ea t add  edges ja t add chunked-get  chunked-put
+                edges ja t add  tmp chunked-put
+            } for
         } for
-    } for
+    } if-else
 
     % Carve when the two endpoints are in different sets.
     0 1 nedges 1 sub {|e|#+7
@@ -5301,7 +5370,7 @@
     tcount
 } def
 
-/test-algo-connectivity {||#+12
+/test-algo-connectivity {||#+14
     1ul rand-seed
     /gb 8 8 make-grid local-def    gb 0 0 recursive-backtracker
     (algo: backtrack 8x8 fully connected)  gb -bfs-unreached  0 eq  expect
@@ -5345,6 +5414,23 @@
     1ul rand-seed
     /gdv 8 8 make-grid local-def   gdv recursive-division
     (algo: division      8x8 fully connected)  gdv -bfs-unreached  0 eq  expect
+
+    % --flow weighted-Kruskal must still yield a fully-connected spanning tree
+    % for every field (the counting sort must keep all edges, none duplicated).
+    /flds [ (radial) (linear) (spiral) (sine) ] local-def
+    0 1 3 {|fi|#+2
+        /opt-flow flds fi get store
+        1ul rand-seed
+        /gfl 8 8 make-grid local-def   gfl (kruskal) 0 0 dispatch-algo
+        (algo: flow ) flds fi get concat ( 8x8 fully connected) concat
+            gfl -bfs-unreached  0 eq  expect
+    } for
+    % jitter=0 (strict field order, maximal ties) must still connect
+    /opt-flow (spiral) store  /opt-flow-jitter 0 store
+    1ul rand-seed
+    /gfs 8 8 make-grid local-def   gfs (kruskal) 0 0 dispatch-algo
+    (algo: flow spiral jitter=0 connected)  gfs -bfs-unreached  0 eq  expect
+    /opt-flow () store  /opt-flow-jitter 3 store
 } def
 
 % ----- recursive-division perfect-maze property --------------------------
@@ -6086,6 +6172,8 @@
 /opt-seed     0u          def         % 0 = clock-seeded
 /opt-grid     (square)    def         % square | hex | theta | triangle | upsilon
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
+/opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
+/opt-flow-jitter 3        def         % --flow tie-break randomness in buckets: 0 = strict art, high = twistier
 /opt-color    (mono)      def         % mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone
 /opt-start-x  0           def
 /opt-start-y  0           def
@@ -6137,6 +6225,11 @@ OPTIONS
                         aldous-broder, prim, hunt-kill, growing-tree;
                         eller/binary-tree/sidewinder/division are
                         square-only.
+    --flow FIELD        Weighted-Kruskal "flow maze": the texture follows a
+                        scalar field -- radial | linear | spiral | sine
+                        (any grid; pairs well with --color)
+    --flow-jitter N     Flow tie-break randomness (default 3): 0 = strict flow
+                        art, larger = twistier / more maze-like
 
   Rendering:
     --color NAME        mono | viridis | magma | inferno | plasma | cividis |
@@ -6228,6 +6321,9 @@ EXAMPLES
                     /i i 2 add store }
     (--out)       { /opt-out args i 1 add get store  /i i 2 add store }
     (--algo)      { /opt-algo args i 1 add get store  /i i 2 add store }
+    (--flow)      { /opt-flow args i 1 add get store  /opt-algo (kruskal) store
+                    /i i 2 add store }
+    (--flow-jitter){ /opt-flow-jitter args i 1 add get to-number store  /i i 2 add store }
     (--color)     { /opt-color args i 1 add get store  /i i 2 add store }
     (--start)     { ||#+1 /sparts args i 1 add get (,) split local-def
                     /opt-start-x sparts 0 get to-number store

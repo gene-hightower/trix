@@ -241,6 +241,22 @@ re-rolled to keep the neighbor choice uniform (the property that makes it a
 ~`n log n` steps -- the slowest in the zoo, included precisely as the cautionary
 "correct but slow" counterpoint to Wilson's.
 
+**Flow fields** (`--flow radial|linear|spiral|sine`)
+A *minimum* spanning tree instead of a random one: Kruskal collects the same
+walls, but orders them by a scalar **field** evaluated at each wall's normalized
+grid midpoint -- carved low-weight-first via an O(n) counting sort -- so the
+spanning tree's spine *follows the field* and the corridors flow in long
+radial / linear / spiral / sine lines. It is still a **perfect maze** (Kruskal's
+union-find guarantees a spanning tree: a unique path between any two cells; the
+self-test checks connectivity for every field), just a low-*twistiness* one --
+the field bias trades puzzle difficulty for visual texture, so it reads as art
+and solves easily. `--flow-jitter N` dials that trade-off: a small random
+tie-break per wall (default `3`), `0` for the strict field ("flow art"), larger
+to randomize toward an ordinary twisty Kruskal maze (e.g. `--flow-jitter 40`
+pushes twistiness past a backtracker's). Works on **every grid** (the field
+reads logical cell coordinates) and composes with `--color`, where the heatmap
+makes the flow structure pop. *No external input* -- the field is analytic.
+
 ### 3.3 Row-wise family
 
 These sweep the grid once, top to bottom, with O(width) or O(1) memory. They are
@@ -694,6 +710,8 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--seed` | uint | RNG seed; `0` seeds from the clock | `0` |
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
 | `--algo` | name | Generation algorithm (7 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
+| `--flow` | name | Weighted-Kruskal flow maze: `radial` / `linear` / `spiral` / `sine` ([§3.2](#32-spanning-tree-family)) | -- |
+| `--flow-jitter` | int | Flow tie-break randomness: `0` = strict art, larger = twistier | `3` |
 | `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` | `square` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |
 | `--start` | `X,Y` | Path/heatmap start cell | `0,0` |
