@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 50 PNGs
+#   examples/gallery.sh              Default: 80 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -118,6 +118,17 @@ run "grid-upsilon.png"          --grid upsilon --size 12x10 --cell-px 24
 run "grid-upsilon-viridis.png"  --grid upsilon --color viridis --size 12x10 --cell-px 24
 run "grid-upsilon-magma.png"    --grid upsilon --color magma --size 12x10 --cell-px 24
 run "grid-upsilon-solve.png"    --grid upsilon --color viridis --solve --size 10x8 --cell-px 24
+
+# The capstone: every portable algorithm carving every non-square grid,
+# driven by the shared topology descriptor (Section 7D-ter).  4 grids x 7
+# portable algos = 28 colored tiles.
+[[ "$QUIET" -eq 0 ]] && echo "Algorithm x topology matrix (portable algos, viridis):"
+for grid in hex theta triangle upsilon; do
+    for algo in backtrack kruskal wilson aldous-broder prim hunt-kill growing-tree; do
+        run "matrix-${grid}-${algo}.png" --grid "$grid" --algo "$algo" \
+            --color viridis --size 16x16 --cell-px 14
+    done
+done
 
 [[ "$QUIET" -eq 0 ]] && echo "Compare:"
 run "compare-4-algos.png" --compare backtrack,kruskal,wilson,eller --size 16x16

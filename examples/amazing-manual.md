@@ -147,10 +147,13 @@ watch for it in the per-algorithm notes.
 
 ## 3. The Algorithm Zoo
 
-All eleven algorithms below run on the **square** grid. (The four non-square grids
-are backtracker-only -- see [§4](#4-grid-topologies).) Select one with
-`--algo NAME`; the default is `backtrack`. Dispatch is a string-keyed table
-(`algo-dispatch` / `dispatch-algo`).
+All eleven algorithms below run on the **square** grid; seven of them
+(recursive-backtracker, Kruskal, Wilson, Aldous-Broder, Prim, Hunt-and-Kill,
+Growing Tree) also run on every non-square grid through a shared topology
+descriptor (see [§4](#4-grid-topologies)). Eller, binary-tree, sidewinder, and
+recursive-division stay square-only. Select one with `--algo NAME`; the default
+is `backtrack`. Dispatch is a string-keyed table (`algo-dispatch` /
+`dispatch-algo` on square, `td-algos` / `dispatch-algo-td` on the others).
 
 Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
 `binary-tree`, `sidewinder`, `division`); the other six begin carving from
@@ -305,14 +308,34 @@ limit.
 
 `--grid TYPE` selects the topology (default `square`). The headline fact:
 
-> **Only the square grid runs the full ten-algorithm zoo.** The four non-square
-> grids (`hex`, `theta`, `triangle`, `upsilon`) are carved by the recursive
-> backtracker only; `--algo` is ignored on them.
+> **The square grid runs the full eleven-algorithm zoo; the four non-square
+> grids (`hex`, `theta`, `triangle`, `upsilon`) run seven of them.** A shared
+> topology descriptor lets backtrack, Kruskal, Wilson, Aldous-Broder, Prim,
+> Hunt-and-Kill, and Growing Tree carve any grid; Eller, binary-tree,
+> sidewinder, and recursive-division stay square-only.
 
 Generalizing maze carving off the square is the genuinely interesting part --
-the backtracker doesn't care about geometry as long as you can answer "what are
+a generator doesn't care about geometry as long as you can answer "what are
 this cell's neighbors?" and "which wall separates these two?". Each grid below
-answers those two questions differently.
+answers those two questions differently. The seven portable algorithms reach
+that answer through a per-topology **descriptor** (`Section 7D-ter`) -- a small
+vtable of `neighbors` / `link` / `visited?` / `mark` procs -- so a single
+implementation of each algorithm drives all five grids. The availability
+matrix:
+
+| Algorithm     | square | hex | theta | triangle | upsilon |
+| ------------- | ------ | --- | ----- | -------- | ------- |
+| backtrack     | +      | +   | +     | +        | +       |
+| kruskal       | +      | +   | +     | +        | +       |
+| wilson        | +      | +   | +     | +        | +       |
+| aldous-broder | +      | +   | +     | +        | +       |
+| prim          | +      | +   | +     | +        | +       |
+| hunt-kill     | +      | +   | +     | +        | +       |
+| growing-tree  | +      | +   | +     | +        | +       |
+| eller         | +      |     |       |          |         |
+| binary-tree   | +      |     |       |          |         |
+| sidewinder    | +      |     |       |          |         |
+| division      | +      |     |       |          |         |
 
 Slanted and curved walls are drawn with an integer **Bresenham line** primitive
 (`-draw-line`); only the square grid gets away with
@@ -513,7 +536,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--wall-px` | int | Wall thickness in pixels | `2` |
 | `--seed` | uint | RNG seed; `0` seeds from the clock | `0` |
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
-| `--algo` | name | Generation algorithm (square only) | `backtrack` |
+| `--algo` | name | Generation algorithm (7 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
 | `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` | `square` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |
 | `--start` | `X,Y` | Path/heatmap start cell | `0,0` |
@@ -601,7 +624,8 @@ The file is organized into numbered `Section N` headers (grep `^%  Section`):
 | 5B-5E   | Hex / theta / triangle / upsilon grids                 |
 | 6-7     | Direction shuffle; recursive backtracker               |
 | 7B-7C   | Kruskal, Wilson                                        |
-| 7C-*    | Per-topology backtrackers                              |
+| 7C-*    | Per-topology backtrackers (test oracles)               |
+| 7D-ter  | Topology descriptor vtable + generic algorithm engine  |
 | 7D-7G   | Eller; long-tail algorithms; recursive division; braid |
 | 7D / 7F | BFS distance field; path solver; hardest pair          |
 | 8-10E   | Pixel buffer; mono and color renderers per grid        |

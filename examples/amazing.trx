@@ -24,6 +24,12 @@
 %   Grids (5):        square, hex (pointy-top, odd-r offset), theta
 %                     (concentric polar rings), triangle (alternating
 %                     up/down by parity), upsilon (octagon + square).
+%   Algo x grid:      7 of the 11 algorithms (backtrack, Kruskal,
+%                     Wilson, Aldous-Broder, Prim, Hunt-and-Kill,
+%                     Growing Tree) run on ALL five grids through a
+%                     shared topology descriptor (Section 7D-ter);
+%                     Eller/binary-tree/sidewinder/division are
+%                     square-only.  35 portable combos.
 %   Colormaps (10):   viridis, magma, inferno, plasma, cividis, turbo,
 %                     rainbow, cubehelix, grayscale, two-tone (plus the
 %                     mono outline).  All work on every grid topology.
@@ -2256,6 +2262,636 @@
             } if-else
         } if
     } while
+} def
+
+% ============================================================================
+%  Section 7D-ter: Topology descriptors + generic algorithm engine
+% ============================================================================
+%
+%  Until now each non-square topology shipped its OWN recursive
+%  backtracker with neighbor enumeration inlined, and the six other
+%  passage-carvers (kruskal/wilson/aldous-broder/prim/hunt-kill/
+%  growing-tree) existed only for the square grid.  Every topology,
+%  though, addresses its cells the same way: a (col,row) pair in
+%  [0,w) x [0,h).  Only three things vary -- how a cell's neighbors are
+%  enumerated (direction count, row/shape parity, sector wrap), how a
+%  wall is carved, and how the visited bit is read/written -- and all of
+%  that logic already exists, scattered through the per-topology
+%  backtrackers.
+%
+%  A topology DESCRIPTOR lifts those varying pieces into a small dict of
+%  procs (a vtable):
+%
+%      (neighbors) {g cx cy out -- count}  fill `out` with `count`
+%                                          (nx ny d) triples for every
+%                                          in-bounds neighbor (parity,
+%                                          wrap and bounds already applied)
+%      (link)      {g cx cy d -- }         carve the wall in direction d
+%      (visited?)  {g cx cy -- bool}       read the visited bit
+%      (mark)      {g cx cy -- }           set the visited bit
+%
+%  `neighbors` writes into a caller-owned scratch array and returns a
+%  count -- no per-step allocation, which matters because aldous-broder
+%  revisits cells thousands of times.  The seven topology-agnostic
+%  generators below are written ONCE against this vtable; each binds the
+%  four procs to locals at entry and invokes them by name in its hot loop
+%  (a frame-local bound to a procedure auto-executes when named, so no
+%  explicit `exec` is wanted), making the dict lookup happen once per run,
+%  not once per step.  Auxiliary
+%  arrays key cells by the flat index cy*w+cx -- any bijection works, and
+%  the descriptor owns every geometric subtlety, so the index is just a
+%  label.
+
+% ----- per-topology neighbor enumerators -----------------------------------
+%   Each fills `out` with (nx ny d) triples at out[3i..3i+2] and returns
+%   the in-bounds neighbor count.
+
+/square-neighbors {|g cx cy out -- count|#+4
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /cnt 0 local-def
+    0 1 3 {|d|#+5
+        /info DIRS d get local-def
+        /nx cx info 0 get add local-def
+        /ny cy info 1 get add local-def
+        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
+            /b 3 cnt mul local-def
+            out b       nx put
+            out b 1 add ny put
+            out b 2 add d  put
+            /cnt cnt 1 add store
+        } if
+    } for
+    cnt
+} def
+
+/hex-neighbors {|g cx cy out -- count|#+5
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /even cy 2 mod 0 eq local-def
+    /cnt 0 local-def
+    0 1 5 {|d|#+7
+        /info HEX-DIRS d get local-def
+        /dx even { info 0 get } { info 2 get } if-else local-def
+        /dy even { info 1 get } { info 3 get } if-else local-def
+        /nx cx dx add local-def
+        /ny cy dy add local-def
+        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
+            /b 3 cnt mul local-def
+            out b       nx put
+            out b 1 add ny put
+            out b 2 add d  put
+            /cnt cnt 1 add store
+        } if
+    } for
+    cnt
+} def
+
+/theta-neighbors {|g cx cy out -- count|#+4
+    /rings   g grid-w local-def
+    /sectors g grid-h local-def
+    /cnt 0 local-def
+    0 1 3 {|d|#+5
+        /info THETA-DIRS d get local-def
+        /nr cx info 0 get add local-def
+        /ns cy info 1 get add sectors add sectors mod local-def
+        nr 0 ge nr rings lt and {
+            /b 3 cnt mul local-def
+            out b       nr put
+            out b 1 add ns put
+            out b 2 add d  put
+            /cnt cnt 1 add store
+        } if
+    } for
+    cnt
+} def
+
+/triangle-neighbors {|g cx cy out -- count|#+5
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /up cx cy triangle-up? local-def
+    /cnt 0 local-def
+    0 1 2 {|d|#+7
+        /info TRI-DIRS d get local-def
+        /dx up { info 0 get } { info 2 get } if-else local-def
+        /dy up { info 1 get } { info 3 get } if-else local-def
+        /nx cx dx add local-def
+        /ny cy dy add local-def
+        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
+            /b 3 cnt mul local-def
+            out b       nx put
+            out b 1 add ny put
+            out b 2 add d  put
+            /cnt cnt 1 add store
+        } if
+    } for
+    cnt
+} def
+
+/upsilon-neighbors {|g cx cy out -- count|#+6
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /oct   cx cy upsilon-octagon? local-def
+    /ndirs oct { 8 } { 4 } if-else local-def
+    /cnt 0 local-def
+    0 1 ndirs 1 sub {|d|#+5
+        /info oct { UPSILON-DIRS-OCT d get } { UPSILON-DIRS-SQ d get } if-else local-def
+        /nx cx info 0 get add local-def
+        /ny cy info 1 get add local-def
+        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
+            /b 3 cnt mul local-def
+            out b       nx put
+            out b 1 add ny put
+            out b 2 add d  put
+            /cnt cnt 1 add store
+        } if
+    } for
+    cnt
+} def
+
+% ----- descriptors (vtables) ------------------------------------------------
+%   Hex and triangle store the visited bit in the same 1-byte cell as the
+%   square grid, so they reuse cell-visited?/mark-visited.
+
+/square-desc <<
+    (neighbors) { square-neighbors }
+    (link)      { carve-wall }
+    (visited?)  { cell-visited? }
+    (mark)      { mark-visited }
+>> def
+
+/hex-desc <<
+    (neighbors) { hex-neighbors }
+    (link)      { hex-carve-wall }
+    (visited?)  { cell-visited? }
+    (mark)      { mark-visited }
+>> def
+
+/theta-desc <<
+    (neighbors) { theta-neighbors }
+    (link)      { theta-carve-wall }
+    (visited?)  { theta-cell-visited? }
+    (mark)      { theta-mark-visited }
+>> def
+
+/triangle-desc <<
+    (neighbors) { triangle-neighbors }
+    (link)      { triangle-carve-wall }
+    (visited?)  { cell-visited? }
+    (mark)      { mark-visited }
+>> def
+
+/upsilon-desc <<
+    (neighbors) { upsilon-neighbors }
+    (link)      { upsilon-carve-wall }
+    (visited?)  { upsilon-cell-visited? }
+    (mark)      { upsilon-mark-visited }
+>> def
+
+/TD-DESCRIPTORS <<
+    (square)   square-desc
+    (hex)      hex-desc
+    (theta)    theta-desc
+    (triangle) triangle-desc
+    (upsilon)  upsilon-desc
+>> def
+
+% (name) td-descriptor-for -- descriptor dict (errors on unknown topology)
+/td-descriptor-for {|name -- desc|#+1
+    TD-DESCRIPTORS name known-get
+    { }
+    { (amazing: unknown topology ) print name print (\n) print
+      (unknown topology) false assert }
+    if-else
+} def
+
+% ----- generic recursive backtracker ---------------------------------------
+%   Iterative DFS over an explicit cell-index stack.  At each cell we
+%   gather its unvisited neighbors and step to a uniformly random one
+%   (carving as we go); when none remain we pop.  Exactly one wall is
+%   carved per newly-visited cell, so the result is a spanning tree -- a
+%   perfect maze -- on any topology.
+/g-backtracker {|desc g sx sy|#+12
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /stack n chunked-array local-def
+    /sp 0 local-def
+    /scratch 24 array local-def
+    /uv      24 array local-def
+
+    g sx sy mrk
+    stack sp  sy w mul sx add  chunked-put
+    /sp sp 1 add store
+
+    { sp 0 gt } {||#+12
+        /idx stack sp 1 sub chunked-get local-def
+        /cx idx w mod local-def
+        /cy idx w div local-def
+        /cnt g cx cy scratch nbrs local-def
+        /uvn 0 local-def
+        0 1 cnt 1 sub {|k|#+6
+            /b 3 k mul local-def
+            /nx scratch b       get local-def
+            /ny scratch b 1 add get local-def
+            /nd scratch b 2 add get local-def
+            g nx ny vis not {
+                /ub 3 uvn mul local-def
+                uv ub       nx put
+                uv ub 1 add ny put
+                uv ub 2 add nd put
+                /uvn uvn 1 add store
+            } if
+        } for
+        uvn 0 gt {
+            /j uvn rand-bound-int local-def
+            /jb 3 j mul local-def
+            /jx uv jb       get local-def
+            /jy uv jb 1 add get local-def
+            /jd uv jb 2 add get local-def
+            g cx cy jd lnk
+            g jx jy mrk
+            stack sp  jy w mul jx add  chunked-put
+            /sp sp 1 add store
+        } {
+            /sp sp 1 sub store
+        } if-else
+    } while
+} def
+
+% ----- generic Kruskal (path-compressed union-find over walls) -------------
+%   Lists each undirected wall once (forward neighbor only, neighborIdx >
+%   cellIdx), shuffles it, and carves a wall iff its two cells are in
+%   different sets.  Reuses -uf-find.
+/g-kruskal {|desc g|#+12
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+
+    % Pass 1: count forward edges so the edge array can be sized exactly.
+    /nedges 0 local-def
+    0 1 n 1 sub {|i|#+2
+        /cnt g  i w mod  i w div  scratch nbrs local-def
+        0 1 cnt 1 sub {|k|#+2
+            /b 3 k mul local-def
+            scratch b 1 add get  w mul  scratch b get  add   i gt {
+                /nedges nedges 1 add store
+            } if
+        } for
+    } for
+
+    % Union-find parent array (uf[i] == i at a root).
+    /uf n chunked-array local-def
+    0 1 n 1 sub {|i| uf i i chunked-put } for
+
+    % Pass 2: collect edges as flat (cellIdx, neighborIdx, d) triples.
+    /edges nedges 3 mul chunked-array local-def
+    /ei 0 local-def
+    0 1 n 1 sub {|i|#+2
+        /cnt g  i w mod  i w div  scratch nbrs local-def
+        0 1 cnt 1 sub {|k|#+3
+            /b 3 k mul local-def
+            /nidx scratch b 1 add get  w mul  scratch b get  add local-def
+            nidx i gt {
+                edges ei        i    chunked-put
+                edges ei 1 add  nidx chunked-put
+                edges ei 2 add  scratch b 2 add get  chunked-put
+                /ei ei 3 add store
+            } if
+        } for
+    } for
+
+    % Shuffle the triples (forward Fisher-Yates).
+    0 1 nedges 2 sub {|e|#+4
+        /j  e  nedges e sub rand-bound-int  add local-def
+        /ea 3 e mul local-def
+        /ja 3 j mul local-def
+        0 1 2 {|t|#+1
+            /tmp edges ea t add chunked-get local-def
+            edges ea t add  edges ja t add chunked-get  chunked-put
+            edges ja t add  tmp chunked-put
+        } for
+    } for
+
+    % Carve when the two endpoints are in different sets.
+    0 1 nedges 1 sub {|e|#+7
+        /ea 3 e mul local-def
+        /ci edges ea       chunked-get local-def
+        /ni edges ea 1 add chunked-get local-def
+        /ed edges ea 2 add chunked-get local-def
+        /ra uf ci -uf-find local-def
+        /rb uf ni -uf-find local-def
+        ra rb ne {
+            g  ci w mod  ci w div  ed lnk
+            uf ra rb chunked-put
+        } if
+    } for
+} def
+
+% ----- generic Wilson (loop-erased random walk: uniform spanning tree) ------
+/g-wilson {|desc g sx sy|#+13
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+    /wnext n chunked-array local-def
+    /wdir  n chunked-array local-def
+    /remaining n 1 sub local-def
+    /scan 0 local-def
+
+    g sx sy mrk
+    { remaining 0 gt } {||#+5
+        % advance to the lowest-index not-yet-in-maze cell
+        { g  scan w mod  scan w div  vis } { /scan scan 1 add store } while
+        /wx scan w mod local-def
+        /wy scan w div local-def
+        % random walk until we touch the maze (loop-erased by overwrite)
+        { g wx wy vis not } {||#+7
+            /cnt g wx wy scratch nbrs local-def
+            /p 3 cnt rand-bound-int mul local-def
+            /nx scratch p       get local-def
+            /ny scratch p 1 add get local-def
+            /nd scratch p 2 add get local-def
+            /ci wy w mul wx add local-def
+            wdir  ci nd chunked-put-persist
+            wnext ci  ny w mul nx add  chunked-put-persist
+            /wx nx store
+            /wy ny store
+        } while
+        % retrace from the start, carving + adopting each cell
+        /rx scan w mod local-def
+        /ry scan w div local-def
+        { g rx ry vis not } {||#+4
+            /ci ry w mul rx add local-def
+            /d wdir ci chunked-get local-def
+            g rx ry d lnk
+            g rx ry mrk
+            /remaining remaining 1 sub store
+            /ni wnext ci chunked-get local-def
+            /rx ni w mod store
+            /ry ni w div store
+        } while
+    } while
+} def
+
+% ----- generic Aldous-Broder (random walk, carve on first visit) -----------
+/g-aldous-broder {|desc g sx sy|#+12
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+    /unvisited n 1 sub local-def
+    /cx sx local-def
+    /cy sy local-def
+    g cx cy mrk
+    { unvisited 0 gt } {||#+6
+        /cnt g cx cy scratch nbrs local-def
+        /p 3 cnt rand-bound-int mul local-def
+        /nx scratch p       get local-def
+        /ny scratch p 1 add get local-def
+        /nd scratch p 2 add get local-def
+        g nx ny vis not {
+            g cx cy nd lnk
+            g nx ny mrk
+            /unvisited unvisited 1 sub store
+        } if
+        /cx nx store
+        /cy ny store
+    } while
+} def
+
+% ----- generic Prim (random frontier growth) -------------------------------
+/g-prim {|desc g sx sy|#+12
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+    /infront n chunked-array local-def
+    0 1 n 1 sub {|i| infront i 0 chunked-put } for
+    /frontier n chunked-array local-def
+    /fsize 0 local-def
+
+    g sx sy mrk
+    /cnt g sx sy scratch nbrs local-def
+    0 1 cnt 1 sub {|k|#+2
+        /ni scratch 3 k mul 1 add get  w mul  scratch 3 k mul get  add local-def
+        infront ni chunked-get 0 eq {
+            frontier fsize ni chunked-put
+            /fsize fsize 1 add store
+            infront ni 1 chunked-put
+        } if
+    } for
+
+    { fsize 0 gt } {||#+10
+        /pi fsize rand-bound-int local-def
+        /pidx frontier pi chunked-get local-def
+        /px pidx w mod local-def
+        /py pidx w div local-def
+        frontier pi  frontier fsize 1 sub chunked-get  chunked-put
+        /fsize fsize 1 sub store
+
+        /pcnt g px py scratch nbrs local-def
+        /vc 0 local-def
+        /vlist 8 array local-def
+        0 1 pcnt 1 sub {|k|#+4
+            /b 3 k mul local-def
+            g  scratch b get  scratch b 1 add get  vis {
+                vlist vc  scratch b 2 add get  put
+                /vc vc 1 add store
+            } if
+        } for
+        vc 0 gt {
+            /pd vlist  vc rand-bound-int  get local-def
+            g px py pd lnk
+            g px py mrk
+            0 1 pcnt 1 sub {|k|#+3
+                /b 3 k mul local-def
+                g  scratch b get  scratch b 1 add get  vis not {
+                    /ni scratch b 1 add get  w mul  scratch b get  add local-def
+                    infront ni chunked-get 0 eq {
+                        frontier fsize ni chunked-put
+                        /fsize fsize 1 add store
+                        infront ni 1 chunked-put
+                    } if
+                } if
+            } for
+        } if
+    } while
+} def
+
+% ----- generic Hunt-and-Kill -----------------------------------------------
+/g-hunt-kill {|desc g sx sy|#+12
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /scratch 24 array local-def
+    /cx sx local-def
+    /cy sy local-def
+    g cx cy mrk
+    /done false local-def
+
+    { done not } {||#+14
+        % WALK: collect (cx,cy)'s unvisited neighbors, step to a random one.
+        /cnt g cx cy scratch nbrs local-def
+        /uc 0 local-def
+        /ulist 24 array local-def
+        0 1 cnt 1 sub {|k|#+6
+            /b 3 k mul local-def
+            /nx scratch b       get local-def
+            /ny scratch b 1 add get local-def
+            /nd scratch b 2 add get local-def
+            g nx ny vis not {
+                /ub 3 uc mul local-def
+                ulist ub       nx put
+                ulist ub 1 add ny put
+                ulist ub 2 add nd put
+                /uc uc 1 add store
+            } if
+        } for
+        uc 0 gt {
+            /j uc rand-bound-int local-def
+            /jb 3 j mul local-def
+            g cx cy  ulist jb 2 add get  lnk
+            g ulist jb get  ulist jb 1 add get  mrk
+            /cx ulist jb       get store
+            /cy ulist jb 1 add get store
+        } {
+            % HUNT: row-major scan for an unvisited cell next to a visited one.
+            /found false local-def
+            0 1 h 1 sub {|hy|#+10
+                found not {
+                    0 1 w 1 sub {|hx|#+10
+                        found not {
+                            g hx hy vis not {
+                                /hcnt g hx hy scratch nbrs local-def
+                                /hvc 0 local-def
+                                /hvlist 8 array local-def
+                                0 1 hcnt 1 sub {|k|#+2
+                                    /b 3 k mul local-def
+                                    g  scratch b get  scratch b 1 add get  vis {
+                                        hvlist hvc  scratch b 2 add get  put
+                                        /hvc hvc 1 add store
+                                    } if
+                                } for
+                                hvc 0 gt {
+                                    g hx hy  hvlist  hvc rand-bound-int  get  lnk
+                                    g hx hy mrk
+                                    /cx hx store
+                                    /cy hy store
+                                    /found true store
+                                } if
+                            } if
+                        } if
+                    } for
+                } if
+            } for
+            found not { /done true store } if
+        } if-else
+    } while
+} def
+
+% ----- generic Growing Tree (Prim / backtracker hybrid, 50/50 pick) --------
+/g-growing-tree {|desc g sx sy|#+11
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /vis  desc (visited?)  get local-def
+    /mrk  desc (mark)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+    /active n chunked-array local-def
+    /asize 0 local-def
+
+    g sx sy mrk
+    active 0  sy w mul sx add  chunked-put
+    /asize 1 store
+
+    { asize 0 gt } {||#+13
+        /pi
+            rand-real 0.5r lt
+                { asize rand-bound-int }
+                { asize 1 sub }
+                if-else
+            local-def
+        /pidx active pi chunked-get local-def
+        /px pidx w mod local-def
+        /py pidx w div local-def
+        /cnt g px py scratch nbrs local-def
+        /uc 0 local-def
+        /ulist 24 array local-def
+        0 1 cnt 1 sub {|k|#+6
+            /b 3 k mul local-def
+            /nx scratch b       get local-def
+            /ny scratch b 1 add get local-def
+            /nd scratch b 2 add get local-def
+            g nx ny vis not {
+                /ub 3 uc mul local-def
+                ulist ub       nx put
+                ulist ub 1 add ny put
+                ulist ub 2 add nd put
+                /uc uc 1 add store
+            } if
+        } for
+        uc 0 gt {
+            /j uc rand-bound-int local-def
+            /jb 3 j mul local-def
+            g px py  ulist jb 2 add get  lnk
+            g ulist jb get  ulist jb 1 add get  mrk
+            active asize  ulist jb 1 add get  w mul  ulist jb get  add  chunked-put
+            /asize asize 1 add store
+        } {
+            active pi  active asize 1 sub chunked-get  chunked-put
+            /asize asize 1 sub store
+        } if-else
+    } while
+} def
+
+% ----- topology-aware algorithm dispatch -----------------------------------
+%   The seven topology-agnostic generators, keyed by the same --algo names
+%   the square dispatch uses.  Each handler runs inside dispatch-algo-td's
+%   frame, so it resolves desc/g/sx/sy dynamically (kruskal ignores sx/sy).
+%   binary-tree/sidewinder/eller/division/weave stay square-only and are
+%   absent here -- requesting one on a non-square grid is a clear error.
+/td-algos <<
+    (backtrack)     { desc g sx sy g-backtracker }
+    (kruskal)       { desc g       g-kruskal }
+    (wilson)        { desc g sx sy g-wilson }
+    (aldous-broder) { desc g sx sy g-aldous-broder }
+    (prim)          { desc g sx sy g-prim }
+    (hunt-kill)     { desc g sx sy g-hunt-kill }
+    (growing-tree)  { desc g sx sy g-growing-tree }
+>> def
+
+% (desc g algo sx sy) dispatch-algo-td --
+/dispatch-algo-td {|desc g algo sx sy -- |#+1
+    td-algos algo known-get { exec } {
+        (Unsupported --algo on this topology: ) print algo print nl
+        (Portable: backtrack | kruskal | wilson | aldous-broder | prim | hunt-kill | growing-tree) print nl
+        (unsupported algo on this topology) false assert
+    } if-else
 } def
 
 % ============================================================================
@@ -5025,7 +5661,10 @@ OPTIONS
                         binary-tree | sidewinder | aldous-broder |
                         prim | hunt-kill | growing-tree | division
                         (default backtrack)
-                        Non-square grids only support backtrack.
+                        All grids support backtrack, kruskal, wilson,
+                        aldous-broder, prim, hunt-kill, growing-tree;
+                        eller/binary-tree/sidewinder/division are
+                        square-only.
 
   Rendering:
     --color NAME        mono | viridis | magma | inferno | plasma | cividis |
@@ -5341,6 +5980,42 @@ opt-bench {
         hpath length  hmax /integer-type cast 1 add  eq       expect
 } def
 
+% ----- generic engine: every portable algorithm spans every topology -----
+%   For each (topology x portable-algo) combo, run the generic algorithm
+%   through dispatch-algo-td on a fresh grid and assert the result is fully
+%   connected.  Connectivity + the carve-once invariant => a perfect maze.
+%   This exercises the vtable dispatch, all five neighbor enumerators, and
+%   all seven generic generators in one matrix (35 combos).
+/-td-unreached <<
+    (square)   { -bfs-unreached }
+    (hex)      { -hex-bfs-unreached }
+    (theta)    { -theta-bfs-unreached }
+    (triangle) { -triangle-bfs-unreached }
+    (upsilon)  { -upsilon-bfs-unreached }
+>> def
+
+% (topo desc ucheck mg) -td-test-combo -- run all 7 portable algos, assert
+%   connected.  mg = 0-arg proc building a fresh grid; ucheck = (g -- count).
+/-td-test-combo {|topo desc ucheck mg|#+4
+    /algos [ (backtrack) (kruskal) (wilson) (aldous-broder) (prim) (hunt-kill) (growing-tree) ] local-def
+    0 1 6 {|ai|#+3
+        /a algos ai get local-def
+        /g mg local-def
+        desc g a 0 0 dispatch-algo-td
+        (td/) topo concat (/) concat a concat ( connected) concat
+        g ucheck 0 eq  expect
+    } for
+} def
+
+/test-td-matrix {||#+1
+    1ul rand-seed
+    (square)   square-desc   -td-unreached (square)   get  { 10 10 make-grid }       -td-test-combo
+    (hex)      hex-desc      -td-unreached (hex)      get  { 8 8 hex-make-grid }      -td-test-combo
+    (theta)    theta-desc    -td-unreached (theta)    get  { 8 8 theta-make-grid }    -td-test-combo
+    (triangle) triangle-desc -td-unreached (triangle) get  { 8 8 triangle-make-grid } -td-test-combo
+    (upsilon)  upsilon-desc  -td-unreached (upsilon)  get  { 8 8 upsilon-make-grid }  -td-test-combo
+} def
+
 opt-self-test {
     /opt-quiet true store    % suppress eller's progress lines + phase timings during self-test
     test-adler32
@@ -5349,6 +6024,7 @@ opt-self-test {
     test-png-checkerboard
     test-algo-connectivity
     test-recursive-division
+    test-td-matrix
     test-metrics
     test-cmap-endpoints
     test-png-viridis
@@ -5396,13 +6072,16 @@ opt-self-test {
     } {
     -effective-seed rand-seed
 
-    % Generate the maze.  Hex and theta grids take different make/algo
-    % paths; algo zoo and weave stay square-only.  Color render (Group
-    % 8), solve overlay (Group 9), and braid (Group 10) all work on
-    % every grid via topology-specific helpers.
+    % Generate the maze.  Each non-square topology builds its grid then
+    % runs the requested --algo through its descriptor + dispatch-algo-td,
+    % so the seven portable generators (backtrack/kruskal/wilson/aldous-
+    % broder/prim/hunt-kill/growing-tree) all work on every grid; only
+    % binary-tree/sidewinder/eller/division/weave stay square-only.  Color
+    % render (Group 8), solve overlay (Group 9), and braid (Group 10) all
+    % work on every grid via topology-specific helpers.
     opt-grid (hex) eq {
         /grid opt-w opt-h hex-make-grid def
-        grid opt-start-x opt-start-y hex-recursive-backtracker
+        hex-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid hex-braid } if
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px hex-mono-render def
@@ -5418,7 +6097,7 @@ opt-self-test {
     } { opt-grid (theta) eq {
         % --size W x H reads as "rings x sectors" for theta.
         /grid opt-w opt-h theta-make-grid def
-        grid opt-start-x opt-start-y theta-recursive-backtracker
+        theta-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid theta-braid } if
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px theta-mono-render def
@@ -5433,7 +6112,7 @@ opt-self-test {
         } if-else
     } { opt-grid (triangle) eq {
         /grid opt-w opt-h triangle-make-grid def
-        grid opt-start-x opt-start-y triangle-recursive-backtracker
+        triangle-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid triangle-braid } if
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px triangle-mono-render def
@@ -5447,10 +6126,10 @@ opt-self-test {
             /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops triangle-color-render def
         } if-else
     } { opt-grid (upsilon) eq {
-        % Upsilon (octagon+square): backtracker + mono/color.  Braid
+        % Upsilon (octagon+square): portable algos + mono/color.  Braid
         % is still deferred and silently ignored on this grid.
         /grid opt-w opt-h upsilon-make-grid def
-        grid opt-start-x opt-start-y upsilon-recursive-backtracker
+        upsilon-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px upsilon-mono-render def
         } {
