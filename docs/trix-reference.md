@@ -1829,8 +1829,8 @@ wrong-shape arrays.  Split into two named ops in commit 9a... on
 
 **Access:**
 ```
-length              arr -- int
-get                 arr index -- any
+length              arr|packed -- int        % element count (also: dict/set/string/record)
+get                 arr|packed index -- any  % element by 0-based index; accepts a packed array (procedure body)
 put                 arr index any --
 put-persist         arr index any --         % non-journaled put (-persist family)
 get-interval        arr index count -- sub-arr
@@ -1958,6 +1958,7 @@ update-persist      dict key proc --             % non-journaled update (-persis
 current-dict        -- dict                      % first non-frame dict from top of dict stack
 dictstack           arr -- arr                   % fill array with dict stack
 known?               dict /name -- bool
+get                  dict key -- value          % value by key; raises `undefined` if absent (use get-default/known-get to avoid)
 known-get           dict /name -- any true | false
 get-default         dict key default -- value  % return value if key found, else default
 where               /name -- dict true | false % which dict contains name
