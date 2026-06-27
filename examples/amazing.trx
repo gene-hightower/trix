@@ -17,19 +17,20 @@
 %
 % Feature surface
 % ---------------
-%   Algorithms (11):  recursive-backtracker, Kruskal, Wilson,
+%   Algorithms (12):  recursive-backtracker, Kruskal, Wilson,
 %                     Eller (row-streaming), binary-tree, sidewinder,
 %                     Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
+%                     Origin Shift (CaptainLuma 2023, edge-reversal),
 %                     recursive-division (wall-adding).
 %   Grids (5):        square, hex (pointy-top, odd-r offset), theta
 %                     (concentric polar rings), triangle (alternating
 %                     up/down by parity), upsilon (octagon + square).
-%   Algo x grid:      7 of the 11 algorithms (backtrack, Kruskal,
+%   Algo x grid:      8 of the 12 algorithms (backtrack, Kruskal,
 %                     Wilson, Aldous-Broder, Prim, Hunt-and-Kill,
-%                     Growing Tree) run on ALL five grids through a
-%                     shared topology descriptor (Section 7D-ter);
-%                     Eller/binary-tree/sidewinder/division are
-%                     square-only.  35 portable combos.
+%                     Growing Tree, Origin Shift) run on ALL five grids
+%                     through a shared topology descriptor (Section
+%                     7D-ter); Eller/binary-tree/sidewinder/division are
+%                     square-only.  40 portable combos.
 %   Colormaps (10):   viridis, magma, inferno, plasma, cividis, turbo,
 %                     rainbow, cubehelix, grayscale, two-tone (plus the
 %                     mono outline).  All work on every grid topology.
@@ -2601,6 +2602,84 @@
     } while
 } def
 
+% ----- generic Origin Shift (CaptainLuma, 2023) ----------------------------
+%   The maze is a DIRECTED spanning tree of parent pointers: every cell points
+%   to one grid-neighbor (its parent, toward the ORIGIN), and the origin is the
+%   root with no pointer.  One step picks a random neighbor m of the origin,
+%   points the origin at m, and re-roots at m (m's pointer is cleared) -- which
+%   removes one tree edge and adds another, so the structure stays a spanning
+%   tree after EVERY step (it is always a perfect maze).  We mix for MULT*n
+%   steps so the initial-tree bias washes out, then carve one wall per pointer.
+%   Genuinely distinct from the carving zoo: nothing is "unvisited", the maze is
+%   complete throughout and only rearranges.  Portable -- it needs only
+%   `neighbors` (a random grid-neighbor + the carve direction d) and `link`; the
+%   initial tree is a BFS from the seed cell (sx,sy) over the reachable cells.
+%   Because it seeds from (sx,sy) and the BFS/mixing stay inside the cell's
+%   connected component (the masked descriptor only offers in-mask neighbors), it
+%   also drives the per-component masked carve -- one origin shift per component.
+%   Mixing is not a uniform spanning tree (Wilson's guarantee) -- just shuffled.
+/g-origin-shift {|desc g sx sy|#+15
+    /nbrs desc (neighbors) get local-def
+    /lnk  desc (link)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /scratch 24 array local-def
+    /ptr  n chunked-array local-def     % parent cell index, -1 at the origin / unreached
+    /q    n chunked-array local-def     % BFS queue
+    /seen n chunked-array local-def
+    /origin sy w mul sx add local-def   % the seed is the first origin (BFS root)
+
+    % --- initial spanning tree: BFS from the seed over its component ---
+    0 1 n 1 sub {|i| ptr i -1 chunked-put  seen i 0 chunked-put } for
+    /qh 0 local-def
+    /qt 0 local-def
+    /csize 1 local-def                  % cells in this component (for proportional mixing)
+    seen origin 1 chunked-put
+    q qt origin chunked-put  /qt qt 1 add store
+    { qh qt lt } {||#+6
+        /c q qh chunked-get local-def  /qh qh 1 add store
+        /cnt g  c w mod  c w div  scratch nbrs local-def
+        0 1 cnt 1 sub {|k|#+2
+            /b 3 k mul local-def
+            /m scratch b 1 add get  w mul  scratch b get  add local-def
+            seen m chunked-get 0 eq {
+                seen m 1 chunked-put
+                ptr m c chunked-put              % m's parent is c (toward origin)
+                q qt m chunked-put  /qt qt 1 add store
+                /csize csize 1 add store
+            } if
+        } for
+    } while
+
+    % --- mixing: 20x the component size washes out the BFS-tree bias ---
+    /steps 20 csize mul local-def
+    0 1 steps 1 sub {|s|#+3
+        /cnt g  origin w mod  origin w div  scratch nbrs local-def
+        /b 3 cnt rand-bound-int mul local-def
+        /m scratch b 1 add get  w mul  scratch b get  add local-def
+        ptr origin m chunked-put         % origin now points to m
+        ptr m -1 chunked-put             % m is the new origin (root)
+        /origin m store
+    } for
+
+    % --- carve one wall per pointer (derive direction d by neighbor match).
+    % Out-of-component cells and the final origin keep ptr=-1 and carve nothing,
+    % so each component contributes (its cells - 1) walls: a perfect forest. ---
+    0 1 n 1 sub {|i|#+5
+        /p ptr i chunked-get local-def
+        p -1 ne {
+            /cnt g  i w mod  i w div  scratch nbrs local-def
+            0 1 cnt 1 sub {|k|#+2
+                /b 3 k mul local-def
+                scratch b 1 add get  w mul  scratch b get  add  p eq {
+                    g  i w mod  i w div  scratch b 2 add get  lnk
+                } if
+            } for
+        } if
+    } for
+} def
+
 % ----- topology-aware algorithm dispatch -----------------------------------
 %   The seven topology-agnostic generators, keyed by the same --algo names
 %   the square dispatch uses.  Each handler runs inside dispatch-algo-td's
@@ -2615,13 +2694,14 @@
     (prim)          { desc g sx sy g-prim }
     (hunt-kill)     { desc g sx sy g-hunt-kill }
     (growing-tree)  { desc g sx sy g-growing-tree }
+    (origin-shift)  { desc g sx sy g-origin-shift }
 >> def
 
 % (desc g algo sx sy) dispatch-algo-td --
 /dispatch-algo-td {|desc g algo sx sy -- |#+1
     td-algos algo known-get { exec } {
         (Unsupported --algo on this topology: ) print algo print nl
-        (Portable: backtrack | kruskal | wilson | aldous-broder | prim | hunt-kill | growing-tree) print nl
+        (Portable: backtrack | kruskal | wilson | aldous-broder | prim | hunt-kill | growing-tree | origin-shift) print nl
         (unsupported algo on this topology) false assert
     } if-else
 } def
@@ -5508,6 +5588,28 @@
     (division: spanning-tree edges)  edges  dw dh mul 1 sub  eq      expect
 } def
 
+% ----- Origin Shift perfect-maze property --------------------------------
+%   Origin Shift keeps the parent-pointer structure a spanning tree after
+%   every step, so the finished maze must be fully connected AND have exactly
+%   w*h-1 passages (one carve per non-origin pointer -- never more, never
+%   fewer).  Same spanning-tree edge count as recursive-division above.
+/test-origin-shift {||#+12
+    1ul rand-seed
+    /go 9 7 make-grid local-def   square-desc go 0 0 g-origin-shift
+    /ow go grid-w local-def
+    /oh go grid-h local-def
+    /edges 0 local-def
+    0 1 oh 1 sub {|oy|#+5
+        0 1 ow 1 sub {|ox|#+5
+            /cv go ox oy cell-at local-def
+            ox ow 1 sub lt { cv WALL-E and 0b eq { /edges edges 1 add store } if } if
+            oy oh 1 sub lt { cv WALL-S and 0b eq { /edges edges 1 add store } if } if
+        } for
+    } for
+    (origin-shift: fully connected)     go -bfs-unreached  0 eq        expect
+    (origin-shift: spanning-tree edges) edges  ow oh mul 1 sub  eq     expect
+} def
+
 % ----- Colormap endpoint sanity (Phase 3) --------------------------------
 %   At t=0 the lookup must hit stop[0]; at t=1 it must hit stop[N-1].
 
@@ -6168,7 +6270,7 @@
     (mask-carve: visited cleared after)    gb 0 0 cell-visited? not                    expect
 
     % every portable algorithm carves a single-component disc into a perfect maze
-    /algos [ (backtrack) (kruskal) (wilson) (aldous-broder) (prim) (hunt-kill) (growing-tree) ] local-def
+    /algos [ (backtrack) (kruskal) (wilson) (aldous-broder) (prim) (hunt-kill) (growing-tree) (origin-shift) ] local-def
     0 1 algos length 1 sub {|ai|#+6
         /alg algos ai get local-def
         /dm 9 9 mask-disc local-def
@@ -6274,12 +6376,12 @@ OPTIONS
     --grid TYPE         square | hex | theta | triangle | upsilon (default square)
     --algo NAME         backtrack | kruskal | wilson | eller |
                         binary-tree | sidewinder | aldous-broder |
-                        prim | hunt-kill | growing-tree | division
-                        (default backtrack)
+                        prim | hunt-kill | growing-tree | origin-shift |
+                        division   (default backtrack)
                         All grids support backtrack, kruskal, wilson,
-                        aldous-broder, prim, hunt-kill, growing-tree;
-                        eller/binary-tree/sidewinder/division are
-                        square-only.
+                        aldous-broder, prim, hunt-kill, growing-tree,
+                        origin-shift; eller/binary-tree/sidewinder/
+                        division are square-only.
     --flow FIELD        Weighted-Kruskal "flow maze": the texture follows a
                         scalar field -- radial | linear | spiral | sine
                         (any grid; pairs well with --color)
@@ -6450,7 +6552,7 @@ EXAMPLES
     /algos [
         (backtrack) (kruskal) (wilson) (eller)
         (binary-tree) (sidewinder) (aldous-broder)
-        (prim) (hunt-kill) (growing-tree) (division)
+        (prim) (hunt-kill) (growing-tree) (origin-shift) (division)
     ] local-def
 
     stderr  (algo               100x100         200x200\n)    write-string
@@ -6501,6 +6603,7 @@ EXAMPLES
     (prim)          { square-desc g sx sy g-prim }
     (hunt-kill)     { square-desc g sx sy g-hunt-kill }
     (growing-tree)  { square-desc g sx sy g-growing-tree }
+    (origin-shift)  { square-desc g sx sy g-origin-shift }
     (division)      { g recursive-division }
 >> def
 
@@ -6508,7 +6611,7 @@ EXAMPLES
 /dispatch-algo {|g algo sx sy -- r|#+1
     algo-dispatch algo known-get { exec } {
         (Unknown --algo: ) print algo print nl
-        (Valid: backtrack | kruskal | wilson | eller | binary-tree | sidewinder | aldous-broder | prim | hunt-kill | growing-tree | division) print nl
+        (Valid: backtrack | kruskal | wilson | eller | binary-tree | sidewinder | aldous-broder | prim | hunt-kill | growing-tree | origin-shift | division) print nl
         (unknown algo) false assert
     } if-else
 } def
@@ -6749,7 +6852,7 @@ opt-bench {
 %   through dispatch-algo-td on a fresh grid and assert the result is fully
 %   connected.  Connectivity + the carve-once invariant => a perfect maze.
 %   This exercises the vtable dispatch, all five neighbor enumerators, and
-%   all seven generic generators in one matrix (35 combos).
+%   all eight generic generators in one matrix (40 combos).
 /-td-unreached <<
     (square)   { -bfs-unreached }
     (hex)      { -hex-bfs-unreached }
@@ -6758,11 +6861,11 @@ opt-bench {
     (upsilon)  { -upsilon-bfs-unreached }
 >> def
 
-% (topo desc ucheck mg) -td-test-combo -- run all 7 portable algos, assert
+% (topo desc ucheck mg) -td-test-combo -- run all 8 portable algos, assert
 %   connected.  mg = 0-arg proc building a fresh grid; ucheck = (g -- count).
 /-td-test-combo {|topo desc ucheck mg|#+4
-    /algos [ (backtrack) (kruskal) (wilson) (aldous-broder) (prim) (hunt-kill) (growing-tree) ] local-def
-    0 1 6 {|ai|#+3
+    /algos [ (backtrack) (kruskal) (wilson) (aldous-broder) (prim) (hunt-kill) (growing-tree) (origin-shift) ] local-def
+    0 1 7 {|ai|#+3
         /a algos ai get local-def
         /g mg local-def
         desc g a 0 0 dispatch-algo-td
@@ -6788,6 +6891,7 @@ opt-self-test {
     test-png-checkerboard
     test-algo-connectivity
     test-recursive-division
+    test-origin-shift
     test-td-matrix
     test-metrics
     test-td-metrics

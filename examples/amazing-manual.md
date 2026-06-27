@@ -21,7 +21,7 @@ limitations under the License.
 # Maze Generation Manual
 
 A teaching reference for the maze zoo built by
-[`examples/amazing.trx`](amazing.trx) -- eleven classic maze-generation
+[`examples/amazing.trx`](amazing.trx) -- twelve classic maze-generation
 algorithms, five grid topologies, distance-field heatmaps, and a PNG encoder
 whose file format is assembled in Trix.
 
@@ -45,7 +45,8 @@ on the 128K Macintosh in 1984.
    - [3.2 Spanning-tree family](#32-spanning-tree-family)
    - [3.3 Row-wise family](#33-row-wise-family)
    - [3.4 Wall-adding family](#34-wall-adding-family)
-   - [3.5 Bias at a glance](#35-bias-at-a-glance)
+   - [3.5 Edge-reversal family (Origin Shift)](#35-edge-reversal-family-origin-shift)
+   - [3.6 Bias at a glance](#36-bias-at-a-glance)
 4. [Grid Topologies](#4-grid-topologies)
 5. [Distance Fields and Colormaps](#5-distance-fields-and-colormaps)
 6. [Overlays: Solve, Braid, Weave](#6-overlays-solve-braid-weave)
@@ -61,7 +62,7 @@ on the 128K Macintosh in 1984.
 
 A **perfect maze** is a grid of cells where exactly one path connects any two
 cells -- no loops, no isolated regions. In graph terms it is a **spanning tree**
-of the grid: every cell reachable, no cycles. All eleven algorithms here produce
+of the grid: every cell reachable, no cycles. All twelve algorithms here produce
 perfect mazes; they differ only in *which* spanning tree they pick, and that
 choice is what gives each its visual character ("texture" or "bias").
 
@@ -148,21 +149,22 @@ watch for it in the per-algorithm notes.
 
 ## 3. The Algorithm Zoo
 
-All eleven algorithms below run on the **square** grid; seven of them
+All twelve algorithms below run on the **square** grid; eight of them
 (recursive-backtracker, Kruskal, Wilson, Aldous-Broder, Prim, Hunt-and-Kill,
-Growing Tree) also run on every non-square grid through a shared topology
-descriptor (see [§4](#4-grid-topologies)). Eller, binary-tree, sidewinder, and
-recursive-division stay square-only. Select one with `--algo NAME`; the default
-is `backtrack`. Dispatch is a string-keyed table (`algo-dispatch` /
-`dispatch-algo` on square, `td-algos` / `dispatch-algo-td` on the others). On
-every grid the seven portable algorithms route through one shared generic
-engine (`square-desc` + the `g-*` procs, [§4](#4-grid-topologies)); `algo-dispatch`
-keeps bespoke square entries only for `backtrack` (which carries the weave
-logic), eller, binary-tree, sidewinder, and division.
+Growing Tree, Origin Shift) also run on every non-square grid through a shared
+topology descriptor (see [§4](#4-grid-topologies)). Eller, binary-tree,
+sidewinder, and recursive-division stay square-only. Select one with
+`--algo NAME`; the default is `backtrack`. Dispatch is a string-keyed table
+(`algo-dispatch` / `dispatch-algo` on square, `td-algos` / `dispatch-algo-td` on
+the others). On every grid the eight portable algorithms route through one shared
+generic engine (`square-desc` + the `g-*` procs, [§4](#4-grid-topologies));
+`algo-dispatch` keeps bespoke square entries only for `backtrack` (which carries
+the weave logic), eller, binary-tree, sidewinder, and division.
 
-Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
-`binary-tree`, `sidewinder`, `division`); the other six begin carving from
-`--start`.
+Five of the twelve ignore the start cell entirely (`kruskal`, `eller`,
+`binary-tree`, `sidewinder`, `division`); the other seven begin from `--start`
+(`origin-shift` uses it as the initial origin / BFS root, the rest as the first
+carve cell).
 
 ### 3.1 Carving family (DFS)
 
@@ -322,7 +324,29 @@ straight walls and nested rectangular rooms -- a crisp, architectural look unlik
 any of the carving algorithms' organic grain. *Cost:* O(n), no recursion-depth
 limit.
 
-### 3.5 Bias at a glance
+### 3.5 Edge-reversal family (Origin Shift)
+
+The one algorithm that doesn't *build* a maze so much as *stir* one.
+
+**Origin Shift** (`--algo origin-shift`)
+A genuinely different idea (CaptainLuma, 2023). The maze is held as a **directed
+spanning tree of parent pointers**: every cell points to one grid-neighbor (its
+parent, toward a distinguished **origin**), and the origin is the root with no
+pointer -- which is exactly a perfect maze. One **step** picks a random neighbor
+`m` of the origin, points the origin at `m`, and makes `m` the new origin
+(clearing its pointer). That removes one tree edge and adds another, so the
+structure is *still a spanning tree after every single step* -- the maze is never
+"under construction", it just rearranges. `amazing.trx` seeds a valid tree with a
+BFS from cell 0, then runs `20·n` steps so the seed's bias washes out, and finally
+carves one wall per pointer. *Texture:* organic and fairly unbiased, between a
+backtracker and a UST. *Honesty:* every intermediate state is a valid maze and it
+mixes toward a random-looking one, but it is **not** a proven uniform spanning
+tree (that is Wilson's / Aldous-Broder's guarantee, not this one). *Portable:* it
+needs only `neighbors` + `link`, so it runs on every grid. Its standout property
+is that it's incremental -- a natural fit for animation, where each frame is a
+legal maze.
+
+### 3.6 Bias at a glance
 
 | Algorithm | Family | Bias / texture | Uniform? | Extra memory |
 | --- | --- | --- | --- | --- |
@@ -337,6 +361,7 @@ limit.
 | sidewinder | row-wise | "rising" look, one top corridor | no | O(1) |
 | Eller's | row-wise | relaxed grain, O(height)=O(1) memory | no | O(width) |
 | recursive-division | wall-adding | straight walls, nested rectangular rooms | no | O(n) region stack |
+| Origin Shift | edge-reversal | organic, near-unbiased; incremental | no (mixes toward it) | O(n) pointers |
 
 ---
 
@@ -344,16 +369,16 @@ limit.
 
 `--grid TYPE` selects the topology (default `square`). The headline fact:
 
-> **The square grid runs the full eleven-algorithm zoo; the four non-square
-> grids (`hex`, `theta`, `triangle`, `upsilon`) run seven of them.** A shared
+> **The square grid runs the full twelve-algorithm zoo; the four non-square
+> grids (`hex`, `theta`, `triangle`, `upsilon`) run eight of them.** A shared
 > topology descriptor lets backtrack, Kruskal, Wilson, Aldous-Broder, Prim,
-> Hunt-and-Kill, and Growing Tree carve any grid; Eller, binary-tree,
-> sidewinder, and recursive-division stay square-only.
+> Hunt-and-Kill, Growing Tree, and Origin Shift carve any grid; Eller,
+> binary-tree, sidewinder, and recursive-division stay square-only.
 
 Generalizing maze carving off the square is the genuinely interesting part --
 a generator doesn't care about geometry as long as you can answer "what are
 this cell's neighbors?" and "which wall separates these two?". Each grid below
-answers those two questions differently. The seven portable algorithms reach
+answers those two questions differently. The eight portable algorithms reach
 that answer through a per-topology **descriptor** (`Section 7D-ter`) -- a small
 vtable of `neighbors` / `link` / `visited?` / `mark` procs -- so a single
 implementation of each algorithm drives all five grids. The availability
@@ -368,6 +393,7 @@ matrix:
 | prim          | +      | +   | +     | +        | +       |
 | hunt-kill     | +      | +   | +     | +        | +       |
 | growing-tree  | +      | +   | +     | +        | +       |
+| origin-shift  | +      | +   | +     | +        | +       |
 | eller         | +      |     |       |          |         |
 | binary-tree   | +      |     |       |          |         |
 | sidewinder    | +      |     |       |          |         |
@@ -748,7 +774,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--mask-margin` | int | With `--mask-invert`, surrounding-maze thickness | auto |
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
-| `--bench` | -- | Time all eleven algorithms; write no PNG | off |
+| `--bench` | -- | Time all twelve algorithms; write no PNG | off |
 | `--metrics` | -- | Print a quality report (degree histogram, loops, solution length) on any grid; twistiness is square-only; no PNG | off |
 | `--quiet` | -- | Suppress stderr progress and phase timings | off |
 
@@ -846,13 +872,14 @@ lowercase folded to uppercase and unknown characters rendered blank.
 `--self-test` runs **179 assertions** across 29 test procedures (the `opt-self-test` block):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
-fully connected spanning tree), the recursive-division perfect-maze check (connected
-*and* exactly `w*h-1` passages -- the failure modes a wall-adder has that carvers
-don't), colormap endpoints, end-to-end color renders,
+fully connected spanning tree), the recursive-division and Origin Shift
+perfect-maze checks (connected *and* exactly `w*h-1` passages -- the spanning-tree
+invariant a wall-adder and an edge-reverser must each maintain), colormap endpoints,
+end-to-end color renders,
 BFS-solve correctness on all five grids, braid-to-zero-dead-ends at `P=1.0`,
 weave under-cell presence with intact connectivity, font glyph bits, compare
 geometry, and the masking builders + per-component perfect-forest invariant for all
-seven portable algorithms. Run it with a large VM:
+eight portable algorithms. Run it with a large VM:
 
 ```sh
 ./trix --vm-size=64M examples/amazing.trx --self-test

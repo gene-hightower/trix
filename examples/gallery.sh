@@ -64,7 +64,7 @@ run() {
 }
 
 [[ "$QUIET" -eq 0 ]] && echo "Algorithms (mono, square 25x25, seed 42):"
-for algo in backtrack kruskal wilson eller binary-tree sidewinder aldous-broder prim hunt-kill growing-tree division; do
+for algo in backtrack kruskal wilson eller binary-tree sidewinder aldous-broder prim hunt-kill growing-tree origin-shift division; do
     run "algo-${algo}.png" --algo "$algo" --size 25x25
 done
 
@@ -73,6 +73,12 @@ done
 [[ "$QUIET" -eq 0 ]] && echo "Recursive-division showcase (magma + grayscale heatmaps):"
 run "algo-division-magma.png"     --algo division --color magma     --size 30x30 --cell-px 16
 run "algo-division-grayscale.png" --algo division --color grayscale --size 30x30 --cell-px 16
+
+# Origin Shift (CaptainLuma 2023) -- the one edge-reversal algorithm; turbo
+# heatmap shows its organic, near-unbiased texture (the warm blob is the
+# final origin, farthest from the start corner).
+[[ "$QUIET" -eq 0 ]] && echo "Origin Shift showcase (turbo heatmap):"
+run "algo-origin-shift-turbo.png" --algo origin-shift --color turbo --size 45x45 --cell-px 13 --wall-px 2 --seed 3
 
 # Flow-field showcase: --flow weights Kruskal by a scalar field (here a spiral),
 # so the corridors flow along it; --flow-jitter dials art (strict) <-> twisty.
@@ -132,10 +138,10 @@ run "grid-upsilon-solve.png"    --grid upsilon --color viridis --solve --size 10
 
 # The capstone: every portable algorithm carving every non-square grid,
 # driven by the shared topology descriptor (Section 7D-ter).  4 grids x 7
-# portable algos = 28 colored tiles.
+# portable algos = 32 colored tiles.
 [[ "$QUIET" -eq 0 ]] && echo "Algorithm x topology matrix (portable algos, viridis):"
 for grid in hex theta triangle upsilon; do
-    for algo in backtrack kruskal wilson aldous-broder prim hunt-kill growing-tree; do
+    for algo in backtrack kruskal wilson aldous-broder prim hunt-kill growing-tree origin-shift; do
         run "matrix-${grid}-${algo}.png" --grid "$grid" --algo "$algo" \
             --color viridis --size 16x16 --cell-px 14
     done

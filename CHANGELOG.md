@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: `--algo origin-shift` (Origin Shift, CaptainLuma 2023).** A
+  twelfth maze algorithm, and the only one that doesn't carve or add walls: the maze is
+  kept as a directed spanning tree of parent pointers, and each step re-roots it at a
+  random neighbor of the origin (one edge removed, one added), so *every intermediate
+  state is a valid perfect maze*. Seeds a tree by BFS, mixes for `20x` the component size,
+  then carves one wall per pointer. Portable across all five grids (8th portable algo, 40
+  combos) and composes with masking (one origin shift per component). Mixes toward a
+  random-looking maze but is not a proven uniform spanning tree. Self-test +8 (208).
+
 ### Added
 - **`examples/amazing.trx`: masking -- carve mazes into words, the Trix logo, any
   SVG, and shapes.** `--mask disc|ring|frame|logo`, `--mask-text WORD`, and
