@@ -90,3 +90,4 @@ examples/sudoku-input.txt
 
 # clang-20 signed-char reproduction build dir (regenerable)
 build-c20/
+build-ci/
