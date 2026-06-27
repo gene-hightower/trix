@@ -78,6 +78,9 @@ run "algo-division-grayscale.png" --algo division --color grayscale --size 30x30
 # so the corridors flow along it; --flow-jitter dials art (strict) <-> twisty.
 [[ "$QUIET" -eq 0 ]] && echo "Flow-field showcase (weighted Kruskal):"
 run "flow-spiral-turbo.png"  --flow spiral --color turbo --size 60x60 --cell-px 7 --wall-px 1
+# --flow-image steers the same weighted Kruskal with an IMAGE field (the bundled
+# 'logo', sampled from the Trix logo SVG): the corridors trace the wordmark.
+run "flow-image-logo.png"    --flow-image logo --flow-jitter 0 --color turbo --size 100x100 --cell-px 7 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Colormaps (kruskal, square 30x30):"
 for color in viridis magma inferno plasma cividis turbo rainbow cubehelix grayscale two-tone; do

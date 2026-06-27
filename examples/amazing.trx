@@ -2172,6 +2172,17 @@
 %   (g-kruskal is topology-generic; the field reads logical cell coords).  A
 %   small random dither breaks ties so equal-field bands stay organic.
 
+% (mx my) -flow-image-val -- sample the loaded image field (opt-flow-field) at
+%   normalized (mx,my) in [0,1] (nearest cell), returning its byte value / 255.
+%   The grid is a [w h rows] like a mask, but each byte is a 0..255 tone.
+/-flow-image-val {|mx my -- v|#+4
+    /fw opt-flow-field mask-w local-def
+    /fh opt-flow-field mask-h local-def
+    /fx  mx fw 1 sub /real-type cast mul round /integer-type cast  0 max  fw 1 sub min local-def
+    /fy  my fh 1 sub /real-type cast mul round /integer-type cast  0 max  fh 1 sub min local-def
+    opt-flow-field mask-rows fy get  fx get  /real-type cast  255.0r div
+} def
+
 % (mx my field) -flow-field-val -- scalar ~[0,1] at normalized midpoint (mx,my)
 /-flow-field-val {|mx my field -- v|#+3
     /dx mx 0.5r sub local-def
@@ -2182,8 +2193,9 @@
         /sv  dy dx atan2 6.2831853r div 0.5r add  dx dy hypot 4.0r mul  add local-def
         sv  sv floor  sub }
     { field (sine) eq { mx my add 9.42478r mul sin 1.0r add 2.0r div }
+    { field (image) eq { mx my -flow-image-val }
     { mx my add 2.0r div }
-    if-else } if-else } if-else } if-else
+    if-else } if-else } if-else } if-else } if-else
 } def
 
 % (ci ni field gw gh) -flow-bucket -- 0..255 weight bucket for the edge ci-ni
@@ -4732,6 +4744,39 @@
     MASK-SHAPES name get
 } def
 
+% ----- image flow fields (lazy-loaded flow-fields/*.trx) --------------------
+%   `--flow-image NAME` biases the weighted-Kruskal carve (see "flow fields"
+%   above) by an IMAGE instead of an analytic field: tools/gen_flow_field.py
+%   samples a PNG/SVG down to a small 0..255 grayscale grid, and amazing carves
+%   the low-value walls first, so the corridors align to the picture's tones at
+%   a macro scale while Kruskal still punches a valid perfect maze (and
+%   --flow-jitter dials art <-> maze).  Each file registers ONE [w h rows] grid
+%   into FLOW-FIELDS (same [w h rows] shape as a mask, but the bytes carry a
+%   0..255 value, not a 0/1 flag) and is loaded on first use.  The bundled
+%   `logo` field is sampled from the real Trix logo SVG.
+/FLOW-FIELDS 4 dynamic-dict def     % name -> [w h rows] field (filled by the files)
+
+% (name) -flow-field-path -- locate flow-fields/<name>.trx (--flow-image-dir or auto).
+/-flow-field-path {|name -- path|#+1
+    name
+    opt-flow-dir () ne { [ opt-flow-dir ] } { [ (examples/flow-fields) (flow-fields) ] } if-else
+    -asset-path
+} def
+
+% (name) -load-flow-field -- return the named [w h rows] field, requiring once.
+/-load-flow-field {|name -- field|#+1
+    FLOW-FIELDS name known? not {
+        /path name -flow-field-path local-def
+        path file-exists? not {
+            (amazing: flow field not found: ) print name print ( (looked in ) print path print
+            (); use --flow-image-dir, or run from the repo root) print nl
+            (flow field not found) false assert
+        } if
+        path require
+    } if
+    FLOW-FIELDS name get
+} def
+
 % (m) mask-trim -- crop the mask to its in-mask bounding box (drops the empty
 %   margins a glyph box leaves -- e.g. the descender band when a word has none).
 /mask-trim {|m -- m'|#+10
@@ -5370,7 +5415,7 @@
     tcount
 } def
 
-/test-algo-connectivity {||#+14
+/test-algo-connectivity {||#+15
     1ul rand-seed
     /gb 8 8 make-grid local-def    gb 0 0 recursive-backtracker
     (algo: backtrack 8x8 fully connected)  gb -bfs-unreached  0 eq  expect
@@ -5430,7 +5475,14 @@
     1ul rand-seed
     /gfs 8 8 make-grid local-def   gfs (kruskal) 0 0 dispatch-algo
     (algo: flow spiral jitter=0 connected)  gfs -bfs-unreached  0 eq  expect
-    /opt-flow () store  /opt-flow-jitter 3 store
+    % --flow-image: a small inline image field (the [w h rows] grid the host
+    % tool emits) must also carve a fully-connected spanning tree.
+    /opt-flow-field [ 4 4 [ <00408000> <206090c0> <4080b0e0> <60a0d0ff> ] ] store
+    /opt-flow (image) store
+    1ul rand-seed
+    /gfi 8 8 make-grid local-def   gfi (kruskal) 0 0 dispatch-algo
+    (algo: flow image  8x8 fully connected)  gfi -bfs-unreached  0 eq  expect
+    /opt-flow () store  /opt-flow-field () store  /opt-flow-jitter 3 store
 } def
 
 % ----- recursive-division perfect-maze property --------------------------
@@ -6197,6 +6249,9 @@
 /opt-font-dir   ()         def         % override dir for mask-fonts/*.trx (default examples/mask-fonts)
 /opt-mask-file  ()         def         % NAME for --mask-file (a mask-shapes/*.trx)
 /opt-mask-dir   ()         def         % override dir for mask-shapes/*.trx (default examples/mask-shapes)
+/opt-flow-image ()         def         % NAME for --flow-image (a flow-fields/*.trx); sets --flow image
+/opt-flow-dir   ()         def         % override dir for flow-fields/*.trx (default examples/flow-fields)
+/opt-flow-field ()         def         % loaded [w h rows] image field grid; () = none
 
 % (--) print-help -- write usage to stdout and quit the interpreter.
 /print-help {
@@ -6228,6 +6283,11 @@ OPTIONS
     --flow FIELD        Weighted-Kruskal "flow maze": the texture follows a
                         scalar field -- radial | linear | spiral | sine
                         (any grid; pairs well with --color)
+    --flow-image NAME   Flow maze steered by an IMAGE field (a flow-fields/
+                        <NAME>.trx sampled from a PNG/SVG by
+                        tools/gen_flow_field.py); 'logo' is bundled. Corridors
+                        align to the picture's tones; match --size to its aspect
+    --flow-image-dir DIR  where to find the flow-fields/*.trx (default auto)
     --flow-jitter N     Flow tie-break randomness (default 3): 0 = strict flow
                         art, larger = twistier / more maze-like
 
@@ -6324,6 +6384,10 @@ EXAMPLES
     (--flow)      { /opt-flow args i 1 add get store  /opt-algo (kruskal) store
                     /i i 2 add store }
     (--flow-jitter){ /opt-flow-jitter args i 1 add get to-number store  /i i 2 add store }
+    (--flow-image){ /opt-flow-image args i 1 add get store
+                    /opt-flow (image) store  /opt-algo (kruskal) store
+                    /i i 2 add store }
+    (--flow-image-dir){ /opt-flow-dir args i 1 add get store  /i i 2 add store }
     (--color)     { /opt-color args i 1 add get store  /i i 2 add store }
     (--start)     { ||#+1 /sparts args i 1 add get (,) split local-def
                     /opt-start-x sparts 0 get to-number store
@@ -6757,6 +6821,12 @@ opt-self-test {
     % directly comparable.
     /-effective-seed
         opt-seed 0u eq { now } { opt-seed } if-else def
+
+    % --flow-image: load the image field grid once (deferred to here so
+    % --flow-image-dir may follow --flow-image on the command line).
+    opt-flow (image) eq {
+        /opt-flow-field opt-flow-image -load-flow-field store
+    } if
 
     /t-start clock def
 

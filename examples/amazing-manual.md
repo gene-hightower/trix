@@ -257,6 +257,19 @@ pushes twistiness past a backtracker's). Works on **every grid** (the field
 reads logical cell coordinates) and composes with `--color`, where the heatmap
 makes the flow structure pop. *No external input* -- the field is analytic.
 
+**Image flow fields** (`--flow-image NAME`)
+The same weighted Kruskal, but the field is an **image** instead of a formula:
+the corridors carve the picture's dark regions first, so the maze's flow aligns
+to the image at a macro scale while Kruskal still punches a perfect maze (and
+`--flow-jitter` dials art ↔ maze exactly as above). Trix has no image decoder,
+so [`tools/gen_flow_field.py`](../tools/gen_flow_field.py) samples a PNG/SVG
+**once** into a small `flow-fields/<NAME>.trx` grayscale grid (committed data,
+not the source image -- see [§7.4](#74-svg-masks) for the same host-tool
+pattern). The bundled `logo` field is sampled from `assets/trix-logo.svg`, so
+`--flow-image logo --flow-jitter 0 --color turbo` traces the Trix wordmark. The
+field is read in normalized coordinates, so match `--size` to the image's aspect
+ratio. (Image flow is square-grid in spirit but runs on any `--grid`.)
+
 ### 3.3 Row-wise family
 
 These sweep the grid once, top to bottom, with O(width) or O(1) memory. They are
@@ -711,6 +724,8 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
 | `--algo` | name | Generation algorithm (7 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
 | `--flow` | name | Weighted-Kruskal flow maze: `radial` / `linear` / `spiral` / `sine` ([§3.2](#32-spanning-tree-family)) | -- |
+| `--flow-image` | `NAME` | Flow maze steered by an image field `flow-fields/<NAME>.trx` (`logo` bundled; from `tools/gen_flow_field.py`) ([§3.2](#32-spanning-tree-family)) | -- |
+| `--flow-image-dir` | dir | Where to find `flow-fields/*.trx` | auto |
 | `--flow-jitter` | int | Flow tie-break randomness: `0` = strict art, larger = twistier | `3` |
 | `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` | `square` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |

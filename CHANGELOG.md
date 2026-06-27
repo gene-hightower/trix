@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corridors flow along it while staying a perfect maze. Works on every grid and composes
   with `--color`; `--flow-jitter N` dials the field bias from strict "flow art" (`0`) to a
   twisty ordinary Kruskal maze.
+- **`examples/amazing.trx`: `--flow-image NAME` image-steered flow mazes.** The same
+  weighted Kruskal driven by an *image* field instead of a formula: the corridors carve the
+  picture's dark regions first, so the maze's flow aligns to the image at a macro scale
+  while still punching a perfect maze. Trix has no image decoder, so the new
+  `tools/gen_flow_field.py` samples a PNG/SVG once into a small `flow-fields/<NAME>.trx`
+  grayscale grid (loaded via a new `FLOW-FIELDS` registry); the bundled `logo` field traces
+  the Trix wordmark. Only the derived logo field is committed -- bring your own image for
+  local mazes.
 - **`globaldict` -- a second user dictionary implementing a PostScript-style
   local/global definition split.** A fixed-capacity dictionary pre-allocated in local
   VM and placed on the dict stack directly below `localdict`, pushed by the new
