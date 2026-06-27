@@ -55,8 +55,8 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Stage binary at repo root (runtests.sh expects ./trix)
-        run: cp build/trix trix
+      - name: Stage binaries at repo root (runtests.sh expects ./trix; the cross-binary snapshot / lockstep tests use ./tetrix and ./chip8)
+        run: cp build/trix build/tetrix build/chip8 .
 
       - name: Set timezone to America/New_York (host zone for test_chrono_local)
         # Trix has no bundled tzdb: the instant-*-local ops delegate to

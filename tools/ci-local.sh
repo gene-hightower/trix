@@ -12,13 +12,14 @@
 #   * CI's clang-format check is a SEPARATE job (clang-format-20 --dry-run
 #     --Werror over all of src/), NOT part of runtests.sh (which runs the
 #     unrelated cpp_style.py linter).
-#   * CI builds only ./trix; tetrix/chip8 cross-binary tests skip there.
+#   * CI builds trix + tetrix + chip8 (cmake); the cross-binary snapshot /
+#     lockstep tests run against those matching binaries.
 # This script builds with cmake (CI's exact config) and runs every ci.yml
 # gate, so validating with it removes the gap.
 #
 # It does NOT clobber your dev binaries: ./trix, ./tetrix, ./chip8 are
-# stashed for the run (so the suite matches CI's trix-only build) and
-# restored on exit.  Rebuild your dev tree afterward with ./build.sh.
+# stashed, the cmake-built trio is staged for the run, and the dev binaries
+# are restored on exit.  Rebuild your dev tree afterward with ./build.sh.
 #
 # Usage:  tools/ci-local.sh            # cmake Debug (CI's representative leg)
 #   CLANG_FORMAT=clang-format tools/ci-local.sh   # override the formatter
@@ -44,7 +45,7 @@ gate() {
     fi
 }
 
-# --- stash dev binaries so the run matches CI (cmake trix, no tetrix/chip8) ---
+# --- stash dev binaries; the cmake-built trio is staged below (matches CI) ---
 STASH=$(mktemp -d)
 cleanup() {
     for b in trix tetrix chip8; do
@@ -65,8 +66,8 @@ fi
 if ! cmake --build build-ci >"$TMP" 2>&1; then
     echo "  BUILD FAILED"; tail -20 "$TMP" | sed 's/^/    /'; exit 1
 fi
-cp build-ci/trix "$ROOT/trix"
-echo "  build OK -> ./trix (cmake)"
+cp build-ci/trix build-ci/tetrix build-ci/chip8 "$ROOT/"
+echo "  build OK -> ./trix ./tetrix ./chip8 (cmake)"
 
 echo "== ci-local: gates (mirror of ci.yml) =="
 gate "Run full test suite"       ./runtests.sh

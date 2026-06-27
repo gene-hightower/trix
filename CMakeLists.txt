@@ -47,109 +47,116 @@ endif()
 
 # ── Main target (skipped when TRIX_FUZZ is ON) ──────────────────────
 if(NOT TRIX_FUZZ)
+# Three host binaries share one configuration: trix is the reference VM;
+# tetrix and chip8 are the same VM with a native AI / CPU kernel registered for
+# their showcase (examples/tetrix.trx, examples/chip8.trx) -- see tetrix.cpp /
+# chip8.cpp.  They build from the same flags as trix (matching build.sh), so the
+# cross-binary snapshot / lockstep tests run against matching binaries.
 add_executable(trix trix.cpp)
+add_executable(tetrix tetrix.cpp)
+add_executable(chip8 chip8.cpp)
 
-target_link_libraries(trix PRIVATE
-    Threads::Threads
-)
+foreach(tgt trix tetrix chip8)
+    target_link_libraries(${tgt} PRIVATE Threads::Threads)
 
-# zlib is optional: -DTRIX_NO_ZLIB=ON drops the dependency and the
-# deflate/inflate operators raise /unsupported (see src/build_config.inl).
-if(TRIX_NO_ZLIB)
-    target_compile_definitions(trix PRIVATE TRIX_NO_ZLIB)
-else()
-    target_link_libraries(trix PRIVATE ZLIB::ZLIB)
-endif()
+    # zlib is optional: -DTRIX_NO_ZLIB=ON drops the dependency and the
+    # deflate/inflate operators raise /unsupported (see src/build_config.inl).
+    if(TRIX_NO_ZLIB)
+        target_compile_definitions(${tgt} PRIVATE TRIX_NO_ZLIB)
+    else()
+        target_link_libraries(${tgt} PRIVATE ZLIB::ZLIB)
+    endif()
 
-# readline is optional: -DTRIX_NO_READLINE=ON drops the dependency and the
-# interactive REPL degrades to a plain prompt (see src/build_config.inl).
-if(TRIX_NO_READLINE)
-    target_compile_definitions(trix PRIVATE TRIX_NO_READLINE)
-else()
-    target_link_libraries(trix PRIVATE ${READLINE_LIBRARY})
-    target_include_directories(trix PRIVATE ${READLINE_INCLUDE_DIR})
-endif()
+    # readline is optional: -DTRIX_NO_READLINE=ON drops the dependency and the
+    # interactive REPL degrades to a plain prompt (see src/build_config.inl).
+    if(TRIX_NO_READLINE)
+        target_compile_definitions(${tgt} PRIVATE TRIX_NO_READLINE)
+    else()
+        target_link_libraries(${tgt} PRIVATE ${READLINE_LIBRARY})
+        target_include_directories(${tgt} PRIVATE ${READLINE_INCLUDE_DIR})
+    endif()
 
-# ── Compiler flags ───────────────────────────────────────────────────
-target_compile_options(trix PRIVATE
-    -fno-rtti
-    -fexceptions
-    -fvisibility=hidden
-    -ffunction-sections
-    -fdata-sections
-    -fstack-protector-strong
-    # Emit per-function stack-usage (.su) under Debug; matches build.sh
-    $<$<CONFIG:Debug>:-fstack-usage>
+    # ── Compiler flags ───────────────────────────────────────────────
+    target_compile_options(${tgt} PRIVATE
+        -fno-rtti
+        -fexceptions
+        -fvisibility=hidden
+        -ffunction-sections
+        -fdata-sections
+        -fstack-protector-strong
+        # Emit per-function stack-usage (.su) under Debug; matches build.sh
+        $<$<CONFIG:Debug>:-fstack-usage>
 
-    # Warnings (portable subset)
-    -Wall -Wextra -Wpedantic
-    -Wformat=2 -Wformat-security
-    -Wnull-dereference -Wstack-protector -Walloca -Wvla
-    -Wcast-qual -Wconversion
-    -Wshadow -Wundef -Wswitch-enum
-    -Wold-style-cast -Wzero-as-null-pointer-constant
-    -Wextra-semi -Wsuggest-override -Wnon-virtual-dtor
-    -Wmismatched-tags -Wdate-time -Winvalid-utf8
-    -Wrange-loop-construct
-    -Wdisabled-optimization -Wdouble-promotion
-)
-
-# GCC-specific warnings (not supported by Clang)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(trix PRIVATE
-        -Wformat-overflow=2 -Wformat-truncation=2
-        -Wtrampolines
-        -Warray-bounds=2 -Wimplicit-fallthrough=3 -Wshift-overflow=2
-        -Wstringop-overflow=4 -Warith-conversion
-        -Wlogical-op -Wduplicated-cond -Wduplicated-branches
-        -Wformat-signedness -Wstack-usage=16000
-        -Wno-psabi -Wnrvo
-        -Wcatch-value=2 -Wredundant-tags
-        -Wdangling-reference -Wplacement-new=2
-        -Walloc-zero -Wsign-promo -Wredundant-decls
+        # Warnings (portable subset)
+        -Wall -Wextra -Wpedantic
+        -Wformat=2 -Wformat-security
+        -Wnull-dereference -Wstack-protector -Walloca -Wvla
+        -Wcast-qual -Wconversion
+        -Wshadow -Wundef -Wswitch-enum
+        -Wold-style-cast -Wzero-as-null-pointer-constant
+        -Wextra-semi -Wsuggest-override -Wnon-virtual-dtor
+        -Wmismatched-tags -Wdate-time -Winvalid-utf8
+        -Wrange-loop-construct
+        -Wdisabled-optimization -Wdouble-promotion
     )
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # The anonymous-union layout in object.inl is an intentional GCC extension
-    # that clang flags under -Wpedantic; suppress just that one warning.
-    target_compile_options(trix PRIVATE -Wno-nested-anon-types)
-endif()
 
-if(TRIX_WERROR)
-    target_compile_options(trix PRIVATE -Werror)
-endif()
+    # GCC-specific warnings (not supported by Clang)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${tgt} PRIVATE
+            -Wformat-overflow=2 -Wformat-truncation=2
+            -Wtrampolines
+            -Warray-bounds=2 -Wimplicit-fallthrough=3 -Wshift-overflow=2
+            -Wstringop-overflow=4 -Warith-conversion
+            -Wlogical-op -Wduplicated-cond -Wduplicated-branches
+            -Wformat-signedness -Wstack-usage=16000
+            -Wno-psabi -Wnrvo
+            -Wcatch-value=2 -Wredundant-tags
+            -Wdangling-reference -Wplacement-new=2
+            -Walloc-zero -Wsign-promo -Wredundant-decls
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # The anonymous-union layout in object.inl is an intentional GCC extension
+        # that clang flags under -Wpedantic; suppress just that one warning.
+        target_compile_options(${tgt} PRIVATE -Wno-nested-anon-types)
+    endif()
 
-if(TRIX_SANITIZERS)
-    target_compile_options(trix PRIVATE
-        -fsanitize=address,undefined
-        -fsanitize-address-use-after-scope
-        -fno-sanitize-recover=undefined
+    if(TRIX_WERROR)
+        target_compile_options(${tgt} PRIVATE -Werror)
+    endif()
+
+    if(TRIX_SANITIZERS)
+        target_compile_options(${tgt} PRIVATE
+            -fsanitize=address,undefined
+            -fsanitize-address-use-after-scope
+            -fno-sanitize-recover=undefined
+        )
+        target_link_options(${tgt} PRIVATE -fsanitize=address,undefined)
+    endif()
+
+    # Hardening for optimized builds: -fhardened (GCC 14+) bundles _FORTIFY_SOURCE=3,
+    # _GLIBCXX_ASSERTIONS, -fstack-clash-protection, -fcf-protection=full, PIE, and
+    # linker hardening (-z,now -z,relro -z,noexecstack).  Skipped for Debug because
+    # _FORTIFY_SOURCE requires -O1+ and emits a no-op warning otherwise.
+    # -Wno-hardened: Ubuntu's gcc-15 pre-defines _FORTIFY_SOURCE=3 at -O2+, which
+    # -fhardened would set to the same value; suppress the "already-defined" warning.
+    target_compile_options(${tgt} PRIVATE
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-fhardened;-Wno-hardened>
     )
-    target_link_options(trix PRIVATE -fsanitize=address,undefined)
-endif()
+    target_link_options(${tgt} PRIVATE
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-fhardened>
+    )
 
-# Hardening for optimized builds: -fhardened (GCC 14+) bundles _FORTIFY_SOURCE=3,
-# _GLIBCXX_ASSERTIONS, -fstack-clash-protection, -fcf-protection=full, PIE, and
-# linker hardening (-z,now -z,relro -z,noexecstack).  Skipped for Debug because
-# _FORTIFY_SOURCE requires -O1+ and emits a no-op warning otherwise.
-# -Wno-hardened: Ubuntu's gcc-15 pre-defines _FORTIFY_SOURCE=3 at -O2+, which
-# -fhardened would set to the same value; suppress the "already-defined" warning.
-target_compile_options(trix PRIVATE
-    $<$<AND:$<CXX_COMPILER_ID:GNU>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-fhardened;-Wno-hardened>
-)
-target_link_options(trix PRIVATE
-    $<$<AND:$<CXX_COMPILER_ID:GNU>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-fhardened>
-)
+    target_link_options(${tgt} PRIVATE -Wl,--gc-sections)
 
-target_link_options(trix PRIVATE -Wl,--gc-sections)
+    # Strip Release at link time so an optimized binary is ALWAYS stripped, even from
+    # a raw `cmake --build` (the build.sh / Dockerfile / release.yml strip steps then
+    # become a harmless no-op).  Only Release: RelWithDebInfo intentionally keeps -g.
+    target_link_options(${tgt} PRIVATE $<$<CONFIG:Release>:-s>)
 
-# Strip Release at link time so an optimized binary is ALWAYS stripped, even from
-# a raw `cmake --build` (the build.sh / Dockerfile / release.yml strip steps then
-# become a harmless no-op).  Only Release: RelWithDebInfo intentionally keeps -g.
-target_link_options(trix PRIVATE $<$<CONFIG:Release>:-s>)
-
-target_compile_definitions(trix PRIVATE
-    $<$<CONFIG:Debug>:TRX_DEBUG>
-)
+    target_compile_definitions(${tgt} PRIVATE
+        $<$<CONFIG:Debug>:TRX_DEBUG>
+    )
+endforeach()
 endif() # NOT TRIX_FUZZ
 
 # ── Fuzz targets (clang only, opt-in) ────────────────────────────────

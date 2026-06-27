@@ -53,18 +53,21 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Strip binary
-        run: strip build/trix
+      - name: Strip binaries
+        run: strip build/trix build/tetrix build/chip8
 
-      - name: Verify binary runs
-        run: build/trix --version
+      - name: Verify binaries run
+        run: |
+          build/trix --version
+          build/tetrix --version
+          build/chip8 --version
 
       - name: Stage artifact (versioned + latest-alias names)
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           STAGE="trix-v${VERSION}-linux-x86_64"
           mkdir -p "$STAGE"
-          cp build/trix "$STAGE/"
+          cp build/trix build/tetrix build/chip8 "$STAGE/"
           # NOTICE.md must accompany any distribution (Apache License 4(d)).
           cp LICENSE NOTICE.md README.md "$STAGE/"
           tar czf "${STAGE}.tar.gz" "$STAGE"
@@ -126,18 +129,21 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Strip binary
-        run: strip build/trix
+      - name: Strip binaries
+        run: strip build/trix build/tetrix build/chip8
 
-      - name: Verify binary runs
-        run: build/trix --version
+      - name: Verify binaries run
+        run: |
+          build/trix --version
+          build/tetrix --version
+          build/chip8 --version
 
       - name: Stage artifact (versioned + latest-alias names)
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           STAGE="trix-v${VERSION}-linux-arm64"
           mkdir -p "$STAGE"
-          cp build/trix "$STAGE/"
+          cp build/trix build/tetrix build/chip8 "$STAGE/"
           # NOTICE.md must accompany any distribution (Apache License 4(d)).
           cp LICENSE NOTICE.md README.md "$STAGE/"
           tar czf "${STAGE}.tar.gz" "$STAGE"
