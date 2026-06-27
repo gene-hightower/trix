@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: `--unicursal` single-path labyrinth.** A classical labyrinth -- one
+  non-branching path that visits every cell, no junctions. Built by the textbook passage-doubling
+  transform: generate a perfect maze, then weave its spanning tree into a single Hamiltonian path on
+  the `2w × 2h` doubled grid (each cell becomes a 2×2 block the path snakes through, every tree edge
+  crossed twice). The output is square-only and twice the `--size`; with `--color` the distance
+  heatmap is position-along-the-path, flowing continuously end to end. Self-test +3 (218): the weave
+  is verified to be a single path (degree ≤ 2, two ends, connected).
 - **`examples/amazing.trx`: `--solver` zoo (dead-end-fill, A\*, wall-follower).** `--solver NAME`
   (implies `--solve`) picks how the maze is solved and visualises the method. On a perfect maze all
   recover the same solution ribbon; what differs is the work: `dead-end-fill` iteratively fills every

@@ -111,6 +111,12 @@ run "solve-dead-end-fill.png" --solver dead-end-fill --size 25x25 --cell-px 16 -
 run "solve-astar.png"         --solver astar         --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 run "solve-wall-follower.png" --solver wall-follower --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 
+# Unicursal: a single-path labyrinth (a doubled perfect maze).  The viridis
+# gradient is BFS distance from the start = position along the one path, so the
+# colour flows continuously end to end -- visual proof there are no junctions.
+[[ "$QUIET" -eq 0 ]] && echo "Unicursal labyrinth (--unicursal):"
+run "unicursal-viridis.png"   --unicursal --color viridis --size 20x20 --cell-px 12 --wall-px 2 --seed 7
+
 [[ "$QUIET" -eq 0 ]] && echo "Grids:"
 run "grid-square.png"     --algo backtrack --size 20x20
 run "grid-hex.png"        --grid hex --size 16x16 --cell-px 14

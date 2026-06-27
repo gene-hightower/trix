@@ -47,6 +47,7 @@ on the 128K Macintosh in 1984.
    - [3.4 Wall-adding family](#34-wall-adding-family)
    - [3.5 Edge-reversal family (Origin Shift)](#35-edge-reversal-family-origin-shift)
    - [3.6 Bias at a glance](#36-bias-at-a-glance)
+   - [3.7 Unicursal mode (--unicursal)](#37-unicursal-mode---unicursal)
 4. [Grid Topologies](#4-grid-topologies)
 5. [Distance Fields and Colormaps](#5-distance-fields-and-colormaps)
 6. [Overlays: Solve, Braid, Weave](#6-overlays-solve-braid-weave)
@@ -362,6 +363,24 @@ legal maze.
 | Eller's | row-wise | relaxed grain, O(height)=O(1) memory | no | O(width) |
 | recursive-division | wall-adding | straight walls, nested rectangular rooms | no | O(n) region stack |
 | Origin Shift | edge-reversal | organic, near-unbiased; incremental | no (mixes toward it) | O(n) pointers |
+
+### 3.7 Unicursal mode (`--unicursal`)
+
+A **unicursal** maze (a classical *labyrinth*) is the opposite of a puzzle: one
+non-branching path that visits every cell, with no junctions and no choices --
+you just follow it from end to end. `--unicursal` builds one by the textbook
+**passage-doubling** transform: generate a perfect maze `M` (a spanning tree),
+then weave that tree into a single Hamiltonian path on the `2w × 2h` doubled
+grid. Each cell of `M` becomes a `2 × 2` block the path snakes through; every
+tree edge is crossed **twice** (the path runs out along one lane and back along
+the other), so entering a block from its parent side the path visits all four
+sub-cells, dips into each child block and returns, and leaves on the parent side.
+Because `M` is a tree this closes up into exactly one path -- the self-test
+checks it (every sub-cell degree ≤ 2, exactly two degree-1 ends, fully
+connected). The output is **square-only and twice the `--size`** on each axis.
+It pairs beautifully with `--color`: on a single path the BFS distance field is
+just *position along the path*, so the heatmap flows continuously from one end to
+the other -- a visual proof there are no junctions.
 
 ---
 
@@ -793,6 +812,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
 | `--braid` | float `0..1` | Fraction of dead-ends to remove | `0.0` |
 | `--weave` | -- | Buck-style overpasses (square + backtrack only) | off |
+| `--unicursal` | -- | Single-path labyrinth; doubles the size, square only ([§3.7](#37-unicursal-mode---unicursal)) | off |
 | `--compare` | `A,B,C` | Side-by-side mono panels of several algorithms | -- |
 | `--mask` | name | Carve the maze into a shape: `disc` / `ring` / `frame` / `logo` (the real Trix logo, [§7.4](#74-svg-masks); square grid) | -- |
 | `--mask-text` | `WORD` | Carve the maze into a word, rendered through `--font` | -- |

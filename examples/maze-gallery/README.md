@@ -32,6 +32,7 @@ examples/gallery.sh
 | [`solve-dead-end-fill.png`](solve-dead-end-fill.png) | **Solver: dead-end-fill** (`--solver dead-end-fill`) — every dead-end iteratively filled (grey), leaving only the start→end solution corridor + red ribbon (the "drained" maze) |
 | [`solve-astar.png`](solve-astar.png) | **Solver: A\*** (`--solver astar`) — the cells A\* expanded tinted blue: a focused frontier toward the goal vs BFS's full flood (same maze/seed as the others) |
 | [`solve-wall-follower.png`](solve-wall-follower.png) | **Solver: wall-follower** (`--solver wall-follower`, square) — the left-hand-rule walk, with its dead-end excursions; finds *a* path, not the shortest |
+| [`unicursal-viridis.png`](unicursal-viridis.png) | **Unicursal labyrinth** (`--unicursal`) — a single non-branching path that visits every cell (a doubled perfect maze); the viridis gradient is distance-along-the-one-path, flowing continuously end to end (no junctions) |
 | [`monster-magma.png`](monster-magma.png) | **Monster** heatmap — a 400×400 maze (160k cells) in magma distance shading |
 | [`monster-division-rainbow.png`](monster-division-rainbow.png) | **Monster recursive-division** — 400×400 (160k cells), rainbow heatmap; the color blocks expose the recursive partition hierarchy |
 | [`color-cividis.png`](color-cividis.png) | **cividis** colormap (colorblind-friendly perceptual) on a Kruskal maze |

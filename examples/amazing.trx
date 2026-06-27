@@ -1875,6 +1875,79 @@
     } while
 } def
 
+% ----- Unicursal (single-path labyrinth) -----------------------------------
+%   A unicursal maze has ONE non-branching path that visits every cell -- a
+%   classical labyrinth, no junctions, no choices.  We build it by the textbook
+%   passage-doubling transform: generate a perfect maze M (a spanning tree),
+%   then weave that tree into a single Hamiltonian path on the 2x-doubled grid.
+%   Each M-cell becomes a 2x2 block the path snakes through; every tree edge is
+%   crossed TWICE (the path goes out along one lane and back along the other),
+%   so entering a cell from its parent side, the path visits all four sub-cells,
+%   dipping into each child block and returning, and leaves on the parent side.
+%   Because M is a tree this closes up into exactly one path.  We carve as we
+%   walk (no stored path).  Square only.
+%
+%   Tables keyed by entryDir (the side the parent is on; DIRS order N E S W):
+%     UNI-ORDER[ed]  -- the four sub-cells (0=TL 1=TR 2=BR 3=BL) in visit order,
+%                       starting and ending on the two entryDir-side sub-cells.
+%     UNI-SPLICE[ed] -- the neighbour direction faced by each of the three
+%                       transitions between consecutive sub-cells; a child there
+%                       is spliced in (entered from the opposite side).
+/UNI-ORDER  [ [0 3 2 1] [1 0 3 2] [2 1 0 3] [3 2 1 0] ] def
+/UNI-SPLICE [ [3 2 1]   [0 3 2]   [1 0 3]   [2 1 0]   ] def
+/UNI-SUBOFF [ [0 0] [1 0] [1 1] [0 1] ] def     % sub-cell idx -> (dx dy) in the 2x2 block
+
+% (mw mh) make-unicursal -- ugrid (a 2mw x 2mh single-path labyrinth)
+/make-unicursal {|mw mh -- ugrid|#+18
+    /m mw mh make-grid local-def
+    m 0 0 recursive-backtracker
+    /u mw 2 mul  mh 2 mul  make-grid local-def      % all walls present; carve the path
+    /stc  mw mh mul chunked-array local-def         % DFS stack: M-cell flat index
+    /sted mw mh mul chunked-array local-def         % ... entryDir
+    /sti  mw mh mul chunked-array local-def         % ... loop index 0..3
+    stc 0 0 chunked-put  sted 0 3 chunked-put  sti 0 0 chunked-put   % root cell 0, entryDir W
+    /sp 1 local-def
+    /have-prev false local-def
+    /prevx 0 local-def
+    /prevy 0 local-def
+    { sp 0 gt } {||#+16
+        /top sp 1 sub local-def
+        /i sti top chunked-get local-def
+        i 4 ge {
+            /sp sp 1 sub store
+        } {
+            /cell stc top chunked-get local-def
+            /ed   sted top chunked-get local-def
+            /cx cell mw mod local-def
+            /cy cell mw div local-def
+            /idx UNI-ORDER ed get i get local-def
+            /off UNI-SUBOFF idx get local-def
+            /ux cx 2 mul off 0 get add local-def
+            /uy cy 2 mul off 1 get add local-def
+            have-prev {
+                /ddx ux prevx sub local-def
+                /ddy uy prevy sub local-def
+                /cdir ddx 1 eq { 1 } { ddx -1 eq { 3 } { ddy 1 eq { 2 } { 0 } if-else } if-else } if-else local-def
+                u prevx prevy cdir carve-wall
+            } if
+            /prevx ux store  /prevy uy store  /have-prev true store
+            sti top i 1 add chunked-put
+            i 3 lt {
+                /d UNI-SPLICE ed get i get local-def
+                d ed ne { m cx cy d square-open? } and? {
+                    /info DIRS d get local-def
+                    /ncell cy info 1 get add  mw mul  cx info 0 get add  add local-def
+                    stc sp ncell chunked-put
+                    sted sp  d 2 add 4 mod  chunked-put     % child entryDir = opposite(d)
+                    sti sp 0 chunked-put
+                    /sp sp 1 add store
+                } if
+            } if
+        } if-else
+    } while
+    u
+} def
+
 % ============================================================================
 %  Section 7D-ter: Topology descriptors + generic algorithm engine
 % ============================================================================
@@ -5858,6 +5931,33 @@
     (solver: wall-follower reaches end)  wlast 0 get 7 eq  wlast 1 get 7 eq  and  expect
 } def
 
+% ----- Unicursal labyrinth (single Hamiltonian path) ---------------------
+%   The doubling weave must yield exactly ONE non-branching path over all
+%   2mw*2mh sub-cells: fully connected, every cell degree <=2 (no junctions),
+%   and exactly two degree-1 cells (the path's two ends).
+/test-unicursal {||#+15
+    1ul rand-seed
+    /uu 5 4 make-unicursal local-def
+    /uw uu grid-w local-def
+    /uh uu grid-h local-def
+    /deg1 0 local-def
+    /degbig 0 local-def
+    0 1 uh 1 sub {|y|#+3
+        0 1 uw 1 sub {|x|#+3
+            /dg 0 local-def
+            x 0 gt        { uu x y cell-at WALL-W and 0b eq { /dg dg 1 add store } if } if
+            x uw 1 sub lt { uu x y cell-at WALL-E and 0b eq { /dg dg 1 add store } if } if
+            y 0 gt        { uu x y cell-at WALL-N and 0b eq { /dg dg 1 add store } if } if
+            y uh 1 sub lt { uu x y cell-at WALL-S and 0b eq { /dg dg 1 add store } if } if
+            dg 1 eq { /deg1   deg1   1 add store } if
+            dg 2 gt { /degbig degbig 1 add store } if
+        } for
+    } for
+    (unicursal: fully connected)    uu -bfs-unreached 0 eq   expect
+    (unicursal: no junctions)       degbig 0 eq              expect
+    (unicursal: two path endpoints) deg1 2 eq                expect
+} def
+
 % ----- Colormap endpoint sanity (Phase 3) --------------------------------
 %   At t=0 the lookup must hit stop[0]; at t=1 it must hit stop[N-1].
 
@@ -6583,6 +6683,7 @@
 /opt-end-y    -1          def         % -1 = (h-1)
 /opt-solve    false       def
 /opt-solver   (bfs)        def         % bfs | dead-end-fill | wall-follower | astar (the --solve method)
+/opt-unicursal false      def         % single-path labyrinth (doubles the size; square only)
 /opt-hardest  false       def         % place start/end at the maze's diameter (square)
 /opt-braid    0.0r        def         % 0.0..1.0 fraction of dead-ends to braid
 /opt-weave    false       def         % enable Buck-style overpasses (backtrack only)
@@ -6641,6 +6742,10 @@ OPTIONS
     --flow-image-dir DIR  where to find the flow-fields/*.trx (default auto)
     --flow-jitter N     Flow tie-break randomness (default 3): 0 = strict flow
                         art, larger = twistier / more maze-like
+    --unicursal         Single-path labyrinth: one non-branching corridor that
+                        visits every cell (a doubled perfect maze, so the image
+                        is 2x the --size; square only). Pairs well with --color,
+                        where the heatmap traces the one path's order.
 
   Rendering:
     --color NAME        mono | viridis | magma | inferno | plasma | cividis |
@@ -6753,6 +6858,7 @@ EXAMPLES
                     /opt-end-y eparts 1 get to-number store  /i i 2 add store }
     (--solve)     { /opt-solve   true store  /i i 1 add store }
     (--solver)    { /opt-solver args i 1 add get store  /opt-solve true store  /i i 2 add store }
+    (--unicursal) { /opt-unicursal true store  /i i 1 add store }
     (--hardest)   { /opt-hardest true store  /i i 1 add store }
     (--braid)     { /opt-braid args i 1 add get to-number /real-type cast store
                     /i i 2 add store }
@@ -7023,6 +7129,11 @@ EXAMPLES
 %   topology-driven report (no twistiness).
 /run-metrics {||#+8
     opt-seed 0u eq { now } { opt-seed } if-else  rand-seed
+    opt-unicursal {
+        % the labyrinth is its own (square) maze at 2x the size; report on it.
+        /gu opt-w opt-h make-unicursal local-def
+        gu 0 0  gu grid-w 1 sub  gu grid-h 1 sub  maze-metrics
+    } {
     /mex opt-end-x 0 lt { opt-w 1 sub } { opt-end-x } if-else local-def
     /mey opt-end-y 0 lt { opt-h 1 sub } { opt-end-y } if-else local-def
     opt-grid (square) eq {
@@ -7035,6 +7146,7 @@ EXAMPLES
         /g opt-w opt-h  desc (make-grid) get exec  local-def
         desc g opt-algo opt-start-x opt-start-y dispatch-algo-td
         desc g opt-start-x opt-start-y mex mey -td-maze-metrics
+    } if-else
     } if-else
 } def
 
@@ -7148,6 +7260,7 @@ opt-self-test {
     test-recursive-division
     test-origin-shift
     test-solvers
+    test-unicursal
     test-td-matrix
     test-metrics
     test-td-metrics
@@ -7260,6 +7373,19 @@ opt-self-test {
     } {
     -effective-seed rand-seed
 
+    % --unicursal: a single-path labyrinth.  Built by doubling a perfect maze
+    % (Section 7D), so it is square-only and twice the requested size on each
+    % axis; force the square render path and the doubled dimensions here.
+    opt-unicursal {
+        opt-grid (square) ne {
+            stderr (amazing: --unicursal is square-only; ignoring --grid ) write-string
+            stderr opt-grid write-string  stderr (\n) write-string  stderr flush-stream
+            /opt-grid (square) store
+        } if
+        /opt-w opt-w 2 mul store
+        /opt-h opt-h 2 mul store
+    } if
+
     % Generate the maze.  Each non-square topology builds its grid then
     % runs the requested --algo through its descriptor + dispatch-algo-td,
     % so the seven portable generators (backtrack/kruskal/wilson/aldous-
@@ -7330,13 +7456,18 @@ opt-self-test {
             /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops upsilon-color-render def
         } if-else
     } {
-        /grid opt-w opt-h make-grid def
-        grid opt-algo opt-start-x opt-start-y dispatch-algo
+        opt-unicursal {
+            % the doubled dims were set above; rebuild M at half-size.
+            /grid opt-w 2 div  opt-h 2 div  make-unicursal def
+        } {
+            /grid opt-w opt-h make-grid def
+            grid opt-algo opt-start-x opt-start-y dispatch-algo
+        } if-else
 
         % Optional braid pass: knock out a fraction of dead ends.  Runs
         % AFTER algo so spanning-tree connectivity is preserved before
-        % we add loops on top.
-        opt-braid 0.0r gt { grid opt-braid braid } if
+        % we add loops on top.  (Braid would break the unicursal single path.)
+        opt-braid 0.0r gt  opt-unicursal not  and { grid opt-braid braid } if
 
         % --hardest: place start/end at the maze's two most distant cells
         % (the diameter) and imply --solve.  Runs after braid so the loops
