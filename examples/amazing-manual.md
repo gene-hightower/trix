@@ -27,7 +27,7 @@ whose file format is assembled in Trix.
 
 This manual is self-contained: read it end to end and you will come away
 understanding how each maze algorithm works, what kind of maze it produces and
-why, how those algorithms generalize off the square grid, and how ~5,400 lines
+why, how those algorithms generalize off the square grid, and how ~5,600 lines
 of Trix turn the result into a real `.png` on disk. No prior background assumed;
 the only Trix-specific idea you need is the [save/restore arena and global
 VM](../docs/local-global-vm.md), which shows up where the hot loops touch a
@@ -150,7 +150,7 @@ watch for it in the per-algorithm notes.
 All eleven algorithms below run on the **square** grid. (The four non-square grids
 are backtracker-only -- see [§4](#4-grid-topologies).) Select one with
 `--algo NAME`; the default is `backtrack`. Dispatch is a string-keyed table
-(`algo-dispatch` / `dispatch-algo`, lines 5173-5194).
+(`algo-dispatch` / `dispatch-algo`, lines 5176-5197).
 
 Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
 `binary-tree`, `sidewinder`, `division`); the other six begin carving from
@@ -506,7 +506,7 @@ This is why `--monster` (a 1001×1001 PNG) works at all.
 ## 8. Command-Line Reference
 
 Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table
-(lines 5076-5132). A bare non-flag argument is taken as the output filename.
+(lines 5078-5135). A bare non-flag argument is taken as the output filename.
 
 | Flag | Argument | Effect | Default |
 | --- | --- | --- | --- |
@@ -529,6 +529,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
 | `--bench` | -- | Time all eleven algorithms; write no PNG | off |
+| `--metrics` | -- | Print a quality report (degree histogram, loops, twistiness, solution length); square only; no PNG | off |
 | `--quiet` | -- | Suppress stderr progress and phase timings | off |
 
 **VM size.** `--vm-size` is a *Trix interpreter* flag and goes **before** the
@@ -597,20 +598,20 @@ cells and roughly ~4× the time, so a 2000×2000 maze is ten-plus minutes.
 
 The file is organized into numbered `Section N` headers (grep `^%  Section`):
 
-| Section | Lines | Contents                                        |
-| ------- | ----- | ----------------------------------------------- |
-| 2-4     | 79    | PNG container, IDAT framing, `write-png`        |
-| 5 / 4B  | 309   | Cell encoding, grid, chunked-array              |
-| 5B-5E   | 509+  | Hex / theta / triangle / upsilon grids          |
-| 6-7     | 557   | Direction shuffle; recursive backtracker        |
-| 7B-7C   | 678   | Kruskal, Wilson                                 |
-| 7C-*    | 858+  | Per-topology backtrackers                       |
-| 7D-7G   | 1726+ | Eller; long-tail algorithms; braid              |
-| 7D / 7F | 2315  | BFS distance field; path solver                 |
-| 8-10E   | 2427+ | Pixel buffer; mono and color renderers per grid |
-| 11-13   | 3560+ | Solve overlay; 5×7 font; compare mode           |
-| 99      | 3926  | `--self-test` suite                             |
-| 100     | 4730  | CLI parsing and main dispatch                   |
+| Section | Lines | Contents                                               |
+| ------- | ----- | ------------------------------------------------------ |
+| 2-4     | 82    | PNG container, IDAT framing, `write-png`               |
+| 5 / 4B  | 312   | Cell encoding, grid, chunked-array                     |
+| 5B-5E   | 512+  | Hex / theta / triangle / upsilon grids                 |
+| 6-7     | 560   | Direction shuffle; recursive backtracker               |
+| 7B-7C   | 681   | Kruskal, Wilson                                        |
+| 7C-*    | 861+  | Per-topology backtrackers                              |
+| 7D-7G   | 1729+ | Eller; long-tail algorithms; recursive division; braid |
+| 7D / 7F | 2416  | BFS distance field; path solver; hardest pair          |
+| 8-10E   | 2578+ | Pixel buffer; mono and color renderers per grid        |
+| 11-13   | 3765+ | Solve overlay; 5×7 font; compare mode                  |
+| 99      | 4131  | `--self-test` suite                                    |
+| 100     | 4981+ | CLI parsing, main dispatch, `--bench` / `--metrics`    |
 
 ### 9.2 The `--compare` font
 
@@ -620,7 +621,7 @@ lowercase folded to uppercase and unknown characters rendered blank.
 
 ### 9.3 Self-test
 
-`--self-test` runs **109 assertions** across 27 test procedures (lines 5226-5256):
+`--self-test` runs **115 assertions** across 28 test procedures (lines 5344-5375):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
 fully connected spanning tree), the recursive-division perfect-maze check (connected

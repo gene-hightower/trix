@@ -5002,6 +5002,7 @@
 /opt-quiet    false       def         % suppress progress + phase-timing output (stderr)
 /opt-self-test  false     def
 /opt-bench      false     def         % run timing harness instead of generating a maze
+/opt-metrics    false     def         % print a read-only quality report (square only)
 
 % (--) print-help -- write usage to stdout and quit the interpreter.
 /print-help {
@@ -5053,6 +5054,7 @@ OPTIONS
 
   Misc:
     --bench             Algo timing harness (no PNG output)
+    --metrics           Quality report: degree histogram, loops, solution (square)
     --self-test         Run internal regression suite
     --quiet             Suppress progress + phase-timing on stderr
     --out FILE          Output PNG filename
@@ -5107,6 +5109,7 @@ EXAMPLES
                     /opt-w 1000 store  /opt-h 1000 store  /opt-cell-px 2 store
                     /opt-wall-px 1 store  /opt-algo (eller) store  /i i 1 add store }
     (--bench)     { /opt-bench true store  /i i 1 add store }
+    (--metrics)   { /opt-metrics true store  /i i 1 add store }
     (--quiet)     { /opt-quiet true store  /i i 1 add store }
 >> def
 
@@ -5193,10 +5196,125 @@ EXAMPLES
     } if-else
 } def
 
+% ----------------------------------------------------------------------------
+%  Quality metrics (read-only analysis) -- backs the --metrics report
+% ----------------------------------------------------------------------------
+%
+%  A cell's degree is the number of open sides = 4 - (walls present).  The
+%  degree histogram classifies every cell: degree 1 = dead-end, 2 = passage,
+%  3 = junction (T), 4 = crossroads (+).  A degree-2 passage is "straight"
+%  when its two openings are opposite (walls 0x0A = N/S open, or 0x05 = E/W
+%  open) and a "turn" otherwise; the turn fraction is the maze's twistiness.
+%  Edges = (sum of degrees)/2; for a connected maze the independent loop
+%  count is edges - cells + 1 (0 for a perfect/tree maze, >0 once braided).
+%  Square grid only -- degree counting needs the 4-bit wall nibble.
+
+% Degree -> histogram-bucket handlers.  Each runs inside -degree-tally's frame,
+% so it resolves the running counters (and `walls`) dynamically.  Keyed by degree
+% 1..4; an isolated degree-0 cell (only in a 1x1 grid) falls through the default.
+/degree-bucket <<
+    1 { /deadends deadends 1 add store }
+    2 { /passages passages 1 add store
+        walls 16#0A#u eq  walls 16#05#u eq  or
+            { /straights straights 1 add store }
+            { /turns     turns     1 add store }
+            if-else }
+    3 { /junctions  junctions  1 add store }
+    4 { /crossroads crossroads 1 add store }
+>> def
+
+% (g) -degree-tally -- deadends passages junctions crossroads straights turns edges
+/-degree-tally {|g -- de pa ju cr st tu ed|#+12
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /deadends   0 local-def
+    /passages   0 local-def
+    /junctions  0 local-def
+    /crossroads 0 local-def
+    /straights  0 local-def
+    /turns      0 local-def
+    /open-total 0 local-def
+    0 1 h 1 sub {|y|#+4
+        0 1 w 1 sub {|x|#+4
+            /walls  g x y cell-at 16#0F#b and /uinteger-type cast local-def
+            /degree 4 walls pop-count sub local-def
+            /open-total open-total degree add store
+            degree-bucket degree known-get { exec } { } if-else
+        } for
+    } for
+    deadends passages junctions crossroads straights turns  open-total 2 div
+} def
+
+% (g sx sy ex ey) maze-metrics -- print a quality report for a square maze.
+/maze-metrics {|g sx sy ex ey|#+18
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /cells w h mul local-def
+    g -degree-tally
+    [ /deadends /passages /junctions /crossroads /straights /turns /edges ] bind-locals
+    /loops edges cells sub 1 add local-def
+    /soln  g sx sy ex ey bfs-solve length local-def
+    /dead-pct  deadends 100 mul /real-type cast  cells /real-type cast  div local-def
+    /twist-pct
+        passages 0 gt
+            { turns 100 mul /real-type cast  passages /real-type cast  div }
+            { 0.0r }
+            if-else
+        local-def
+    /loop-note loops 0 eq { (   perfect maze) } { () } if-else local-def
+
+    (maze metrics: {0} {1}x{2}  (seed {3})\n)  mark opt-algo w h opt-seed  print-fmt pop pop
+    (  cells          : {0}\n)                          mark cells                print-fmt pop pop
+    (  dead-ends      : {0}  ({1:.1f}%)\n)              mark deadends dead-pct    print-fmt pop pop
+    (  passages       : {0}  (straight {1}, turns {2}; twistiness {3:.1f}%)\n)
+        mark passages straights turns twist-pct  print-fmt pop pop
+    (  junctions (T)  : {0}\n)                          mark junctions            print-fmt pop pop
+    (  crossroads (+) : {0}\n)                          mark crossroads           print-fmt pop pop
+    (  edges          : {0}\n)                          mark edges                print-fmt pop pop
+    (  loops (cycles) : {0}{1}\n)                       mark loops loop-note      print-fmt pop pop
+    (  solution       : {0} cells  ({1},{2} -> {3},{4})\n)
+        mark soln sx sy ex ey  print-fmt pop pop
+} def
+
+% (--) run-metrics -- generate a square maze per the CLI options and report.
+/run-metrics {||#+6
+    opt-grid (square) eq not {
+        (--metrics supports the square grid only; got --grid ) print opt-grid print nl
+    } {
+        opt-seed 0u eq { now } { opt-seed } if-else  rand-seed
+        /g opt-w opt-h make-grid local-def
+        g opt-algo opt-start-x opt-start-y dispatch-algo
+        opt-braid 0.0r gt { g opt-braid braid } if
+        /mex opt-end-x 0 lt { opt-w 1 sub } { opt-end-x } if-else local-def
+        /mey opt-end-y 0 lt { opt-h 1 sub } { opt-end-y } if-else local-def
+        g opt-start-x opt-start-y mex mey maze-metrics
+    } if-else
+} def
+
+% ----- quality metrics (degree tally on a known corridor) ----------------
+%   A 3x1 grid carved into one corridor: the two ends are dead-ends, the
+%   middle is a straight passage, and the whole thing is a perfect (0-loop)
+%   maze with 2 edges.
+/test-metrics {||#+10
+    /gm 3 1 make-grid local-def
+    gm 0 0 1 carve-wall
+    gm 1 0 1 carve-wall
+    gm -degree-tally
+    [ /mde /mpa /mju /mcr /mst /mtu /med ] bind-locals
+    (metrics: corridor has 2 dead-ends)      mde 2 eq                    expect
+    (metrics: corridor has 1 passage)        mpa 1 eq                    expect
+    (metrics: that passage is straight)      mst 1 eq  mtu 0 eq  and     expect
+    (metrics: corridor has no junctions)     mju 0 eq  mcr 0 eq  and     expect
+    (metrics: corridor edges = 2)            med 2 eq                    expect
+    (metrics: corridor is perfect, 0 loops)  med 3 sub 1 add  0 eq       expect
+} def
+
 command-line-args parse-args
 
 opt-bench {
     run-bench
+} { opt-metrics {
+    run-metrics
 } {
 % ----- hardest start/end pair (graph diameter) ---------------------------
 %   On a perfect (tree) maze the diameter endpoints satisfy: the end is the
@@ -5231,6 +5349,7 @@ opt-self-test {
     test-png-checkerboard
     test-algo-connectivity
     test-recursive-division
+    test-metrics
     test-cmap-endpoints
     test-png-viridis
     test-png-hex-color
@@ -5443,5 +5562,6 @@ opt-self-test {
         stderr flush-stream
     } if
 } if-else
+} if-else    % closes opt-metrics { run-metrics } { ... } if-else
 } if-else    % closes the opt-bench { ... } { ... } if-else added in C6
 
