@@ -717,151 +717,10 @@
     root
 } def
 
-/kruskal {|g|#+10
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /n w h mul local-def
-
-    % Wall list: each cell contributes its east wall (when x < w-1) and
-    % its south wall (when y < h-1).  Total = (w-1)*h + w*(h-1).
-    /num-walls w 1 sub h mul   w h 1 sub mul   add  local-def
-    /walls num-walls chunked-array local-def
-    /idx 0 local-def
-    0 1 h 1 sub {|y|#+5
-        0 1 w 1 sub {|x|#+5
-            x w 1 sub lt {
-                walls idx  y w mul x add 2 mul /uinteger-type cast  chunked-put-persist
-                /idx idx 1 add store
-            } if
-            y h 1 sub lt {
-                walls idx  y w mul x add 2 mul 1 add /uinteger-type cast  chunked-put-persist
-                /idx idx 1 add store
-            } if
-        } for
-    } for
-
-    % Fisher-Yates shuffle (ascending form: swap walls[i] with random
-    % element in [i, num-walls)).  chunked-put-persist twice for the swap.
-    0 1 num-walls 2 sub {|i|#+3
-        /j i  num-walls i sub  rand-bound-int  add local-def
-        /tmp walls i chunked-get local-def
-        walls i  walls j chunked-get  chunked-put-persist
-        walls j  tmp                  chunked-put-persist
-    } for
-
-    % Initialize union-find: every cell is its own root.
-    /uf n chunked-array local-def
-    0 1 n 1 sub {|i|
-        uf i  i /uinteger-type cast  chunked-put-persist
-    } for
-
-    % Walk the shuffled wall list.  For each wall: if the two flanking
-    % cells live in different sets, carve the wall and merge.
-    %
-    % NOTE: every local here has a `kr-` prefix.  Trix dict lookups walk
-    % up the live dict stack including |...| frames, so a bare local
-    % colliding with a top-level proc name (e.g. `cell-at`, `grid-w`)
-    % would shadow it when transitively called procs hit the name as a
-    % free variable.  Prefixing avoids those collisions outright.
-    0 1 num-walls 1 sub {|wi|#+12
-        /kr-enc walls wi chunked-get local-def
-        /kr-from kr-enc 1 shift-right /integer-type cast local-def
-        /kr-dir-bit kr-enc 1u and local-def
-        /kr-x kr-from w mod local-def
-        /kr-y kr-from w div local-def
-        /kr-d  kr-dir-bit 0u eq { 1 } { 2 } if-else local-def    % 1=E, 2=S
-        /kr-info DIRS kr-d get local-def
-        /kr-nx kr-x kr-info 0 get add local-def
-        /kr-ny kr-y kr-info 1 get add local-def
-        /kr-nidx kr-ny w mul kr-nx add local-def
-        /kr-ra uf kr-from -uf-find local-def
-        /kr-rb uf kr-nidx -uf-find local-def
-        kr-ra kr-rb ne {
-            uf kr-ra  kr-rb /uinteger-type cast  chunked-put-persist
-            g kr-x kr-y kr-d carve-wall
-        } if
-    } for
-} def
-
-% ============================================================================
-%  Section 7C: Wilson's algorithm (loop-erased random walks)
-% ============================================================================
-%
-%  Wilson's produces a uniform-random spanning tree -- mathematically the
-%  most "fair" maze you can draw.  Strategy:
-%
-%    1. Pick one cell, mark it as "in maze".
-%    2. From any not-in-maze cell, do a random walk recording the
-%       direction taken at each cell (overwriting on revisit -- that's
-%       the loop erasure).
-%    3. When the walk hits an in-maze cell, retrace from the start
-%       carving each wall and adding cells to the maze.
-%    4. Repeat from step 2 until every cell is in the maze.
-%
-%  Two parallel byte-arrays back the bookkeeping:
-%      in-maze  -- 0 or 1 per cell
-%      walk-dir -- direction last walked from this cell (0..3), or 0xFF
-%
-%  A cursor `scan-cursor` advances through cell indices to find the next
-%  out-cell quickly; once a cell is in the maze it never leaves so the
-%  cursor never has to back up.
-
-/wilson {|g sx sy|#+10
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /n w h mul local-def
-    /in-maze  h array local-def
-    /walk-dir h array local-def
-    0 1 h 1 sub {|y|
-        in-maze  y  (\x00) w repeat-string  put
-        walk-dir y  (\xFF) w repeat-string  put
-    } for
-
-    in-maze sy get  sx 1b put-persist
-    /remaining n 1 sub local-def
-    /sc-x 0 local-def
-    /sc-y 0 local-def
-
-    { remaining 0 gt } {||#+10
-        % Find the next out-of-maze cell.
-        { in-maze sc-y get  sc-x get  1b eq } {
-            /sc-x sc-x 1 add store
-            sc-x w eq { /sc-x 0 store /sc-y sc-y 1 add store } if
-        } while
-        /walk-x sc-x local-def
-        /walk-y sc-y local-def
-
-        % Random walk until we hit an in-maze cell.  Out-of-bounds steps
-        % are rejected (re-roll).  Repeated visits silently overwrite
-        % `walk-dir`, achieving loop erasure for free.
-        { in-maze walk-y get  walk-x get  0b eq } {||#+5
-            /d 4 rand-bound-int local-def
-            /info DIRS d get local-def
-            /nx walk-x info 0 get add local-def
-            /ny walk-y info 1 get add local-def
-            nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-                walk-dir walk-y get  walk-x  d /byte-type cast  put-persist
-                /walk-x nx store
-                /walk-y ny store
-            } if
-        } while
-
-        % Retrace from (sc-x, sc-y): each step carves one wall and adopts
-        % the cell into the maze.  The walk's recorded direction at each
-        % cell tells us where to go next.
-        /rx sc-x local-def
-        /ry sc-y local-def
-        { in-maze ry get  rx get  0b eq } {||#+5
-            /d walk-dir ry get  rx get  /integer-type cast local-def
-            /info DIRS d get local-def
-            g rx ry d carve-wall
-            in-maze ry get  rx 1b put-persist
-            /remaining remaining 1 sub store
-            /rx rx info 0 get add store
-            /ry ry info 1 get add store
-        } while
-    } while
-} def
+% kruskal and wilson now run through the shared generic engine (g-kruskal /
+% g-wilson driven by square-desc -- Section 7D-ter), so the square grid carries
+% no duplicate copies.  -uf-find above remains the union-find helper g-kruskal
+% uses.
 
 % ============================================================================
 %  Section 7C-hex: Recursive backtracker on hex grid
@@ -1913,258 +1772,9 @@
     } for
 } def
 
-% Aldous-Broder: random walk from start until every cell visited.
-%   Whenever the walk steps to an unvisited neighbor, carve the wall.
-%   Out-of-bounds direction picks are rejected (re-roll), keeping the
-%   neighbor distribution uniform over valid neighbors -- which is
-%   what gives Aldous-Broder its mathematically uniform spanning-tree
-%   property.  Slow on large mazes (expected steps grows ~n log n).
-/aldous-broder {|g sx sy|#+8
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /unvisited w h mul 1 sub local-def
-    /cx sx local-def
-    /cy sy local-def
-    g cx cy mark-visited
-    { unvisited 0 gt } {||#+10
-        /d 4 rand-bound-int local-def
-        /info DIRS d get local-def
-        /nx cx info 0 get add local-def
-        /ny cy info 1 get add local-def
-        /in-bounds
-            nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and?
-            local-def
-        in-bounds {
-            g nx ny cell-visited? not {
-                g cx cy d carve-wall
-                g nx ny mark-visited
-                /unvisited unvisited 1 sub store
-            } if
-            /cx nx store
-            /cy ny store
-        } if
-    } while
-} def
-
-% Prim's algorithm: maintain a frontier of unvisited cells adjacent to
-%   the visited region.  At each step pick a random frontier cell,
-%   connect it to a random visited neighbor, mark it visited, push its
-%   unvisited neighbors onto the frontier.  Continue until empty.
-%
-%   Frontier is a flat Object array used as a stack-with-removal-via-
-%   swap-with-last.  An auxiliary in-frontier byte string acts as an
-%   O(1) membership test so we don't add the same cell twice.
-/prim {|g sx sy|#+15
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /n w h mul local-def
-    /in-frontier h array local-def
-    0 1 h 1 sub {|y| in-frontier y  (\x00) w repeat-string  put} for
-    /frontier n chunked-array local-def
-    /fsize 0 local-def
-
-    g sx sy mark-visited
-
-    % Seed the frontier with sx,sy's neighbors.
-    0 1 3 {|d|#+5
-        /info DIRS d get local-def
-        /nx sx info 0 get add local-def
-        /ny sy info 1 get add local-def
-        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-            /cidx ny w mul nx add local-def
-            in-frontier ny get  nx get  0b eq {
-                frontier fsize cidx chunked-put
-                /fsize fsize 1 add store
-                in-frontier ny get  nx 1b put
-            } if
-        } if
-    } for
-
-    { fsize 0 gt } {||#+12
-        /pick-i fsize rand-bound-int local-def
-        /pick-idx frontier pick-i chunked-get local-def
-        /pick-x pick-idx w mod local-def
-        /pick-y pick-idx w div local-def
-
-        % Remove pick from frontier (swap-with-last).
-        frontier pick-i  frontier fsize 1 sub chunked-get  chunked-put
-        /fsize fsize 1 sub store
-
-        % Find a random visited neighbor of pick.
-        /vd-list 4 array local-def
-        /vd-count 0 local-def
-        0 1 3 {|d|#+5
-            /info DIRS d get local-def
-            /nx pick-x info 0 get add local-def
-            /ny pick-y info 1 get add local-def
-            nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-                g nx ny cell-visited? {
-                    vd-list vd-count d put
-                    /vd-count vd-count 1 add store
-                } if
-            } if
-        } for
-
-        vd-count 0 gt {
-            /pick-d vd-list  vd-count rand-bound-int  get local-def
-            g pick-x pick-y pick-d carve-wall
-            g pick-x pick-y mark-visited
-            % Add unvisited neighbors of pick to frontier.
-            0 1 3 {|d|#+5
-                /info DIRS d get local-def
-                /nx pick-x info 0 get add local-def
-                /ny pick-y info 1 get add local-def
-                nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-                    g nx ny cell-visited? not {
-                        /cidx ny w mul nx add local-def
-                        in-frontier ny get  nx get  0b eq {
-                            frontier fsize cidx chunked-put
-                            /fsize fsize 1 add store
-                            in-frontier ny get  nx 1b put
-                        } if
-                    } if
-                } if
-            } for
-        } if
-    } while
-} def
-
-% Hunt-and-Kill: walk randomly carving until stuck, then scan top-down
-%   left-to-right for the next unvisited cell adjacent to a visited
-%   cell, jump there, restart the walk.  Like backtracker but no stack
-%   -- the linear scan substitutes for the explicit pop.
-/hunt-kill {|g sx sy|#+10
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /cx sx local-def
-    /cy sy local-def
-    g cx cy mark-visited
-    /done false local-def
-
-    { done not } {||#+15
-        % WALK: pick a random unvisited neighbor; carve+move if any.
-        /vd-list 4 array local-def
-        /vd-count 0 local-def
-        0 1 3 {|d|#+5
-            /info DIRS d get local-def
-            /nx cx info 0 get add local-def
-            /ny cy info 1 get add local-def
-            nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-                g nx ny cell-visited? not {
-                    vd-list vd-count d put
-                    /vd-count vd-count 1 add store
-                } if
-            } if
-        } for
-
-        vd-count 0 gt {
-            /pd  vd-list  vd-count rand-bound-int  get  local-def
-            /pinfo DIRS pd get local-def
-            /pnx cx pinfo 0 get add local-def
-            /pny cy pinfo 1 get add local-def
-            g cx cy pd carve-wall
-            g pnx pny mark-visited
-            /cx pnx store
-            /cy pny store
-        } {
-            % HUNT: scan for an unvisited cell with a visited neighbor.
-            /found false local-def
-            0 1 h 1 sub {|hy|#+10
-                found not {
-                    0 1 w 1 sub {|hx|#+10
-                        found not {
-                            g hx hy cell-visited? not {
-                                /hd-list 4 array local-def
-                                /hd-count 0 local-def
-                                0 1 3 {|hd|#+5
-                                    /hi DIRS hd get local-def
-                                    /hnx hx hi 0 get add local-def
-                                    /hny hy hi 1 get add local-def
-                                    hnx 0 ge { hnx w lt } and? { hny 0 ge } and? { hny h lt } and? {
-                                        g hnx hny cell-visited? {
-                                            hd-list hd-count hd put
-                                            /hd-count hd-count 1 add store
-                                        } if
-                                    } if
-                                } for
-                                hd-count 0 gt {
-                                    /hpd  hd-list  hd-count rand-bound-int  get  local-def
-                                    g hx hy hpd carve-wall
-                                    g hx hy mark-visited
-                                    /cx hx store
-                                    /cy hy store
-                                    /found true store
-                                } if
-                            } if
-                        } if
-                    } for
-                } if
-            } for
-            found not { /done true store } if
-        } if-else
-    } while
-} def
-
-% Growing Tree: maintain an "active set" of visited cells with potential
-%   unvisited neighbors.  At each step pick one (50% random / 50% most
-%   recently added -- a deliberate mix that gets some Prim-style
-%   organic texture and some backtracker-style long corridors), connect
-%   to a random unvisited neighbor.  When a cell has no unvisited
-%   neighbors it leaves the active set permanently.  Generalizes Prim
-%   (always pick random) and Recursive Backtracker (always pick most
-%   recent).
-/growing-tree {|g sx sy|#+10
-    /w g grid-w local-def
-    /h g grid-h local-def
-    /n w h mul local-def
-    /active n chunked-array local-def
-    /asize 0 local-def
-
-    g sx sy mark-visited
-    active asize  sy w mul sx add  chunked-put
-    /asize 1 store
-
-    { asize 0 gt } {||#+12
-        /pick-i
-            rand-real 0.5r lt
-                { asize rand-bound-int }
-                { asize 1 sub }
-                if-else
-            local-def
-        /pick-idx active pick-i chunked-get local-def
-        /px pick-idx w mod local-def
-        /py pick-idx w div local-def
-
-        /vd-list 4 array local-def
-        /vd-count 0 local-def
-        0 1 3 {|d|#+5
-            /info DIRS d get local-def
-            /nx px info 0 get add local-def
-            /ny py info 1 get add local-def
-            nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
-                g nx ny cell-visited? not {
-                    vd-list vd-count d put
-                    /vd-count vd-count 1 add store
-                } if
-            } if
-        } for
-
-        vd-count 0 gt {
-            /pd  vd-list  vd-count rand-bound-int  get  local-def
-            /pinfo DIRS pd get local-def
-            /pnx px pinfo 0 get add local-def
-            /pny py pinfo 1 get add local-def
-            g px py pd carve-wall
-            g pnx pny mark-visited
-            active asize  pny w mul pnx add  chunked-put
-            /asize asize 1 add store
-        } {
-            % No unvisited neighbors; remove pick-i from active (swap-with-last).
-            active pick-i  active asize 1 sub chunked-get  chunked-put
-            /asize asize 1 sub store
-        } if-else
-    } while
-} def
+% aldous-broder, prim, hunt-kill, and growing-tree now run through the
+% shared generic engine (g-* driven by square-desc -- Section 7D-ter), so
+% the square grid carries no duplicate copies.
 
 % ============================================================================
 %  Section 7D-bis: Recursive Division (wall-adding fractal)
@@ -4969,11 +4579,11 @@
     (algo: backtrack 8x8 fully connected)  gb -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /gk 8 8 make-grid local-def    gk kruskal
+    /gk 8 8 make-grid local-def    gk (kruskal) 0 0 dispatch-algo
     (algo: kruskal   8x8 fully connected)  gk -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /gw 8 8 make-grid local-def    gw 0 0 wilson
+    /gw 8 8 make-grid local-def    gw (wilson) 0 0 dispatch-algo
     (algo: wilson    8x8 fully connected)  gw -bfs-unreached  0 eq  expect
 
     1ul rand-seed
@@ -4989,19 +4599,19 @@
     (algo: sidewinder    8x8 fully connected)  gsw -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /gab 8 8 make-grid local-def   gab 0 0 aldous-broder
+    /gab 8 8 make-grid local-def   gab (aldous-broder) 0 0 dispatch-algo
     (algo: aldous-broder 8x8 fully connected)  gab -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /gpr 8 8 make-grid local-def   gpr 0 0 prim
+    /gpr 8 8 make-grid local-def   gpr (prim) 0 0 dispatch-algo
     (algo: prim          8x8 fully connected)  gpr -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /ghk 8 8 make-grid local-def   ghk 0 0 hunt-kill
+    /ghk 8 8 make-grid local-def   ghk (hunt-kill) 0 0 dispatch-algo
     (algo: hunt-kill     8x8 fully connected)  ghk -bfs-unreached  0 eq  expect
 
     1ul rand-seed
-    /ggt 8 8 make-grid local-def   ggt 0 0 growing-tree
+    /ggt 8 8 make-grid local-def   ggt (growing-tree) 0 0 dispatch-algo
     (algo: growing-tree  8x8 fully connected)  ggt -bfs-unreached  0 eq  expect
 
     1ul rand-seed
@@ -5844,17 +5454,23 @@ EXAMPLES
 % Algorithm dispatch table.  Each handler runs inside dispatch-algo's frame, so
 % it resolves `g`/`sx`/`sy` dynamically; algos that ignore the start cell simply
 % never name `sx`/`sy`.  Adding an algorithm = one entry here + one in run-bench.
+%
+% The seven portable algorithms route through the SHARED generic engine via
+% `square-desc` (the same code that drives the non-square grids), so square has
+% no duplicate algorithm implementations.  `backtrack` keeps its own square proc
+% because that one carries the weave (overpass) logic; eller/binary-tree/
+% sidewinder/division are structurally square-only and stay bespoke.
 /algo-dispatch <<
     (backtrack)     { g sx sy recursive-backtracker }
-    (kruskal)       { g kruskal }
-    (wilson)        { g sx sy wilson }
+    (kruskal)       { square-desc g       g-kruskal }
+    (wilson)        { square-desc g sx sy g-wilson }
     (eller)         { g eller }
     (binary-tree)   { g binary-tree }
     (sidewinder)    { g sidewinder }
-    (aldous-broder) { g sx sy aldous-broder }
-    (prim)          { g sx sy prim }
-    (hunt-kill)     { g sx sy hunt-kill }
-    (growing-tree)  { g sx sy growing-tree }
+    (aldous-broder) { square-desc g sx sy g-aldous-broder }
+    (prim)          { square-desc g sx sy g-prim }
+    (hunt-kill)     { square-desc g sx sy g-hunt-kill }
+    (growing-tree)  { square-desc g sx sy g-growing-tree }
     (division)      { g recursive-division }
 >> def
 

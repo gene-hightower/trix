@@ -153,7 +153,11 @@ Growing Tree) also run on every non-square grid through a shared topology
 descriptor (see [§4](#4-grid-topologies)). Eller, binary-tree, sidewinder, and
 recursive-division stay square-only. Select one with `--algo NAME`; the default
 is `backtrack`. Dispatch is a string-keyed table (`algo-dispatch` /
-`dispatch-algo` on square, `td-algos` / `dispatch-algo-td` on the others).
+`dispatch-algo` on square, `td-algos` / `dispatch-algo-td` on the others). On
+every grid the seven portable algorithms route through one shared generic
+engine (`square-desc` + the `g-*` procs, [§4](#4-grid-topologies)); `algo-dispatch`
+keeps bespoke square entries only for `backtrack` (which carries the weave
+logic), eller, binary-tree, sidewinder, and division.
 
 Five of the eleven ignore the start cell entirely (`kruskal`, `eller`,
 `binary-tree`, `sidewinder`, `division`); the other six begin carving from
@@ -623,10 +627,10 @@ The file is organized into numbered `Section N` headers (grep `^%  Section`):
 | 5 / 4B  | Cell encoding, grid, chunked-array                     |
 | 5B-5E   | Hex / theta / triangle / upsilon grids                 |
 | 6-7     | Direction shuffle; recursive backtracker               |
-| 7B-7C   | Kruskal, Wilson                                        |
+| 7B      | Union-find helper (`-uf-find`, backs generic Kruskal)  |
 | 7C-*    | Per-topology backtrackers (test oracles)               |
 | 7D-ter  | Topology descriptor vtable + generic algorithm engine  |
-| 7D-7G   | Eller; long-tail algorithms; recursive division; braid |
+| 7D-7G   | Eller; binary-tree; sidewinder; recursive division; braid |
 | 7D / 7F | BFS distance field; path solver; hardest pair          |
 | 8-10E   | Pixel buffer; mono and color renderers per grid        |
 | 11-13   | Solve overlay; 5×7 font; compare mode                  |
