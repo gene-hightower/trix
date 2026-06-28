@@ -66,6 +66,8 @@ examples/maze-gallery/*
 !examples/maze-gallery/grid-theta-viridis.png
 !examples/maze-gallery/grid-hex-magma.png
 !examples/maze-gallery/grid-upsilon-viridis.png
+!examples/maze-gallery/grid-zeta-turbo.png
+!examples/maze-gallery/grid-zeta-solve.png
 !examples/maze-gallery/grid-triangle-inferno.png
 !examples/maze-gallery/compare-4-algos.png
 !examples/maze-gallery/grid-hex-solve.png

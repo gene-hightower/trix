@@ -22,15 +22,17 @@
 %                     Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
 %                     Origin Shift (CaptainLuma 2023, edge-reversal),
 %                     recursive-division (wall-adding).
-%   Grids (5):        square, hex (pointy-top, odd-r offset), theta
+%   Grids (6):        square, hex (pointy-top, odd-r offset), theta
 %                     (concentric polar rings), triangle (alternating
-%                     up/down by parity), upsilon (octagon + square).
+%                     up/down by parity), upsilon (octagon + square),
+%                     zeta (square cells + per-quad diagonal passages).
 %   Algo x grid:      8 of the 12 algorithms (backtrack, Kruskal,
 %                     Wilson, Aldous-Broder, Prim, Hunt-and-Kill,
-%                     Growing Tree, Origin Shift) run on ALL five grids
+%                     Growing Tree, Origin Shift) run on ALL six grids
 %                     through a shared topology descriptor (Section
-%                     7D-ter); Eller/binary-tree/sidewinder/division are
-%                     square-only.  40 portable combos.
+%                     7D-ter), which also drives make-grid / render / solve
+%                     / braid; Eller/binary-tree/sidewinder/division are
+%                     square-only.  48 portable combos.
 %   Colormaps (14):   viridis, magma, inferno, plasma, cividis, turbo,
 %                     rainbow, cubehelix, grayscale, two-tone, fire-ice,
 %                     spectral, coolwarm, twilight (plus the mono outline).
@@ -2110,6 +2112,180 @@
     and  0b eq
 } def
 
+% ============================================================================
+%  Section 7C-zeta: Zeta grid (square cells + diagonal passages)
+% ============================================================================
+%
+%  A zeta maze is a square grid where, in addition to the four orthogonal
+%  neighbours, a cell may connect DIAGONALLY -- but the two diagonals of any
+%  2x2 quad must never cross.  We satisfy that by construction: at grid
+%  creation each quad is pre-assigned ONE permitted diagonal orientation
+%  ("/" or "\", randomised by seed) and stored alongside the cells.  A cell's
+%  diagonal neighbour exists only when the relevant quad permits that
+%  orientation, so `neighbours` is STATELESS with respect to carving and every
+%  generator (including the pre-collecting Kruskal and walk-then-carve Wilson)
+%  works unchanged -- a crossing can never be proposed.
+%
+%  Cells reuse the upsilon 2-byte layout (walls byte + flags byte) and the
+%  8-direction table UPSILON-DIRS-OCT (N NE E SE S SW W NW = bits 0..7); the
+%  grid carries a 4th element, `quaddiag`: (h-1) rows of (w-1) bytes, byte
+%  value 0 = "/", 1 = "\".  Orthogonal directions are the even d (0/2/4/6);
+%  diagonals are the odd d (1/3/5/7).
+
+/ZETA-DIRS UPSILON-DIRS-OCT def     % alias: zeta uses all 8 directions uniformly
+
+% (g qx qy) zeta-quad-diag -- byte (0 = "/", 1 = "\")    quad's chosen orientation
+/zeta-quad-diag {|g qx qy -- byte|  g 3 get  qy get  qx get  } def
+
+% (w h) zeta-make-grid -- [w h rows quaddiag]
+%   rows: h byte-strings of 2*w bytes (walls 0xFF, flags 0x00), upsilon layout.
+%   quaddiag: (h-1) byte-strings of (w-1) bytes, each 0 ("/") or 1 ("\") drawn
+%   from the PRNG -- so the diagonal pattern varies with --seed.
+/zeta-make-grid {|w h|#+4
+    /rows h array local-def
+    0 1 h 1 sub {|y| rows y  (\xFF\x00) w repeat-string  put} for
+    /qrows h 1 sub 0 max local-def
+    /qcols w 1 sub 0 max local-def
+    /quad qrows array local-def
+    0 1 qrows 1 sub {|qy|#+3
+        /qrow (\x00) qcols repeat-string local-def
+        0 1 qcols 1 sub {|qx| qrow qx  2 rand-bound-int /byte-type cast  put} for
+        quad qy qrow put
+    } for
+    [ w h rows quad ]
+} def
+
+% (g col row d) zeta-carve-wall -- knock the wall bit on both cells (all cells
+%   are 8-directional, so always the OCT table; matching opposite on the
+%   neighbour).
+/zeta-carve-wall {|g col row d|#+6
+    /info ZETA-DIRS d get local-def
+    /not-mask info 4 get local-def
+    /not-opp  info 5 get local-def
+    /ncol col info 0 get add local-def
+    /nrow row info 1 get add local-def
+    g col  row    g col  row  upsilon-cell-walls not-mask and  upsilon-set-walls
+    g ncol nrow   g ncol nrow upsilon-cell-walls not-opp  and  upsilon-set-walls
+} def
+
+% (g cx cy d) zeta-diag-allowed? -- bool    (d is one of the diagonals 1/3/5/7)
+%   The diagonal is permitted iff its quad's pre-assigned orientation matches.
+%   Quad indices are valid whenever the diagonal neighbour itself is in bounds.
+/zeta-diag-allowed? {|g cx cy d -- bool|#+3
+    d 1 eq { cx        cy 1 sub  0 } {     % NE -> quad (cx,   cy-1) must be "/"
+    d 3 eq { cx        cy        1 } {     % SE -> quad (cx,   cy)   must be "\"
+    d 5 eq { cx 1 sub  cy        0 } {     % SW -> quad (cx-1, cy)   must be "/"
+             cx 1 sub  cy 1 sub  1   % NW -> quad (cx-1, cy-1) must be "\"
+    } if-else } if-else } if-else
+    [ /qx /qy /want ] bind-locals
+    g qx qy zeta-quad-diag  want /byte-type cast  eq
+} def
+
+% (g cx cy out) zeta-neighbors -- count    fill out with (nx ny d) triples for
+%   every in-bounds neighbour: the four orthogonals always, plus each diagonal
+%   that its quad permits.
+/zeta-neighbors {|g cx cy out -- count|#+8
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /cnt 0 local-def
+    0 1 7 {|d|#+7
+        /info ZETA-DIRS d get local-def
+        /nx cx info 0 get add local-def
+        /ny cy info 1 get add local-def
+        nx 0 ge { nx w lt } and? { ny 0 ge } and? { ny h lt } and? {
+            d 2 mod 1 eq { g cx cy d zeta-diag-allowed? } { true } if-else {
+                /b 3 cnt mul local-def
+                out b nx put  out b 1 add ny put  out b 2 add d put
+                /cnt cnt 1 add store
+            } if
+        } if
+    } for
+    cnt
+} def
+
+% (g cx cy d) zeta-open? -- bool    wall in direction d carved?
+/zeta-open? {|g cx cy d -- bool|
+    g cx cy upsilon-cell-walls  ZETA-DIRS d get 2 get  and  0b eq
+} def
+
+% (g sx sy) zeta-bfs-distances -- dist max-d    BFS over the 8 carved directions.
+/zeta-bfs-distances {|g sx sy|#+12
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /dist w h make-dist-field local-def
+    /qbx  n chunked-array local-def
+    /qby  n chunked-array local-def
+    /max-d 0u local-def
+    qbx 0 sx chunked-put-persist
+    qby 0 sy chunked-put-persist
+    dist sy get  sx 0u put-persist
+    /qhead 0 local-def
+    /qtail 1 local-def
+    { qhead qtail lt } {||#+9
+        /zbcx qbx qhead chunked-get local-def
+        /zbcy qby qhead chunked-get local-def
+        /qhead qhead 1 add store
+        /zbcd dist zbcy get  zbcx get  local-def
+        zbcd max-d gt { /max-d zbcd store } if
+        0 1 7 {|zbd|#+5
+            /zbinfo ZETA-DIRS zbd get local-def
+            g zbcx zbcy upsilon-cell-walls  zbinfo 2 get  and  0b eq {
+                /zbnx zbcx zbinfo 0 get add local-def
+                /zbny zbcy zbinfo 1 get add local-def
+                zbnx 0 ge { zbnx w lt } and? { zbny 0 ge } and? { zbny h lt } and? {
+                    dist zbny get  zbnx get  16#FFFFFFFF#u eq {
+                        dist zbny get  zbnx  zbcd 1u add  put-persist
+                        qbx qtail zbnx chunked-put-persist
+                        qby qtail zbny chunked-put-persist
+                        /qtail qtail 1 add store
+                    } if
+                } if
+            } if
+        } for
+    } while
+    dist max-d
+} def
+
+% (g sx sy ex ey) zeta-bfs-solve -- path-array (reverse-trace; [] if unreachable)
+/zeta-bfs-solve {|g sx sy ex ey|#+15
+    g sx sy zeta-bfs-distances
+    [ /zsl-dist /zsl-max-d ] bind-locals
+    zsl-dist ey get  ex get  16#FFFFFFFF#u eq {
+        [ ]
+    } {
+        /zsl-plen zsl-dist ey get  ex get  1u add /integer-type cast  local-def
+        /zsl-path zsl-plen array local-def
+        /zsl-cx ex local-def
+        /zsl-cy ey local-def
+        /zsl-pi zsl-plen 1 sub local-def
+        { zsl-pi 0 ge } {||#+9
+            /zsl-step 2 array local-def
+            zsl-step 0 zsl-cx put
+            zsl-step 1 zsl-cy put
+            zsl-path zsl-pi zsl-step put
+            /zsl-pi zsl-pi 1 sub store
+            zsl-pi 0 ge {
+                /zsl-cur-d zsl-dist zsl-cy get  zsl-cx get  local-def
+                /zsl-target zsl-cur-d 1u sub local-def
+                0 1 7 {|zsl-d|#+5
+                    /zsl-info ZETA-DIRS zsl-d get local-def
+                    g zsl-cx zsl-cy upsilon-cell-walls  zsl-info 2 get  and  0b eq {
+                        /zsl-nx zsl-cx zsl-info 0 get add local-def
+                        /zsl-ny zsl-cy zsl-info 1 get add local-def
+                        zsl-dist zsl-ny get  zsl-nx get  zsl-target  eq {
+                            /zsl-cx zsl-nx store
+                            /zsl-cy zsl-ny store
+                            exit
+                        } if
+                    } if
+                } for
+            } if
+        } while
+        zsl-path
+    } if-else
+} def
+
 % ----- descriptors (vtables) ------------------------------------------------
 %   Hex and triangle store the visited bit in the same 1-byte cell as the
 %   square grid, so they reuse cell-visited?/mark-visited.  open?/make-grid/
@@ -2117,53 +2293,94 @@
 %   --metrics report are fully topology-driven.
 
 /square-desc <<
-    (neighbors) { square-neighbors }
-    (link)      { carve-wall }
-    (visited?)  { cell-visited? }
-    (mark)      { mark-visited }
-    (open?)     { square-open? }
-    (make-grid) { make-grid }
-    (bfs-solve) { bfs-solve }
+    (neighbors)     { square-neighbors }
+    (link)          { carve-wall }
+    (visited?)      { cell-visited? }
+    (mark)          { mark-visited }
+    (open?)         { square-open? }
+    (make-grid)     { make-grid }
+    (bfs-solve)     { bfs-solve }
+    (bfs-distances) { bfs-distances }
+    (mono-render)   { mono-render }
+    (color-render)  { color-render }
+    (braid)         { braid }
+    (draw-overlay)  { draw-path-overlay }
 >> def
 
 /hex-desc <<
-    (neighbors) { hex-neighbors }
-    (link)      { hex-carve-wall }
-    (visited?)  { cell-visited? }
-    (mark)      { mark-visited }
-    (open?)     { hex-open? }
-    (make-grid) { hex-make-grid }
-    (bfs-solve) { hex-bfs-solve }
+    (neighbors)     { hex-neighbors }
+    (link)          { hex-carve-wall }
+    (visited?)      { cell-visited? }
+    (mark)          { mark-visited }
+    (open?)         { hex-open? }
+    (make-grid)     { hex-make-grid }
+    (bfs-solve)     { hex-bfs-solve }
+    (bfs-distances) { hex-bfs-distances }
+    (mono-render)   { hex-mono-render }
+    (color-render)  { hex-color-render }
+    (braid)         { hex-braid }
+    (draw-overlay)  { hex-draw-path-overlay }
 >> def
 
 /theta-desc <<
-    (neighbors) { theta-neighbors }
-    (link)      { theta-carve-wall }
-    (visited?)  { theta-cell-visited? }
-    (mark)      { theta-mark-visited }
-    (open?)     { theta-open? }
-    (make-grid) { theta-make-grid }
-    (bfs-solve) { theta-bfs-solve }
+    (neighbors)     { theta-neighbors }
+    (link)          { theta-carve-wall }
+    (visited?)      { theta-cell-visited? }
+    (mark)          { theta-mark-visited }
+    (open?)         { theta-open? }
+    (make-grid)     { theta-make-grid }
+    (bfs-solve)     { theta-bfs-solve }
+    (bfs-distances) { theta-bfs-distances }
+    (mono-render)   { theta-mono-render }
+    (color-render)  { theta-color-render }
+    (braid)         { theta-braid }
+    (draw-overlay)  { theta-draw-path-overlay }   % NB: takes (rows grid path ...)
 >> def
 
 /triangle-desc <<
-    (neighbors) { triangle-neighbors }
-    (link)      { triangle-carve-wall }
-    (visited?)  { cell-visited? }
-    (mark)      { mark-visited }
-    (open?)     { triangle-open? }
-    (make-grid) { triangle-make-grid }
-    (bfs-solve) { triangle-bfs-solve }
+    (neighbors)     { triangle-neighbors }
+    (link)          { triangle-carve-wall }
+    (visited?)      { cell-visited? }
+    (mark)          { mark-visited }
+    (open?)         { triangle-open? }
+    (make-grid)     { triangle-make-grid }
+    (bfs-solve)     { triangle-bfs-solve }
+    (bfs-distances) { triangle-bfs-distances }
+    (mono-render)   { triangle-mono-render }
+    (color-render)  { triangle-color-render }
+    (braid)         { triangle-braid }
+    (draw-overlay)  { triangle-draw-path-overlay }
 >> def
 
 /upsilon-desc <<
-    (neighbors) { upsilon-neighbors }
-    (link)      { upsilon-carve-wall }
-    (visited?)  { upsilon-cell-visited? }
-    (mark)      { upsilon-mark-visited }
-    (open?)     { upsilon-open? }
-    (make-grid) { upsilon-make-grid }
-    (bfs-solve) { upsilon-bfs-solve }
+    (neighbors)     { upsilon-neighbors }
+    (link)          { upsilon-carve-wall }
+    (visited?)      { upsilon-cell-visited? }
+    (mark)          { upsilon-mark-visited }
+    (open?)         { upsilon-open? }
+    (make-grid)     { upsilon-make-grid }
+    (bfs-solve)     { upsilon-bfs-solve }
+    (bfs-distances) { upsilon-bfs-distances }
+    (mono-render)   { upsilon-mono-render }
+    (color-render)  { upsilon-color-render }
+    (braid)         { pop pop }       % probabilistic --braid deferred; use --target-*
+    (draw-overlay)  { upsilon-draw-path-overlay }
+>> def
+
+% Zeta reuses upsilon's 2-byte cell layout, so visited?/mark are shared.
+/zeta-desc <<
+    (neighbors)     { zeta-neighbors }
+    (link)          { zeta-carve-wall }
+    (visited?)      { upsilon-cell-visited? }
+    (mark)          { upsilon-mark-visited }
+    (open?)         { zeta-open? }
+    (make-grid)     { zeta-make-grid }
+    (bfs-solve)     { zeta-bfs-solve }
+    (bfs-distances) { zeta-bfs-distances }
+    (mono-render)   { zeta-mono-render }
+    (color-render)  { zeta-color-render }
+    (braid)         { pop pop }       % probabilistic --braid deferred; use --target-*
+    (draw-overlay)  { zeta-draw-path-overlay }
 >> def
 
 /TD-DESCRIPTORS <<
@@ -2172,6 +2389,7 @@
     (theta)    theta-desc
     (triangle) triangle-desc
     (upsilon)  upsilon-desc
+    (zeta)     zeta-desc
 >> def
 
 % (name) td-descriptor-for -- descriptor dict (errors on unknown topology)
@@ -4780,6 +4998,116 @@
 } def
 
 % ============================================================================
+%  Section 10E: Zeta renderer (square cells + diagonal corridors)
+% ============================================================================
+%
+%  Square cells are drawn exactly like the square renderer (floor rect plus a
+%  punched slab for each open orthogonal passage).  A diagonal passage is a
+%  thick band drawn from one cell's centre to the other's, through the 2x2
+%  quad corner -- split at the midpoint so each half carries its own cell's
+%  colour (mono passes the background colour for both).  Only the quad's
+%  permitted orientation can be open, so the band never collides with a
+%  crossing partner.
+
+% (rows acx acy bcx bcy thk ar ag ab br bg bb) -zeta-corridor --
+/-zeta-corridor {|rows acx acy bcx bcy thk ar ag ab br bg bb|#+2
+    /mcx acx bcx add 2 div local-def
+    /mcy acy bcy add 2 div local-def
+    rows acx acy mcx mcy thk ar ag ab -draw-line
+    rows mcx mcy bcx bcy thk br bg bb -draw-line
+} def
+
+/zeta-mono-render {|g cell-px wall-px|#+12
+    /cw g grid-w local-def
+    /ch g grid-h local-def
+    /step cell-px wall-px add local-def
+    /img-w cw step mul wall-px add local-def
+    /img-h ch step mul wall-px add local-def
+    /rows img-w img-h make-pixel-rows local-def
+    rows img-w img-h opt-wall-r opt-wall-g opt-wall-b fill-pixels
+    /thk cell-px 2 mul 3 div local-def
+
+    0 1 ch 1 sub {|cy|#+10
+        0 1 cw 1 sub {|cx|#+10
+            /wb g cx cy upsilon-cell-walls local-def
+            /x0 cx step mul wall-px add local-def
+            /y0 cy step mul wall-px add local-def
+            /x1 x0 cell-px add 1 sub local-def
+            /y1 y0 cell-px add 1 sub local-def
+            rows x0 y0 x1 y1 opt-bg-r opt-bg-g opt-bg-b fill-rect
+            wb 16#04#b and 0b eq { rows x1 1 add y0 x1 wall-px add y1 opt-bg-r opt-bg-g opt-bg-b fill-rect } if
+            wb 16#10#b and 0b eq { rows x0 y1 1 add x1 y1 wall-px add opt-bg-r opt-bg-g opt-bg-b fill-rect } if
+        } for
+    } for
+
+    0 1 ch 2 sub {|qy|#+10
+        0 1 cw 2 sub {|qx|#+10
+            g qx qy zeta-quad-diag 0b eq
+                { /ax qx local-def /ay qy 1 add local-def /bx qx 1 add local-def /by qy local-def
+                  g qx qy 1 add 1 zeta-open? }
+                { /ax qx local-def /ay qy local-def /bx qx 1 add local-def /by qy 1 add local-def
+                  g qx qy 3 zeta-open? }
+                if-else
+            {
+                rows
+                  ax step mul wall-px add cell-px 2 div add   ay step mul wall-px add cell-px 2 div add
+                  bx step mul wall-px add cell-px 2 div add   by step mul wall-px add cell-px 2 div add
+                  thk  opt-bg-r opt-bg-g opt-bg-b  opt-bg-r opt-bg-g opt-bg-b  -zeta-corridor
+            } if
+        } for
+    } for
+    [ img-w img-h rows ]
+} def
+
+/zeta-color-render {|g cell-px wall-px dist max-d cmap stops|#+12
+    /cw g grid-w local-def
+    /ch g grid-h local-def
+    /step cell-px wall-px add local-def
+    /img-w cw step mul wall-px add local-def
+    /img-h ch step mul wall-px add local-def
+    /rows img-w img-h make-pixel-rows local-def
+    rows img-w img-h opt-wall-r opt-wall-g opt-wall-b fill-pixels
+    /thk cell-px 2 mul 3 div local-def
+
+    0 1 ch 1 sub {|cy|#+14
+        0 1 cw 1 sub {|cx|#+14
+            /wb g cx cy upsilon-cell-walls local-def
+            cmap stops  dist cy get cx get  max-d cmap-color
+            [ /cr /cg /cb ] bind-locals
+            /x0 cx step mul wall-px add local-def
+            /y0 cy step mul wall-px add local-def
+            /x1 x0 cell-px add 1 sub local-def
+            /y1 y0 cell-px add 1 sub local-def
+            rows x0 y0 x1 y1 cr cg cb fill-rect
+            wb 16#04#b and 0b eq { rows x1 1 add y0 x1 wall-px add y1 cr cg cb fill-rect } if
+            wb 16#10#b and 0b eq { rows x0 y1 1 add x1 y1 wall-px add cr cg cb fill-rect } if
+        } for
+    } for
+
+    0 1 ch 2 sub {|qy|#+18
+        0 1 cw 2 sub {|qx|#+18
+            g qx qy zeta-quad-diag 0b eq
+                { /ax qx local-def /ay qy 1 add local-def /bx qx 1 add local-def /by qy local-def
+                  g qx qy 1 add 1 zeta-open? }
+                { /ax qx local-def /ay qy local-def /bx qx 1 add local-def /by qy 1 add local-def
+                  g qx qy 3 zeta-open? }
+                if-else
+            {
+                cmap stops  dist ay get ax get  max-d cmap-color
+                [ /aar /aag /aab ] bind-locals
+                cmap stops  dist by get bx get  max-d cmap-color
+                [ /bbr /bbg /bbb ] bind-locals
+                rows
+                  ax step mul wall-px add cell-px 2 div add   ay step mul wall-px add cell-px 2 div add
+                  bx step mul wall-px add cell-px 2 div add   by step mul wall-px add cell-px 2 div add
+                  thk  aar aag aab  bbr bbg bbb  -zeta-corridor
+            } if
+        } for
+    } for
+    [ img-w img-h rows ]
+} def
+
+% ============================================================================
 %  Section 11: Solve overlay (path ribbon)
 % ============================================================================
 %
@@ -5028,6 +5356,39 @@
                 /pa-cy pa 1 get pitch mul pitch 2 div add margin add local-def
                 /pb-cx pb 0 get pitch mul pitch 2 div add margin add local-def
                 /pb-cy pb 1 get pitch mul pitch 2 div add margin add local-def
+                rows pa-cx pa-cy pb-cx pb-cy ribbon-px col-r col-g col-b -draw-line
+            } for
+        } if-else
+    } if-else
+} def
+
+% (rows path cell-px wall-px ribbon-px r g b) zeta-draw-path-overlay --
+%   Ribbon between square-cell centres.  Unlike the square overlay (which
+%   bounding-box-fills axis steps) zeta steps may be diagonal, so we draw real
+%   lines -- a diagonal step renders as a diagonal ribbon.
+/zeta-draw-path-overlay {|rows path cell-px wall-px ribbon-px col-r col-g col-b|#+10
+    /step cell-px wall-px add local-def
+    /half cell-px 2 div local-def
+    /n path length local-def
+    /half-rib ribbon-px 2 div local-def
+    n 0 eq { } {
+        0 1 n 1 sub {|pi|#+5
+            /pcell path pi get local-def
+            /pccx pcell 0 get step mul wall-px add half add local-def
+            /pccy pcell 1 get step mul wall-px add half add local-def
+            rows  pccx half-rib sub  pccy half-rib sub
+                  pccx half-rib sub ribbon-px add 1 sub
+                  pccy half-rib sub ribbon-px add 1 sub
+                  col-r col-g col-b fill-rect
+        } for
+        n 1 le { } {
+            0 1 n 2 sub {|pi|#+8
+                /pa path pi get local-def
+                /pb path pi 1 add get local-def
+                /pa-cx pa 0 get step mul wall-px add half add local-def
+                /pa-cy pa 1 get step mul wall-px add half add local-def
+                /pb-cx pb 0 get step mul wall-px add half add local-def
+                /pb-cy pb 1 get step mul wall-px add half add local-def
                 rows pa-cx pa-cy pb-cx pb-cy ribbon-px col-r col-g col-b -draw-line
             } for
         } if-else
@@ -6587,6 +6948,33 @@
     (target-braid: upsilon stays connected)        gtu -upsilon-bfs-unreached 0 eq  expect
 } def
 
+% ----- Zeta grid (square + per-quad diagonal, no crossings) --------------
+%   Verify a perfect maze forms and stays connected, that no 2x2 quad ever
+%   has both diagonals carved (the crossing invariant), and -- crucially --
+%   that the pre-collecting Kruskal and walk-then-carve Wilson both honour it
+%   (they were the algos a dynamic constraint would have broken).
+/test-zeta {||#+12
+    5ul rand-seed
+    /gz 8 8 zeta-make-grid def
+    zeta-desc gz 0 0 g-backtracker
+    (zeta: backtracker connected)            gz -zeta-bfs-unreached 0 eq  expect
+    zeta-desc gz -td-degree-tally
+    [ /zde /zpa /zju /zed /zmx ] bind-locals
+    (zeta: backtracker is perfect, 0 loops)  zed 64 sub 1 add 0 eq        expect
+    (zeta: degree never exceeds 8)           zmx 8 le                     expect
+    (zeta: no crossing diagonals)            gz -zeta-no-crossings?       expect
+
+    /gz2 8 8 zeta-make-grid def
+    zeta-desc gz2 g-kruskal
+    (zeta: kruskal connected)                gz2 -zeta-bfs-unreached 0 eq expect
+    (zeta: kruskal no crossings)             gz2 -zeta-no-crossings?      expect
+
+    /gz3 8 8 zeta-make-grid def
+    zeta-desc gz3 0 0 g-wilson
+    (zeta: wilson connected)                 gz3 -zeta-bfs-unreached 0 eq expect
+    (zeta: wilson no crossings)              gz3 -zeta-no-crossings?      expect
+} def
+
 % ----- Weave produces under-cells + stays connected (Phase 6) ------------
 
 /-count-under-cells {|g|#+5
@@ -6826,6 +7214,37 @@
     uunr
 } def
 
+% (g) -zeta-bfs-unreached -- count    cells the BFS from (0,0) never reaches.
+/-zeta-bfs-unreached {|g -- count|#+6
+    g 0 0 zeta-bfs-distances
+    [ /zu-dist /zu-max ] bind-locals
+    /zu-w g grid-w local-def
+    /zu-h g grid-h local-def
+    /zu-cnt 0 local-def
+    0 1 zu-h 1 sub {|y|#+2
+        0 1 zu-w 1 sub {|x|#+1
+            zu-dist y get  x get  16#FFFFFFFF#u eq { /zu-cnt zu-cnt 1 add store } if
+        } for
+    } for
+    zu-cnt
+} def
+
+% (g) -zeta-no-crossings? -- bool    true unless some 2x2 quad has BOTH of its
+%   diagonals carved (the invariant the per-quad orientation guarantees).
+/-zeta-no-crossings? {|g -- bool|#+5
+    /zw g grid-w local-def
+    /zh g grid-h local-def
+    /ok true local-def
+    0 1 zh 2 sub {|qy|#+3
+        0 1 zw 2 sub {|qx|#+2
+            g qx qy 1 add 1 zeta-open?     % "/" passage: NE from (qx,qy+1)
+            g qx qy        3 zeta-open?     % "\" passage: SE from (qx,qy)
+            and { /ok false store } if
+        } for
+    } for
+    ok
+} def
+
 /test-upsilon {||#+5
     1ul rand-seed
     /ug 6 6 upsilon-make-grid local-def
@@ -6992,7 +7411,7 @@
 /opt-cell-set false       def         % did the user pass --cell-px? (auto-size hi-res masks if not)
 /opt-wall-px  2           def
 /opt-seed     0u          def         % 0 = clock-seeded
-/opt-grid     (square)    def         % square | hex | theta | triangle | upsilon
+/opt-grid     (square)    def         % square | hex | theta | triangle | upsilon | zeta
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
 /opt-flow-jitter 3        def         % --flow tie-break randomness in buckets: 0 = strict art, high = twistier
@@ -7047,7 +7466,8 @@ OPTIONS
     --bg-color HEX      Passage/background color as RRGGBB (default FFFFFF)
 
   Topology + algorithm:
-    --grid TYPE         square | hex | theta | triangle | upsilon (default square)
+    --grid TYPE         square | hex | theta | triangle | upsilon | zeta
+                        (default square; zeta = square cells + diagonal passages)
     --algo NAME         backtrack | kruskal | wilson | eller |
                         binary-tree | sidewinder | aldous-broder |
                         prim | hunt-kill | growing-tree | origin-shift |
@@ -7566,6 +7986,7 @@ opt-bench {
     (theta)    { -theta-bfs-unreached }
     (triangle) { -triangle-bfs-unreached }
     (upsilon)  { -upsilon-bfs-unreached }
+    (zeta)     { -zeta-bfs-unreached }
 >> def
 
 % (topo desc ucheck mg) -td-test-combo -- run all 8 portable algos, assert
@@ -7588,6 +8009,7 @@ opt-bench {
     (theta)    theta-desc    -td-unreached (theta)    get  { 8 8 theta-make-grid }    -td-test-combo
     (triangle) triangle-desc -td-unreached (triangle) get  { 8 8 triangle-make-grid } -td-test-combo
     (upsilon)  upsilon-desc  -td-unreached (upsilon)  get  { 8 8 upsilon-make-grid }  -td-test-combo
+    (zeta)     zeta-desc     -td-unreached (zeta)     get  { 8 8 zeta-make-grid }     -td-test-combo
 } def
 
 opt-self-test {
@@ -7619,6 +8041,7 @@ opt-self-test {
     test-theta-braid
     test-triangle-braid
     test-target-braid
+    test-zeta
     test-weave
     test-hex
     test-theta
@@ -7735,73 +8158,27 @@ opt-self-test {
     % binary-tree/sidewinder/eller/division/weave stay square-only.  Color
     % render (Group 8), solve overlay (Group 9), and braid (Group 10) all
     % work on every grid via topology-specific helpers.
-    opt-grid (hex) eq {
-        /grid opt-w opt-h hex-make-grid def
-        hex-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
-        opt-braid 0.0r gt { grid opt-braid hex-braid } if
-        hex-desc grid -maybe-target-braid
+    opt-grid (square) ne {
+        % Every non-square topology has the SAME shape -- build the grid, run
+        % the --algo through its descriptor, braid, then render -- differing
+        % only in the procs.  So pull each step off the topology descriptor
+        % (Section 7D-ter) instead of a per-grid branch.  Adding a grid is now
+        % one descriptor + one TD-DESCRIPTORS row, no new branch here.
+        /gdesc opt-grid td-descriptor-for def
+        /grid opt-w opt-h  gdesc (make-grid) get exec  def
+        gdesc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
+        opt-braid 0.0r gt { grid opt-braid  gdesc (braid) get exec } if
+        gdesc grid -maybe-target-braid
         opt-color (mono) eq {
-            /pic grid opt-cell-px opt-wall-px hex-mono-render def
+            /pic grid opt-cell-px opt-wall-px  gdesc (mono-render) get exec  def
         } {
-            grid opt-start-x opt-start-y hex-bfs-distances
+            grid opt-start-x opt-start-y  gdesc (bfs-distances) get exec
             /max-d exch def
             /dist  exch def
             opt-color get-cmap
             /cmap-stops exch def
             /cmap-buf   exch def
-            /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops hex-color-render def
-        } if-else
-    } { opt-grid (theta) eq {
-        % --size W x H reads as "rings x sectors" for theta.
-        /grid opt-w opt-h theta-make-grid def
-        theta-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
-        opt-braid 0.0r gt { grid opt-braid theta-braid } if
-        theta-desc grid -maybe-target-braid
-        opt-color (mono) eq {
-            /pic grid opt-cell-px opt-wall-px theta-mono-render def
-        } {
-            grid opt-start-x opt-start-y theta-bfs-distances
-            /max-d exch def
-            /dist  exch def
-            opt-color get-cmap
-            /cmap-stops exch def
-            /cmap-buf   exch def
-            /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops theta-color-render def
-        } if-else
-    } { opt-grid (triangle) eq {
-        /grid opt-w opt-h triangle-make-grid def
-        triangle-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
-        opt-braid 0.0r gt { grid opt-braid triangle-braid } if
-        triangle-desc grid -maybe-target-braid
-        opt-color (mono) eq {
-            /pic grid opt-cell-px opt-wall-px triangle-mono-render def
-        } {
-            grid opt-start-x opt-start-y triangle-bfs-distances
-            /max-d exch def
-            /dist  exch def
-            opt-color get-cmap
-            /cmap-stops exch def
-            /cmap-buf   exch def
-            /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops triangle-color-render def
-        } if-else
-    } { opt-grid (upsilon) eq {
-        % Upsilon (octagon+square): portable algos + mono/color.  The
-        % probabilistic --braid pass is still deferred here, but the
-        % descriptor-driven --target-* braiding works (it rides neighbors/
-        % open?/link, which upsilon has).
-        /grid opt-w opt-h upsilon-make-grid def
-        upsilon-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
-        upsilon-desc grid -maybe-target-braid
-        opt-color (mono) eq {
-            /pic grid opt-cell-px opt-wall-px upsilon-mono-render def
-        } {
-            grid opt-start-x opt-start-y upsilon-bfs-distances
-            /max-d exch def
-            /dist  exch def
-            opt-color get-cmap
-            /cmap-stops exch def
-            /cmap-buf   exch def
-            /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops upsilon-color-render def
+            /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops  gdesc (color-render) get exec  def
         } if-else
     } {
         opt-unicursal {
@@ -7851,7 +8228,7 @@ opt-self-test {
             /cmap-buf   exch def
             /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops color-render def
         } if-else
-    } if-else } if-else } if-else } if-else
+    } if-else
     } if-else
     } if-else
 
@@ -7895,22 +8272,16 @@ opt-self-test {
             /as-ec exch def  /as-expl exch def
             sq { rows as-expl opt-w opt-h opt-cell-px opt-wall-px 16#A8#b 16#C0#b 16#F0#b tint-cells-square } if
         } if
-        opt-grid (square) eq {
-            /path grid opt-start-x opt-start-y opt-end-x opt-end-y bfs-solve def
-            rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b draw-path-overlay
-        } { opt-grid (hex) eq {
-            /path grid opt-start-x opt-start-y opt-end-x opt-end-y hex-bfs-solve def
-            rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b hex-draw-path-overlay
-        } { opt-grid (theta) eq {
-            /path grid opt-start-x opt-start-y opt-end-x opt-end-y theta-bfs-solve def
-            rows grid path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b theta-draw-path-overlay
-        } { opt-grid (triangle) eq {
-            /path grid opt-start-x opt-start-y opt-end-x opt-end-y triangle-bfs-solve def
-            rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b triangle-draw-path-overlay
-        } { opt-grid (upsilon) eq {
-            /path grid opt-start-x opt-start-y opt-end-x opt-end-y upsilon-bfs-solve def
-            rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b upsilon-draw-path-overlay
-        } if } if-else } if-else } if-else } if-else
+        % Solve path + ribbon are descriptor-driven: bfs-solve and draw-overlay
+        % both live on the descriptor, so this is one path call + the ribbon.
+        % theta is the lone special -- its polar overlay needs the grid for ring
+        % geometry, where the rectangular grids draw straight from cell coords.
+        /path grid opt-start-x opt-start-y opt-end-x opt-end-y  sdesc (bfs-solve) get exec  def
+        opt-grid (theta) eq {
+            rows grid path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b  sdesc (draw-overlay) get exec
+        } {
+            rows path opt-cell-px opt-wall-px ribbon-px 16#E0#b 16#28#b 16#28#b  sdesc (draw-overlay) get exec
+        } if-else
         % report the method's distinctive count (the solution ribbon is drawn)
         opt-solver (dead-end-fill) eq {
             (solver dead-end-fill: filled {0} of {1} cells, solution {2}\n)

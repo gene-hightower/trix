@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 110 PNGs
+#   examples/gallery.sh              Default: 121 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -168,11 +168,17 @@ run "grid-upsilon-viridis.png"  --grid upsilon --color viridis --size 12x10 --ce
 run "grid-upsilon-magma.png"    --grid upsilon --color magma --size 12x10 --cell-px 24
 run "grid-upsilon-solve.png"    --grid upsilon --color viridis --solve --size 10x8 --cell-px 24
 
+# Zeta grid: square cells + per-quad diagonal passages (no crossings).
+[[ "$QUIET" -eq 0 ]] && echo "Zeta grid (square + diagonal passages):"
+run "grid-zeta.png"             --grid zeta --size 16x16 --cell-px 20 --wall-px 2
+run "grid-zeta-turbo.png"       --grid zeta --color turbo --size 16x16 --cell-px 20 --wall-px 2 --seed 5
+run "grid-zeta-solve.png"       --grid zeta --color magma --solve --size 14x14 --cell-px 22 --wall-px 2 --seed 5
+
 # The capstone: every portable algorithm carving every non-square grid,
-# driven by the shared topology descriptor (Section 7D-ter).  4 grids x 7
-# portable algos = 32 colored tiles.
+# driven by the shared topology descriptor (Section 7D-ter).  5 grids x 8
+# portable algos = 40 colored tiles.
 [[ "$QUIET" -eq 0 ]] && echo "Algorithm x topology matrix (portable algos, viridis):"
-for grid in hex theta triangle upsilon; do
+for grid in hex theta triangle upsilon zeta; do
     for algo in backtrack kruskal wilson aldous-broder prim hunt-kill growing-tree origin-shift; do
         run "matrix-${grid}-${algo}.png" --grid "$grid" --algo "$algo" \
             --color viridis --size 16x16 --cell-px 14

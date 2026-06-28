@@ -22,7 +22,7 @@ limitations under the License.
 
 A teaching reference for the maze zoo built by
 [`examples/amazing.trx`](amazing.trx) -- twelve classic maze-generation
-algorithms, five grid topologies, distance-field heatmaps, and a PNG encoder
+algorithms, six grid topologies, distance-field heatmaps, and a PNG encoder
 whose file format is assembled in Trix.
 
 This manual is self-contained: read it end to end and you will come away
@@ -399,24 +399,26 @@ a generator doesn't care about geometry as long as you can answer "what are
 this cell's neighbors?" and "which wall separates these two?". Each grid below
 answers those two questions differently. The eight portable algorithms reach
 that answer through a per-topology **descriptor** (`Section 7D-ter`) -- a small
-vtable of `neighbors` / `link` / `visited?` / `mark` procs -- so a single
-implementation of each algorithm drives all five grids. The availability
-matrix:
+vtable of `neighbors` / `link` / `visited?` / `mark` procs (plus `make-grid` /
+`bfs-distances` / `bfs-solve` / `mono-render` / `color-render` / `braid` /
+`draw-overlay`, so the whole generate-render-solve pipeline is one table-driven
+path, not a per-grid branch) -- so a single implementation of each algorithm
+drives all six grids. The availability matrix:
 
-| Algorithm     | square | hex | theta | triangle | upsilon |
-| ------------- | ------ | --- | ----- | -------- | ------- |
-| backtrack     | +      | +   | +     | +        | +       |
-| kruskal       | +      | +   | +     | +        | +       |
-| wilson        | +      | +   | +     | +        | +       |
-| aldous-broder | +      | +   | +     | +        | +       |
-| prim          | +      | +   | +     | +        | +       |
-| hunt-kill     | +      | +   | +     | +        | +       |
-| growing-tree  | +      | +   | +     | +        | +       |
-| origin-shift  | +      | +   | +     | +        | +       |
-| eller         | +      |     |       |          |         |
-| binary-tree   | +      |     |       |          |         |
-| sidewinder    | +      |     |       |          |         |
-| division      | +      |     |       |          |         |
+| Algorithm     | square | hex | theta | triangle | upsilon | zeta |
+| ------------- | ------ | --- | ----- | -------- | ------- | ---- |
+| backtrack     | +      | +   | +     | +        | +       | +    |
+| kruskal       | +      | +   | +     | +        | +       | +    |
+| wilson        | +      | +   | +     | +        | +       | +    |
+| aldous-broder | +      | +   | +     | +        | +       | +    |
+| prim          | +      | +   | +     | +        | +       | +    |
+| hunt-kill     | +      | +   | +     | +        | +       | +    |
+| growing-tree  | +      | +   | +     | +        | +       | +    |
+| origin-shift  | +      | +   | +     | +        | +       | +    |
+| eller         | +      |     |       |          |         |      |
+| binary-tree   | +      |     |       |          |         |      |
+| sidewinder    | +      |     |       |          |         |      |
+| division      | +      |     |       |          |         |      |
 
 Slanted and curved walls are drawn with an integer **Bresenham line** primitive
 (`-draw-line`); only the square grid gets away with
@@ -463,17 +465,34 @@ and a separate flags byte for VISITED / IN-SOLUTION. The geometry is sized so th
 octagon's diagonal edges land exactly on the square's corners, tiling without
 gaps. (`--braid` is silently ignored on upsilon; color heatmaps *are* supported.)
 
-### 4.6 What works where
+### 4.6 zeta (`--grid zeta`) -- square cells + diagonal passages
 
-| Feature             | square | hex | theta | triangle | upsilon |
-| ------------------- | :----: | --- | :---: | :------: | :-----: |
-| Full 12-algo zoo    |   ✓    | ·   |   ·   |    ·     |    ·    |
-| Backtracker         |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |
-| `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |
+A square grid where a cell may also connect to its four **diagonal** neighbors,
+with the rule that the two diagonals of any 2×2 quad must never cross. `amazing.trx`
+guarantees that *by construction*: at grid creation each quad is pre-assigned one
+permitted diagonal orientation (`/` or `\`, randomised by `--seed`) and stored in
+a fourth grid element. A cell's diagonal neighbor exists only when its quad permits
+that orientation, so `neighbors` is **stateless with respect to carving** -- a
+crossing can never even be proposed, and so every portable generator works
+unchanged, including the pre-collecting Kruskal and the walk-then-carve Wilson that
+a *dynamic* (algorithm-chooses) constraint would have tangled. Cells reuse upsilon's
+two-byte layout and the eight-direction table. Rendering draws the square cells
+exactly like the square grid, then a diagonal passage as a thick band from one cell
+centre to the other through the quad corner (split at the midpoint so each half
+carries its cell's color). The probabilistic `--braid` is deferred here as on
+upsilon, but the descriptor-driven `--target-*` braiding works.
+
+### 4.7 What works where
+
+| Feature             | square | hex | theta | triangle | upsilon | zeta |
+| ------------------- | :----: | --- | :---: | :------: | :-----: | :--: |
+| Full 12-algo zoo    |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |
+| Backtracker         |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
+| Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
+| `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
+| `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |  ·   |
+| `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
+| `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |
 
 ---
 
@@ -880,7 +899,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--flow-image` | `NAME` | Flow maze steered by an image field `flow-fields/<NAME>.trx` (`logo` / `cat` bundled; from `tools/gen_flow_field.py`) ([§3.2](#32-spanning-tree-family)) | -- |
 | `--flow-image-dir` | dir | Where to find `flow-fields/*.trx` | auto |
 | `--flow-jitter` | int | Flow tie-break randomness: `0` = strict art, larger = twistier | `3` |
-| `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` | `square` |
+| `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` / `zeta` ([§4.6](#46-zeta---grid-zeta----square-cells--diagonal-passages)) | `square` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |
 | `--color-curve` | float | Gamma on the distance ramp; `>1` spreads near cells, `<1` the far tail ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `1.0` |
 | `--color-cycles` | int | Repeat the palette as `N` seamless sine-wave bands (`0` = off) ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `0` |
@@ -1007,7 +1026,7 @@ fully connected spanning tree), the recursive-division and Origin Shift
 perfect-maze checks (connected *and* exactly `w*h-1` passages -- the spanning-tree
 invariant a wall-adder and an edge-reverser must each maintain), colormap endpoints,
 end-to-end color renders,
-BFS-solve correctness on all five grids, braid-to-zero-dead-ends at `P=1.0`,
+BFS-solve correctness on all six grids, braid-to-zero-dead-ends at `P=1.0`,
 weave under-cell presence with intact connectivity, font glyph bits, compare
 geometry, and the masking builders + per-component perfect-forest invariant for all
 eight portable algorithms. Run it with a large VM:

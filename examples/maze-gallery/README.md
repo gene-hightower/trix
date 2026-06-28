@@ -4,7 +4,7 @@ Sample output from [`examples/amazing.trx`](../amazing.trx) — a ~6,600-line
 pure-Trix maze generator (homage to Steve Capps' *Amazing* on the 128K Mac).
 Every image here is a real PNG whose format `amazing.trx` assembles itself in
 Trix -- no libpng, over the engine's native `deflate`/`crc32`/`adler32` ops --
-holding twelve maze algorithms across five grid topologies, distance-colored with
+holding twelve maze algorithms across six grid topologies, distance-colored with
 fourteen colormaps.
 
 This directory is otherwise generated output and git-ignored; the handful below
@@ -18,6 +18,8 @@ examples/gallery.sh
 | Image | Shows |
 | --- | --- |
 | [`grid-upsilon-viridis.png`](grid-upsilon-viridis.png) | **Upsilon** grid (octagons + squares), viridis shading |
+| [`grid-zeta-turbo.png`](grid-zeta-turbo.png) | **Zeta** grid (square cells + per-quad diagonal passages, no crossings), turbo shading — the heatmap flows diagonally through the corridors |
+| [`grid-zeta-solve.png`](grid-zeta-solve.png) | **Zeta** grid solved — the red ribbon runs diagonally where the path takes a diagonal passage |
 | [`grid-theta-viridis.png`](grid-theta-viridis.png) | Concentric **polar** grid (theta), viridis distance shading — the README topology hero |
 | [`grid-hex-magma.png`](grid-hex-magma.png) | **Hex** grid (pointy-top, odd-r offset), magma colormap |
 | [`grid-triangle-inferno.png`](grid-triangle-inferno.png) | **Triangle** grid (alternating up/down), inferno colormap |
@@ -57,7 +59,7 @@ examples/gallery.sh
 Algorithms: recursive-backtracker, Kruskal, Wilson, Eller, binary-tree,
 sidewinder, Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
 Origin Shift (edge-reversal), recursive-division (the one wall-adding generator).
-Grids: square, hex, theta (polar), triangle, upsilon (octagon).
+Grids: square, hex, theta (polar), triangle, upsilon (octagon), zeta (square + diagonals).
 Colormaps: viridis, magma, inferno, plasma, cividis, turbo, rainbow, cubehelix,
 grayscale, two-tone, fire-ice, spectral, coolwarm, twilight (plus the `mono`
 outline render).  On large mazes `--color-curve` (gamma) and `--color-cycles`

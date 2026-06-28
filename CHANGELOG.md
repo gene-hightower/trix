@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: zeta grid (`--grid zeta`) -- a sixth topology, square cells with
+  diagonal passages.** A cell may connect to its four diagonal neighbours as well as the four
+  orthogonal ones, subject to the rule that the two diagonals of any 2x2 quad never cross. That is
+  guaranteed by construction: at grid creation each quad is pre-assigned one permitted diagonal
+  orientation (randomised by `--seed`), so `neighbors` is stateless with respect to carving and
+  every portable generator works unchanged -- including the pre-collecting Kruskal and walk-then-carve
+  Wilson that an algorithm-chooses-the-diagonal constraint would have broken. Reuses upsilon's
+  two-byte cell layout and eight-direction table; a new renderer draws diagonal corridors as
+  centre-to-centre bands through the quad corner. All eight portable algos work (48 combos), with
+  `--color`, `--solve` (diagonal ribbons), and `--target-*` braiding. Self-test +16 (259): a perfect
+  connected crossing-free maze for backtracker/Kruskal/Wilson plus the full 8-algo connectivity row.
+- **`examples/amazing.trx`: the grid generate/render/solve pipeline is now table-driven.** The
+  per-topology `--grid` dispatch was a six-deep `opt-grid (X) eq { ... }` if-else ladder (and a
+  parallel one for the solve ribbon). The topology descriptor gained `make-grid` / `bfs-distances` /
+  `mono-render` / `color-render` / `braid` / `draw-overlay` (it already had `neighbors` / `link` /
+  `visited?` / `mark` / `open?` / `bfs-solve`), so both ladders collapse to one descriptor-driven
+  block each (the solve overlay keeps a lone theta special, whose polar ribbon needs the grid).
+  Adding a grid is now one descriptor plus one registry row -- no new branch. Output is byte-identical.
 - **`examples/amazing.trx`: metric-targeted braiding (`--target-dead-ends` / `--target-loops`).**
   The `--metrics` numbers become targets: `--target-dead-ends P` braids the maze toward a dead-end
   percentage, `--target-loops N` toward an exact loop count. Braiding is monotone -- from the
