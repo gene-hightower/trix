@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: crack grid (`--grid crack`) -- a seventh topology, irregular Voronoi
+  cells.** A "crack" maze tessellates the plane into irregular polygons (the cracked-mud look) and
+  carves a maze over the cell-adjacency graph. The Voronoi geometry is generated **entirely in
+  Trix** (no host tool, no bundled data) using the engine's IEEE-754 ops: each cell is built by
+  half-plane clipping (Sutherland-Hodgman) of the bounding box against every other site's
+  perpendicular bisector, with `--crack-relax` Lloyd passes to even the cells out, and the per-edge
+  clip owner yields the adjacency directly. Generation is **~O(N)** (not O(N^2)) via a uniform
+  bucket grid -- Voronoi neighbours are spatially local, so each cell only clips against sites in
+  expanding rings of nearby buckets until the prune radius is exceeded; cell count is `w*h`, so a
+  40x40 (1600 cells) generates in a couple of seconds. The irregular graph rides the **same**
+  topology descriptor as the lattice grids by a one-row-of-N embed (cell id = `cy*w+cx`, `w*h = N`),
+  so all eight portable generators, the generic solvers, `--metrics`, `--target-*` braiding and
+  `--color` work unchanged (56 portable combos). The colour path adds a convex-polygon **scanline
+  fill** -- each cell is filled by its BFS distance, walls stroked on top -- and the `--solve` ribbon
+  runs between cell centroids. Self-test +4 (268): backtracker/Kruskal/Wilson each carve a perfect
+  maze (connected spanning tree) on the irregular graph, plus a graph-connectivity check. Masking and
+  `--weave` stay square-only.
+- **`examples/amazing.trx`: Trémaux solver (`--solver tremaux`).** A fourth method in the solver
+  zoo: Trémaux's algorithm, the depth-first passage-marking walk a person can run with chalk and no
+  map (mark a passage once when you take it, twice when its far side is exhausted, and never re-enter
+  a twice-marked passage). Implemented as an explicit-stack DFS over the topology descriptor
+  (`neighbors` / `open?`), so it runs on **every** grid; it wanders into dead ends and backs out,
+  visiting more cells than A\*'s focused frontier but fewer than BFS's full flood, and stops the
+  instant it reaches the exit. The visited cells are tinted green on the square render and the
+  visited **count** reports on every grid (the solution ribbon itself is the canonical BFS path, as
+  with the other solvers). Self-test +5 (264): reaches the goal while visiting between the path
+  length and every cell, on the square grid and on a non-square (hex) grid.
 - **`examples/amazing.trx`: zeta grid (`--grid zeta`) -- a sixth topology, square cells with
   diagonal passages.** A cell may connect to its four diagonal neighbours as well as the four
   orthogonal ones, subject to the rule that the two diagonals of any 2x2 quad never cross. That is

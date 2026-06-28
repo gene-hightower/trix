@@ -1,10 +1,10 @@
 # Maze gallery
 
-Sample output from [`examples/amazing.trx`](../amazing.trx) — a ~6,600-line
+Sample output from [`examples/amazing.trx`](../amazing.trx) — a ~9,000-line
 pure-Trix maze generator (homage to Steve Capps' *Amazing* on the 128K Mac).
 Every image here is a real PNG whose format `amazing.trx` assembles itself in
 Trix -- no libpng, over the engine's native `deflate`/`crc32`/`adler32` ops --
-holding twelve maze algorithms across six grid topologies, distance-colored with
+holding twelve maze algorithms across seven grid topologies, distance-colored with
 fourteen colormaps.
 
 This directory is otherwise generated output and git-ignored; the handful below
@@ -20,6 +20,8 @@ examples/gallery.sh
 | [`grid-upsilon-viridis.png`](grid-upsilon-viridis.png) | **Upsilon** grid (octagons + squares), viridis shading |
 | [`grid-zeta-turbo.png`](grid-zeta-turbo.png) | **Zeta** grid (square cells + per-quad diagonal passages, no crossings), turbo shading — the heatmap flows diagonally through the corridors |
 | [`grid-zeta-solve.png`](grid-zeta-solve.png) | **Zeta** grid solved — the red ribbon runs diagonally where the path takes a diagonal passage |
+| [`grid-crack-turbo.png`](grid-crack-turbo.png) | **Crack** grid (irregular Voronoi cells, generated in-engine), turbo shading — the distance heatmap flows across the cracked-mud tessellation |
+| [`grid-crack-solve.png`](grid-crack-solve.png) | **Crack** grid solved — the red ribbon threads between Voronoi cell centroids |
 | [`grid-theta-viridis.png`](grid-theta-viridis.png) | Concentric **polar** grid (theta), viridis distance shading — the README topology hero |
 | [`grid-hex-magma.png`](grid-hex-magma.png) | **Hex** grid (pointy-top, odd-r offset), magma colormap |
 | [`grid-triangle-inferno.png`](grid-triangle-inferno.png) | **Triangle** grid (alternating up/down), inferno colormap |
@@ -33,6 +35,7 @@ examples/gallery.sh
 | [`grid-hex-solve.png`](grid-hex-solve.png) | Hex maze with the solution path overlaid in red |
 | [`solve-dead-end-fill.png`](solve-dead-end-fill.png) | **Solver: dead-end-fill** (`--solver dead-end-fill`) — every dead-end iteratively filled (grey), leaving only the start→end solution corridor + red ribbon (the "drained" maze) |
 | [`solve-astar.png`](solve-astar.png) | **Solver: A\*** (`--solver astar`) — the cells A\* expanded tinted blue: a focused frontier toward the goal vs BFS's full flood (same maze/seed as the others) |
+| [`solve-tremaux.png`](solve-tremaux.png) | **Solver: Trémaux** (`--solver tremaux`) — the cells the depth-first passage-marking walk visited tinted green: a wandering footprint that backs out of dead ends, broader than A\*'s frontier (same maze/seed as the others) |
 | [`solve-wall-follower.png`](solve-wall-follower.png) | **Solver: wall-follower** (`--solver wall-follower`, square) — the left-hand-rule walk, with its dead-end excursions; finds *a* path, not the shortest |
 | [`unicursal-viridis.png`](unicursal-viridis.png) | **Unicursal labyrinth** (`--unicursal`) — a single non-branching path that visits every cell (a doubled perfect maze); the viridis gradient is distance-along-the-one-path, flowing continuously end to end (no junctions) |
 | [`target-deadends-20.png`](target-deadends-20.png) | **Metric-targeted braid** (`--target-dead-ends 20`) — the perfect maze braided down to ~20% dead-ends; monotone, connectivity-safe, best-effort (reports achieved vs requested) |
@@ -59,7 +62,7 @@ examples/gallery.sh
 Algorithms: recursive-backtracker, Kruskal, Wilson, Eller, binary-tree,
 sidewinder, Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
 Origin Shift (edge-reversal), recursive-division (the one wall-adding generator).
-Grids: square, hex, theta (polar), triangle, upsilon (octagon), zeta (square + diagonals).
+Grids: square, hex, theta (polar), triangle, upsilon (octagon), zeta (square + diagonals), crack (Voronoi).
 Colormaps: viridis, magma, inferno, plasma, cividis, turbo, rainbow, cubehelix,
 grayscale, two-tone, fire-ice, spectral, coolwarm, twilight (plus the `mono`
 outline render).  On large mazes `--color-curve` (gamma) and `--color-cycles`

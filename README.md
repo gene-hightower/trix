@@ -28,7 +28,7 @@ C++23 | Single-Header | ASan/UBSan clean | Apache 2.0
 </p>
 
 <p align="center"><em>Sample output from the Trix program
-<a href="examples/amazing.trx"><code>examples/amazing.trx</code></a> &mdash; twelve maze algorithms across six
+<a href="examples/amazing.trx"><code>examples/amazing.trx</code></a> &mdash; twelve maze algorithms across seven
 grid topologies. <a href="examples/maze-gallery/">More in the gallery.</a></em></p>
 
 <p align="center">
@@ -265,7 +265,7 @@ emulators and interpreters.  The highlights:
 | Program | Demonstrates |
 | --- | --- |
 | [zmachine.trx](examples/zmachine.trx) | Infocom Z-machine covering V1-V5, V7, V8 (no V6 graphical) -- runs interactive-fiction story files, fetched separately (none bundled) |
-| [amazing.trx](examples/amazing.trx) | Maze zoo -- twelve algorithms (incl. Origin Shift) across six grid topologies (incl. zeta diagonals), distance-field heatmaps, PNG output |
+| [amazing.trx](examples/amazing.trx) | Maze zoo -- twelve algorithms (incl. Origin Shift) across seven grid topologies (incl. zeta diagonals + crack Voronoi cells), distance-field heatmaps, PNG output |
 | [mini-scheme.trx](examples/mini-scheme.trx) | Metacircular Scheme: CEK machine, first-class continuations, `call/cc` |
 | [tetrix.trx](examples/tetrix.trx) | Playable terminal falling-block game -- SRS rotation, T-spins, lookahead AI |
 | [chip8.trx](examples/chip8.trx) | CHIP-8 / Super-CHIP emulator for the classic 1977 VM |

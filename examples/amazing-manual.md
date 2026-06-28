@@ -22,7 +22,7 @@ limitations under the License.
 
 A teaching reference for the maze zoo built by
 [`examples/amazing.trx`](amazing.trx) -- twelve classic maze-generation
-algorithms, six grid topologies, distance-field heatmaps, and a PNG encoder
+algorithms, seven grid topologies, distance-field heatmaps, and a PNG encoder
 whose file format is assembled in Trix.
 
 This manual is self-contained: read it end to end and you will come away
@@ -403,22 +403,22 @@ vtable of `neighbors` / `link` / `visited?` / `mark` procs (plus `make-grid` /
 `bfs-distances` / `bfs-solve` / `mono-render` / `color-render` / `braid` /
 `draw-overlay`, so the whole generate-render-solve pipeline is one table-driven
 path, not a per-grid branch) -- so a single implementation of each algorithm
-drives all six grids. The availability matrix:
+drives all seven grids. The availability matrix:
 
-| Algorithm     | square | hex | theta | triangle | upsilon | zeta |
-| ------------- | ------ | --- | ----- | -------- | ------- | ---- |
-| backtrack     | +      | +   | +     | +        | +       | +    |
-| kruskal       | +      | +   | +     | +        | +       | +    |
-| wilson        | +      | +   | +     | +        | +       | +    |
-| aldous-broder | +      | +   | +     | +        | +       | +    |
-| prim          | +      | +   | +     | +        | +       | +    |
-| hunt-kill     | +      | +   | +     | +        | +       | +    |
-| growing-tree  | +      | +   | +     | +        | +       | +    |
-| origin-shift  | +      | +   | +     | +        | +       | +    |
-| eller         | +      |     |       |          |         |      |
-| binary-tree   | +      |     |       |          |         |      |
-| sidewinder    | +      |     |       |          |         |      |
-| division      | +      |     |       |          |         |      |
+| Algorithm     | square | hex | theta | triangle | upsilon | zeta | crack |
+| ------------- | ------ | --- | ----- | -------- | ------- | ---- | ----- |
+| backtrack     | +      | +   | +     | +        | +       | +    | +     |
+| kruskal       | +      | +   | +     | +        | +       | +    | +     |
+| wilson        | +      | +   | +     | +        | +       | +    | +     |
+| aldous-broder | +      | +   | +     | +        | +       | +    | +     |
+| prim          | +      | +   | +     | +        | +       | +    | +     |
+| hunt-kill     | +      | +   | +     | +        | +       | +    | +     |
+| growing-tree  | +      | +   | +     | +        | +       | +    | +     |
+| origin-shift  | +      | +   | +     | +        | +       | +    | +     |
+| eller         | +      |     |       |          |         |      |       |
+| binary-tree   | +      |     |       |          |         |      |       |
+| sidewinder    | +      |     |       |          |         |      |       |
+| division      | +      |     |       |          |         |      |       |
 
 Slanted and curved walls are drawn with an integer **Bresenham line** primitive
 (`-draw-line`); only the square grid gets away with
@@ -482,17 +482,44 @@ centre to the other through the quad corner (split at the midpoint so each half
 carries its cell's color). The probabilistic `--braid` is deferred here as on
 upsilon, but the descriptor-driven `--target-*` braiding works.
 
-### 4.7 What works where
+### 4.7 crack (`--grid crack`) -- irregular Voronoi cells
 
-| Feature             | square | hex | theta | triangle | upsilon | zeta |
-| ------------------- | :----: | --- | :---: | :------: | :-----: | :--: |
-| Full 12-algo zoo    |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |
-| Backtracker         |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
-| Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
-| `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
-| `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |  ·   |
-| `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |
-| `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |
+A "crack" maze tessellates the plane into irregular **Voronoi polygons** (the
+dried-mud / cracked-glass look) and carves a maze over the cell-adjacency graph
+(one node per cell, one passage per shared boundary). The geometry is generated
+**entirely in Trix** (Section 7C-crack) using the engine's IEEE-754 ops -- no
+host tool, no bundled data. Each cell is built by **half-plane clipping**: it
+starts as the bounding box and is clipped by the perpendicular bisector against
+each other site (Sutherland-Hodgman), so every cell is a bounded convex polygon
+inside the box. A few **Lloyd relaxation** passes (`--crack-relax N`, default 2)
+even the cells out; the per-edge clip *owner* gives the adjacency directly.
+
+To make `--size` behave like every other grid, generation is **`O(N)`** via a
+uniform bucket grid: Voronoi neighbours are spatially local, so each cell only
+tests sites in expanding rings of nearby buckets until the prune radius is
+exceeded. Cell count is `w·h` (so `--size 20x20` ≈ 400 cells); a 40×40 (1600
+cells) generates in a couple of seconds.
+
+The irregular graph rides the **same** topology descriptor as the lattice grids
+by embedding it as a one-row-of-N grid (cell id = `cy·w + cx`, with `w·h = N`),
+so the eight portable generators, the generic solvers, `--metrics`,
+`--target-*`, `--color` and `--solve` all work unchanged. Walls are Bresenham
+lines along each closed cell boundary; the color path **scanline-fills** each
+convex cell polygon with its BFS-distance color, then strokes the walls on top,
+and the `--solve` ribbon runs between cell **centroids**. (`--mask` and `--weave`
+are square-only and ignored here, as on the other non-square grids.)
+
+### 4.8 What works where
+
+| Feature             | square | hex | theta | triangle | upsilon | zeta | crack |
+| ------------------- | :----: | --- | :---: | :------: | :-----: | :--: | :---: |
+| Full 12-algo zoo    |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |   ·   |
+| Backtracker         |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |   ✓   |
+| Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |   ✓   |
+| `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |   ✓   |
+| `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |  ·   |   ·   |
+| `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |   ✓   |
+| `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |   ·   |
 
 ---
 
@@ -603,6 +630,14 @@ get there, which is the point of the showcase:
   goal instead of BFS's even flood. The expanded cells are tinted blue (square);
   the expanded **count** reports everywhere. (On a perfect maze the path is
   unique regardless of the heuristic; on a braided maze A\* returns a short path.)
+- **`tremaux`** -- Trémaux's algorithm, the depth-first passage-marking walk a
+  person can run with chalk and no map: mark each passage as you take it (one
+  mark = you are standing on it now, two = its far side was fully explored), and
+  never re-enter a two-marked passage. Implemented as an explicit-stack DFS over
+  the descriptor, so it **rides every grid** -- it wanders into dead ends and
+  backs out, visiting *more* cells than A\*'s focused frontier but fewer than
+  BFS's full flood. The visited cells are tinted green (square); the visited
+  **count** reports everywhere. It stops the instant it reaches the exit.
 - **`wall-follower`** -- the classic left-hand rule (keep one hand on the wall):
   at each cell try to turn left, else go straight, else right, else back. It
   finds *a* path, not the shortest, wandering into and back out of dead-ends, so
@@ -899,14 +934,15 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--flow-image` | `NAME` | Flow maze steered by an image field `flow-fields/<NAME>.trx` (`logo` / `cat` bundled; from `tools/gen_flow_field.py`) ([§3.2](#32-spanning-tree-family)) | -- |
 | `--flow-image-dir` | dir | Where to find `flow-fields/*.trx` | auto |
 | `--flow-jitter` | int | Flow tie-break randomness: `0` = strict art, larger = twistier | `3` |
-| `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` / `zeta` ([§4.6](#46-zeta---grid-zeta----square-cells--diagonal-passages)) | `square` |
+| `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` / `zeta` / `crack` ([§4.7](#47-crack---grid-crack----irregular-voronoi-cells)) | `square` |
+| `--crack-relax` | N | Lloyd relaxation passes for `--grid crack` (cell uniformity) | `2` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |
 | `--color-curve` | float | Gamma on the distance ramp; `>1` spreads near cells, `<1` the far tail ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `1.0` |
 | `--color-cycles` | int | Repeat the palette as `N` seamless sine-wave bands (`0` = off) ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `0` |
 | `--start` | `X,Y` | Path/heatmap start cell | `0,0` |
 | `--end` | `X,Y` | Path end cell; `-1,-1` = far corner | `-1,-1` |
 | `--solve` | -- | Overlay the shortest-path ribbon in red | off |
-| `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
+| `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `tremaux` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
 | `--braid` | float `0..1` | Fraction of dead-ends to remove | `0.0` |
 | `--target-dead-ends` | float `%` | Braid toward this dead-end percentage; best-effort, any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |
 | `--target-loops` | int | Braid toward this exact loop count; any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |
@@ -1026,7 +1062,7 @@ fully connected spanning tree), the recursive-division and Origin Shift
 perfect-maze checks (connected *and* exactly `w*h-1` passages -- the spanning-tree
 invariant a wall-adder and an edge-reverser must each maintain), colormap endpoints,
 end-to-end color renders,
-BFS-solve correctness on all six grids, braid-to-zero-dead-ends at `P=1.0`,
+BFS-solve correctness on all seven grids, braid-to-zero-dead-ends at `P=1.0`,
 weave under-cell presence with intact connectivity, font glyph bits, compare
 geometry, and the masking builders + per-component perfect-forest invariant for all
 eight portable algorithms. Run it with a large VM:

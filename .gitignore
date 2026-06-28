@@ -68,6 +68,8 @@ examples/maze-gallery/*
 !examples/maze-gallery/grid-upsilon-viridis.png
 !examples/maze-gallery/grid-zeta-turbo.png
 !examples/maze-gallery/grid-zeta-solve.png
+!examples/maze-gallery/grid-crack-turbo.png
+!examples/maze-gallery/grid-crack-solve.png
 !examples/maze-gallery/grid-triangle-inferno.png
 !examples/maze-gallery/compare-4-algos.png
 !examples/maze-gallery/grid-hex-solve.png
@@ -78,6 +80,7 @@ examples/maze-gallery/*
 !examples/maze-gallery/algo-origin-shift-turbo.png
 !examples/maze-gallery/solve-dead-end-fill.png
 !examples/maze-gallery/solve-astar.png
+!examples/maze-gallery/solve-tremaux.png
 !examples/maze-gallery/solve-wall-follower.png
 !examples/maze-gallery/unicursal-viridis.png
 !examples/maze-gallery/target-deadends-20.png

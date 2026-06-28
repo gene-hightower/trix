@@ -2383,6 +2383,26 @@
     (draw-overlay)  { zeta-draw-path-overlay }
 >> def
 
+% crack (Voronoi) descriptor.  Its procs are defined far below (near the
+%   in-engine generator), but the dict only needs their NAMES -- the code blocks
+%   are late-bound, resolved at render time -- so it is registered here with the
+%   other topologies (the << >> registry has a fixed capacity, so crack must be
+%   a literal entry, not a later `put`).
+/crack-desc <<
+    (neighbors)     { crack-neighbors }
+    (link)          { crack-link }
+    (visited?)      { crack-visited? }
+    (mark)          { crack-mark }
+    (open?)         { crack-open? }
+    (make-grid)     { crack-make-grid }
+    (bfs-solve)     { crack-bfs-solve }
+    (bfs-distances) { crack-bfs-distances }
+    (mono-render)   { crack-mono-render }
+    (color-render)  { crack-color-render }
+    (braid)         { pop pop }       % probabilistic --braid deferred; use --target-*
+    (draw-overlay)  { crack-draw-overlay }
+>> def
+
 /TD-DESCRIPTORS <<
     (square)   square-desc
     (hex)      hex-desc
@@ -2390,6 +2410,7 @@
     (triangle) triangle-desc
     (upsilon)  upsilon-desc
     (zeta)     zeta-desc
+    (crack)    crack-desc
 >> def
 
 % (name) td-descriptor-for -- descriptor dict (errors on unknown topology)
@@ -2417,8 +2438,8 @@
     /n w h mul local-def
     /stack n chunked-array local-def
     /sp 0 local-def
-    /scratch 24 array local-def
-    /uv      24 array local-def
+    /scratch 60 array local-def
+    /uv      60 array local-def
 
     g sx sy mrk
     stack sp  sy w mul sx add  chunked-put
@@ -2545,7 +2566,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
 
     % Pass 1: count forward edges so the edge array can be sized exactly.
     /nedges 0 local-def
@@ -2621,7 +2642,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /wnext n chunked-array local-def
     /wdir  n chunked-array local-def
     % Count the cells we must still bring into the tree.  On a fresh grid this
@@ -2678,7 +2699,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     % Cells still to visit -- whole grid normally, one component under masking
     % (Section 14).  Counted via the descriptor's `vis` so it is topology-correct.
     /unvisited -1 local-def
@@ -2711,7 +2732,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /infront n chunked-array local-def
     0 1 n 1 sub {|i| infront i 0 chunked-put } for
     /frontier n chunked-array local-def
@@ -2773,7 +2794,7 @@
     /mrk  desc (mark)      get local-def
     /w g grid-w local-def
     /h g grid-h local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /cx sx local-def
     /cy sy local-def
     g cx cy mrk
@@ -2783,7 +2804,7 @@
         % WALK: collect (cx,cy)'s unvisited neighbors, step to a random one.
         /cnt g cx cy scratch nbrs local-def
         /uc 0 local-def
-        /ulist 24 array local-def
+        /ulist 60 array local-def
         0 1 cnt 1 sub {|k|#+6
             /b 3 k mul local-def
             /nx scratch b       get local-def
@@ -2848,7 +2869,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /active n chunked-array local-def
     /asize 0 local-def
 
@@ -2868,7 +2889,7 @@
         /py pidx w div local-def
         /cnt g px py scratch nbrs local-def
         /uc 0 local-def
-        /ulist 24 array local-def
+        /ulist 60 array local-def
         0 1 cnt 1 sub {|k|#+6
             /b 3 k mul local-def
             /nx scratch b       get local-def
@@ -2918,7 +2939,7 @@
     /w g grid-w local-def
     /h g grid-h local-def
     /n w h mul local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /ptr  n chunked-array local-def     % parent cell index, -1 at the origin / unreached
     /q    n chunked-array local-def     % BFS queue
     /seen n chunked-array local-def
@@ -3177,7 +3198,7 @@
 /-cell-degree {|desc g x y -- degree|#+6
     /nbrs desc (neighbors) get local-def
     /opn  desc (open?)     get local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /cnt g x y scratch nbrs local-def
     /deg 0 local-def
     0 1 cnt 1 sub {|k|#+1
@@ -3195,7 +3216,7 @@
     /opn  desc (open?)     get local-def
     /w g grid-w local-def
     /h g grid-h local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /count 0 local-def
     /open-total 0 local-def
     0 1 h 1 sub {|y|#+8
@@ -3244,7 +3265,7 @@
 
     /braids 0 local-def
     /deN de0 local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     0 1 de0 1 sub {|t|#+12
         mode 0 eq { deN tgt le } { loops0 braids add  tgt ge } if-else
         { exit } if
@@ -3477,16 +3498,17 @@
 } def
 
 % ============================================================================
-%  Section 7H: Solver zoo (dead-end-fill, A*, wall-follower)
+%  Section 7H: Solver zoo (dead-end-fill, A*, Trémaux, wall-follower)
 % ============================================================================
 %   These SOLVE an already-generated maze, each with a characteristic
-%   exploration that the --solver flag visualises.  On a perfect maze all three
+%   exploration that the --solver flag visualises.  On a perfect maze all four
 %   recover the same unique solution (the ribbon uses bfs-solve); what differs is
 %   HOW: dead-end-fill drains every dead-end until only the solution corridor
-%   remains, A* expands a focused frontier toward the goal, and the wall-follower
-%   traces a hand-on-wall walk.  dead-end-fill and A* ride the descriptor
-%   (neighbors + open?) so they run on every grid; the wall-follower needs a
-%   clean turn order and is square-only.
+%   remains, A* expands a focused frontier toward the goal, Trémaux wanders the
+%   maze depth-first marking passages and backing out of dead ends, and the
+%   wall-follower traces a hand-on-wall walk.  dead-end-fill, A* and Trémaux ride
+%   the descriptor (neighbors + open?) so they run on every grid; the
+%   wall-follower needs a clean turn order and is square-only.
 
 % (desc g sx sy ex ey) dead-end-fill -- filled fcount
 %   Iteratively fill every degree-1 cell that is not the start/end, decrementing
@@ -3501,7 +3523,7 @@
     /n w h mul local-def
     /sidx sy w mul sx add local-def
     /eidx ey w mul ex add local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /deg    n chunked-array local-def
     /filled n chunked-array local-def
     /q      n chunked-array local-def
@@ -3563,7 +3585,7 @@
     /h g grid-h local-def
     /n w h mul local-def
     /eidx ey w mul ex add local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /BIG 16#7FFFFFFF# local-def
     /gsc    n chunked-array local-def
     /closed n chunked-array local-def
@@ -3635,6 +3657,68 @@
         } if
     } while
     closed ecount
+} def
+
+% (desc g sx sy ex ey) tremaux-solve -- visited vcount
+%   Trémaux's algorithm: walk the maze depth-first, marking each passage as you
+%   traverse it -- a passage may carry one mark (it is on the path you are
+%   currently standing on) or two (its far side was fully explored and you backed
+%   out).  Never re-enter a two-marked passage.  Implemented as an explicit-stack
+%   DFS over the descriptor (neighbors + open?), so it runs on every grid: the
+%   stack holds the singly-marked corridor from the start to where you stand, and
+%   popping a cell is the moment its passage earns its second mark.  Stops the
+%   instant the exit is reached, the way a runner leaves once they find the way
+%   out.  `visited` is a w*h byte map (1 = the walk entered this cell); vcount =
+%   how many were entered -- the wandering footprint, larger than A*'s focused
+%   frontier and the complement of dead-end-fill's drained cells.  The solution
+%   ribbon itself is drawn from bfs-solve, as with the other solvers.
+/tremaux-solve {|desc g sx sy ex ey -- visited vcount|#+13
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /n w h mul local-def
+    /eidx ey w mul ex add local-def
+    /scratch 60 array local-def
+    /visited n chunked-array local-def
+    /stack   n chunked-array local-def
+    /sp 0 local-def
+    /vcount 0 local-def
+    0 1 n 1 sub {|i| visited i 0b chunked-put } for
+
+    % seed the walk at the start cell
+    /sidx sy w mul sx add local-def
+    visited sidx 1b chunked-put  /vcount vcount 1 add store
+    stack 0 sidx chunked-put  /sp 1 store
+    /found sidx eidx eq local-def
+
+    { sp 0 gt  found not  and } {||#+5
+        /c stack sp 1 sub chunked-get local-def    % peek the top of the path
+        /cx c w mod local-def
+        /cy c w div local-def
+        /cnt g cx cy scratch nbrs local-def
+        % first open, not-yet-visited neighbour in direction order (mark once)
+        /next -1 local-def
+        0 1 cnt 1 sub {|k|#+2
+            next 0 lt {
+                /d scratch 3 k mul 2 add get local-def
+                g cx cy d opn {
+                    /m scratch 3 k mul 1 add get  w mul  scratch 3 k mul get  add local-def
+                    visited m chunked-get 0b eq { /next m store } if
+                } if
+            } if
+        } for
+        next 0 ge {
+            % advance: the passage to `next` takes its first mark
+            visited next 1b chunked-put  /vcount vcount 1 add store
+            stack sp next chunked-put  /sp sp 1 add store
+            next eidx eq { /found true store } if
+        } {
+            % dead end here -- back out, marking the passage a second time
+            /sp sp 1 sub store
+        } if-else
+    } while
+    visited vcount
 } def
 
 % (g sx sy ex ey) wall-follow -- walk
@@ -6003,7 +6087,7 @@
     /labels w h -make-label-field local-def
     /seeds n chunked-array local-def
     /ncomp 0 local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /queue n chunked-array local-def
     0 1 h 1 sub {|sy|#+12
         0 1 w 1 sub {|sx|#+12
@@ -6514,11 +6598,13 @@
     (origin-shift: spanning-tree edges) edges  ow oh mul 1 sub  eq     expect
 } def
 
-% ----- solver zoo (dead-end-fill, A*, wall-follower) ---------------------
-%   On a perfect maze all three recover the unique solution; the tests pin each
+% ----- solver zoo (dead-end-fill, A*, Trémaux, wall-follower) ------------
+%   On a perfect maze all four recover the unique solution; the tests pin each
 %   method's invariant.  dead-end-fill must leave EXACTLY the solution (so the
 %   filled count = cells - path length); A* must reach + expand the goal within
-%   [path, cells]; the wall-follower's left hand must arrive at the exit.
+%   [path, cells]; Trémaux's depth-first walk must reach the goal while visiting
+%   between the path length and every cell (and runs on a non-square grid too);
+%   the wall-follower's left hand must arrive at the exit.
 /test-solvers {||#+15
     1ul rand-seed
     /gs 8 8 make-grid local-def   gs 0 0 recursive-backtracker
@@ -6536,6 +6622,19 @@
     (solver: astar reached the goal)  aexpl 63 chunked-get 0b ne   expect
     (solver: astar expanded >= path)  aec pathlen ge               expect
     (solver: astar expanded <= cells) aec sn le                    expect
+
+    square-desc gs 0 0 7 7 tremaux-solve
+    [ /trvis /trvc ] bind-locals
+    (solver: tremaux reached the end) trvis 63 chunked-get 0b ne   expect
+    (solver: tremaux visited >= path) trvc pathlen ge              expect
+    (solver: tremaux visited <= cells) trvc sn le                  expect
+    (solver: tremaux keeps start)     trvis 0 chunked-get 0b ne    expect
+
+    % Trémaux rides the descriptor -- exercise it on a non-square grid.
+    /ghx 6 6 hex-make-grid local-def   hex-desc ghx 0 0 g-backtracker
+    hex-desc ghx 0 0 5 5 tremaux-solve
+    [ /hxvis /hxvc ] bind-locals
+    (solver: tremaux reaches end on hex) hxvis  5 6 mul 5 add  chunked-get 0b ne  expect
 
     /walk gs 0 0 7 7 wall-follow local-def
     /wlast walk  walk length 1 sub  get local-def
@@ -7411,7 +7510,7 @@
 /opt-cell-set false       def         % did the user pass --cell-px? (auto-size hi-res masks if not)
 /opt-wall-px  2           def
 /opt-seed     0u          def         % 0 = clock-seeded
-/opt-grid     (square)    def         % square | hex | theta | triangle | upsilon | zeta
+/opt-grid     (square)    def         % square | hex | theta | triangle | upsilon | zeta | crack
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
 /opt-flow-jitter 3        def         % --flow tie-break randomness in buckets: 0 = strict art, high = twistier
@@ -7423,7 +7522,8 @@
 /opt-end-x    -1          def         % -1 = (w-1)
 /opt-end-y    -1          def         % -1 = (h-1)
 /opt-solve    false       def
-/opt-solver   (bfs)        def         % bfs | dead-end-fill | wall-follower | astar (the --solve method)
+/opt-solver   (bfs)        def         % bfs | dead-end-fill | astar | tremaux | wall-follower (the --solve method)
+/opt-crack-relax 2         def         % crack: Lloyd relaxation passes (cell-uniformity) for --grid crack
 /opt-unicursal false      def         % single-path labyrinth (doubles the size; square only)
 /opt-hardest  false       def         % place start/end at the maze's diameter (square)
 /opt-braid    0.0r        def         % 0.0..1.0 fraction of dead-ends to braid
@@ -7466,8 +7566,11 @@ OPTIONS
     --bg-color HEX      Passage/background color as RRGGBB (default FFFFFF)
 
   Topology + algorithm:
-    --grid TYPE         square | hex | theta | triangle | upsilon | zeta
-                        (default square; zeta = square cells + diagonal passages)
+    --grid TYPE         square | hex | theta | triangle | upsilon | zeta |
+                        crack   (default square; zeta = square cells + diagonal
+                        passages; crack = irregular Voronoi cells)
+    --crack-relax N     Lloyd relaxation passes for --grid crack (default 2;
+                        higher = more uniform cells, slower generation)
     --algo NAME         backtrack | kruskal | wilson | eller |
                         binary-tree | sidewinder | aldous-broder |
                         prim | hunt-kill | growing-tree | origin-shift |
@@ -7506,10 +7609,11 @@ OPTIONS
   Solving / loops:
     --solve             Draw red ribbon overlay along shortest path
     --solver NAME       Solve method (implies --solve): bfs (default) |
-                        dead-end-fill | astar | wall-follower.  dead-end-fill
-                        and astar tint their work-set on the square render
-                        (filled dead-ends / expanded frontier) and report a
-                        count on any grid; wall-follower is square-only.
+                        dead-end-fill | astar | tremaux | wall-follower.
+                        dead-end-fill, astar and tremaux tint their work-set on
+                        the square render (filled dead-ends / expanded frontier /
+                        visited cells) and report a count on any grid;
+                        wall-follower is square-only.
     --hardest           Place start/end at the maze's two most distant
                         cells (graph diameter) and solve it (square grid)
     --start X,Y         Path start cell (default 0,0)
@@ -7622,6 +7726,7 @@ EXAMPLES
     (--target-dead-ends){ /opt-target-deadends args i 1 add get to-number /real-type cast store  /i i 2 add store }
     (--weave)     { /opt-weave true store  /i i 1 add store }
     (--grid)      { /opt-grid args i 1 add get store  /i i 2 add store }
+    (--crack-relax) { /opt-crack-relax args i 1 add get to-number store  /i i 2 add store }
     (--compare)   { /opt-compare args i 1 add get store  /i i 2 add store }
     (--stress)    { /opt-w 200 store  /opt-h 200 store  /opt-cell-px 4 store
                     /opt-wall-px 1 store  /opt-algo (eller) store  /i i 1 add store }
@@ -7830,7 +7935,7 @@ EXAMPLES
     /opn  desc (open?)     get local-def
     /w g grid-w local-def
     /h g grid-h local-def
-    /scratch 24 array local-def
+    /scratch 60 array local-def
     /deadends   0 local-def
     /passages   0 local-def
     /junctions  0 local-def
@@ -7942,13 +8047,6 @@ EXAMPLES
     (td-metrics: hex degree never exceeds 6)   tmmax 6 le                expect
 } def
 
-command-line-args parse-args
-
-opt-bench {
-    run-bench
-} { opt-metrics {
-    run-metrics
-} {
 % ----- hardest start/end pair (graph diameter) ---------------------------
 %   On a perfect (tree) maze the diameter endpoints satisfy: the end is the
 %   farthest cell from the start, the two differ, and the solved path spans
@@ -8012,6 +8110,548 @@ opt-bench {
     (zeta)     zeta-desc     -td-unreached (zeta)     get  { 8 8 zeta-make-grid }     -td-test-combo
 } def
 
+% ============================================================================
+%  Section 7C-crack: Crack (Voronoi) topology -- in-engine generation.
+%  `--grid crack` tessellates the plane into irregular Voronoi polygons; the
+%  maze graph is the cell-adjacency graph (one node per cell, one edge per
+%  shared boundary).  Cells are built natively in Trix by HALF-PLANE CLIPPING:
+%  each cell starts as the bounding box and is clipped by the perpendicular
+%  bisector against every other site (Sutherland-Hodgman), with a bounding-
+%  radius prune so far sites are skipped.  `--crack-relax` Lloyd passes even the
+%  cells out.  Every cell is a bounded convex polygon inside the box, so all the
+%  rendering stays on-canvas.  The graph rides the topology descriptor as a 1xN
+%  embed (cell id = cy*w+cx, w*h = N), so all eight portable generators, the
+%  generic solvers/metrics, --color, --solve and --target-* all work unchanged.
+%  Cell count is w*h (so --size scales it); generation is ~O(N) via the buckets.
+% ============================================================================
+
+% Ping-pong scratch buffers for the Sutherland-Hodgman clip (x, y, edge-owner).
+/CK-CAP 128 def
+/ck-bx CK-CAP array def   /ck-by CK-CAP array def   /ck-bo CK-CAP array def
+/ck-tx CK-CAP array def   /ck-ty CK-CAP array def   /ck-to CK-CAP array def
+% Clip state (globals so the bucketed ring search can update them in place) +
+% a uniform bucket grid over the box so each cell only tests nearby sites
+% (Voronoi neighbours are spatially local -> O(N) generation, not O(N^2)).
+/ck-cnt   0     def       % current vertex count of the cell polygon in ck-b*
+/ck-rmax2 0.0r  def        % max squared vertex distance from the site (prune radius)
+/ck-G     1     def        % bucket grid is ck-G x ck-G
+/ck-cellw 1.0r  def   /ck-cellh 1.0r def
+/ck-bstart [ 0 0 ] def     % bucket b spans ck-bsites[ck-bstart[b] .. ck-bstart[b+1])
+/ck-bsites [ 0 ]   def     % site ids grouped by bucket (counting sort)
+
+% (count -- cx cy)  centroid of the polygon currently in ck-bx/ck-by.
+/-poly-centroid {|count -- cx cy|#+5
+    /a  0.0r local-def
+    /sx 0.0r local-def
+    /sy 0.0r local-def
+    0 1 count 1 sub {|k|#+6
+        /kn k 1 add count mod local-def
+        /x0 ck-bx k  get local-def
+        /y0 ck-by k  get local-def
+        /x1 ck-bx kn get local-def
+        /y1 ck-by kn get local-def
+        /cr x0 y1 mul  x1 y0 mul  sub local-def
+        /a  a cr add store
+        /sx sx  x0 x1 add cr mul  add store
+        /sy sy  y0 y1 add cr mul  add store
+    } for
+    a a mul 0.000001r lt {                 % degenerate -> vertex average
+        /ax 0.0r local-def  /ay 0.0r local-def
+        0 1 count 1 sub {|k| /ax ax ck-bx k get add store  /ay ay ck-by k get add store } for
+        ax count /real-type cast div   ay count /real-type cast div
+    } {
+        /inv 1.0r  3.0r a mul  div local-def
+        sx inv mul   sy inv mul
+    } if-else
+} def
+
+% (px py N wr hr -- )  Bucket the sites into a ck-G x ck-G uniform grid over the
+%   box, grouped by counting sort into ck-bstart / ck-bsites.  Rebuilt each
+%   Lloyd pass (the sites move).
+/-crack-build-buckets {|px py N wr hr|#+8
+    /G N /real-type cast 0.5r pow floor /integer-type cast  1 max local-def
+    /ck-G G store
+    /ck-cellw wr G /real-type cast div store
+    /ck-cellh hr G /real-type cast div store
+    /nb G G mul local-def
+    /cnt nb array local-def
+    0 1 nb 1 sub {|b| cnt b 0 put } for
+    /bidx N array local-def
+    0 1 N 1 sub {|i|#+3
+        /bx px i get ck-cellw div floor /integer-type cast  0 max  G 1 sub min local-def
+        /by py i get ck-cellh div floor /integer-type cast  0 max  G 1 sub min local-def
+        /b by G mul bx add local-def
+        bidx i b put
+        cnt b  cnt b get 1 add  put
+    } for
+    /bstart nb 1 add array local-def
+    bstart 0 0 put
+    0 1 nb 1 sub {|b| bstart b 1 add  bstart b get cnt b get add  put } for
+    /bsites N array local-def
+    /cur nb array local-def
+    0 1 nb 1 sub {|b| cur b bstart b get put } for
+    0 1 N 1 sub {|i|#+2
+        /b bidx i get local-def
+        /pos cur b get local-def
+        bsites pos i put
+        cur b pos 1 add put
+    } for
+    /ck-bstart bstart store
+    /ck-bsites bsites store
+} def
+
+% (j pix piy px py -- )  Clip the working cell polygon (ck-b*, ck-cnt) by the
+%   perpendicular bisector of site i (pix,piy) and site j -- the half closer to
+%   i.  Skips j whose bisector lies beyond the cell (ck-rmax2 prune).  New edges
+%   along the bisector are tagged owner j; surviving edges keep their owner.
+/-crack-clip-one {|j pix piy px py|#+8
+    /pjx px j get local-def
+    /pjy py j get local-def
+    /dx pjx pix sub local-def
+    /dy pjy piy sub local-def
+    /d2 dx dx mul  dy dy mul  add local-def
+    d2  4.0r ck-rmax2 mul  le {
+        /c  pix pix mul piy piy mul add   pjx pjx mul pjy pjy mul add  sub local-def
+        /nc 0 local-def
+        0 1 ck-cnt 1 sub {|k|#+12
+            /ax  ck-bx k get local-def
+            /ay  ck-by k get local-def
+            /oab ck-bo k get local-def
+            /kn  k 1 add ck-cnt mod local-def
+            /bxk ck-bx kn get local-def
+            /byk ck-by kn get local-def
+            /fa  ax dx mul ay dy mul add  2.0r mul  c add local-def
+            /fb  bxk dx mul byk dy mul add  2.0r mul  c add local-def
+            fa 0.0r le {
+                ck-tx nc ax put  ck-ty nc ay put  ck-to nc oab put  /nc nc 1 add store
+                fb 0.0r le not {
+                    /t fa fa fb sub div local-def
+                    ck-tx nc  ax t bxk ax sub mul add  put
+                    ck-ty nc  ay t byk ay sub mul add  put
+                    ck-to nc j put  /nc nc 1 add store
+                } if
+            } {
+                fb 0.0r le {
+                    /t fa fa fb sub div local-def
+                    ck-tx nc  ax t bxk ax sub mul add  put
+                    ck-ty nc  ay t byk ay sub mul add  put
+                    ck-to nc oab put  /nc nc 1 add store
+                } if
+            } if-else
+        } for
+        0 1 nc 1 sub {|k| ck-bx k ck-tx k get put  ck-by k ck-ty k get put  ck-bo k ck-to k get put } for
+        /ck-cnt nc store
+        /ck-rmax2 0.0r store
+        0 1 ck-cnt 1 sub {|k|#+3
+            /ddx ck-bx k get pix sub local-def
+            /ddy ck-by k get piy sub local-def
+            /dd ddx ddx mul  ddy ddy mul  add local-def
+            dd ck-rmax2 gt { /ck-rmax2 dd store } if
+        } for
+    } if
+} def
+
+% (i px py wr hr N -- count)  fill ck-bx/ck-by/ck-bo with cell i's Voronoi
+%   polygon (vertices + per-edge owner: -1 = box border, else neighbor site id).
+%   Clips against sites in expanding rings of buckets around the site, stopping
+%   once the nearest possible site in the next ring is beyond the prune radius.
+/-crack-cell-poly {|i px py wr hr N -- count|#+8
+    /pix px i get local-def
+    /piy py i get local-def
+    ck-bx 0 0.0r put  ck-by 0 0.0r put  ck-bo 0 -1 put
+    ck-bx 1 wr   put  ck-by 1 0.0r put  ck-bo 1 -1 put
+    ck-bx 2 wr   put  ck-by 2 hr   put  ck-bo 2 -1 put
+    ck-bx 3 0.0r put  ck-by 3 hr   put  ck-bo 3 -1 put
+    /ck-cnt 4 store
+    /ck-rmax2 0.0r store
+    0 1 3 {|k|#+3
+        /ddx ck-bx k get pix sub local-def
+        /ddy ck-by k get piy sub local-def
+        /dd ddx ddx mul  ddy ddy mul  add local-def
+        dd ck-rmax2 gt { /ck-rmax2 dd store } if
+    } for
+    /bix pix ck-cellw div floor /integer-type cast  0 max  ck-G 1 sub min local-def
+    /biy piy ck-cellh div floor /integer-type cast  0 max  ck-G 1 sub min local-def
+    /cellmin ck-cellw ck-cellh min local-def
+    /r 0 local-def
+    /go true local-def
+    { go } {||#+8
+        r 1 ge {
+            /rmin r 1 sub /real-type cast cellmin mul local-def
+            rmin rmin mul  4.0r ck-rmax2 mul  gt { /go false store } if
+        } if
+        go {
+            biy r sub  1  biy r add {|by2|#+5
+                by2 0 ge  by2 ck-G lt  and {
+                    bix r sub  1  bix r add {|bx2|#+4
+                        bx2 0 ge  bx2 ck-G lt  and
+                        bx2 bix sub abs  by2 biy sub abs  max  r eq  and {
+                            /b by2 ck-G mul bx2 add local-def
+                            ck-bstart b get  1  ck-bstart b 1 add get 1 sub {|si|#+1
+                                /s ck-bsites si get local-def
+                                s i ne { s pix piy px py -crack-clip-one } if
+                            } for
+                        } if
+                    } for
+                } if
+            } for
+            /r r 1 add store
+            r ck-G gt { /go false store } if
+        } if
+    } while
+    ck-cnt
+} def
+
+% (w h -- g)  Build a crack grid: g = [ w h N px py edges adj eopen cxs cys polys ]
+%   edges[k]   = [ ax ay bx by c0 c1 ] (real coords; c1 = -1 box border, else c0<c1)
+%   adj[i]     = flat [ nbrId edgeIdx nbrId edgeIdx ... ] for the descriptor
+%   eopen[k]   = 0 wall / 1 passage ;  cxs/cys = centroids ; polys[i] = flat verts
+/crack-make-grid {|w h -- g|#+16
+    /N w h mul local-def
+    /wr w /real-type cast local-def
+    /hr h /real-type cast local-def
+    /px N array local-def
+    /py N array local-def
+    0 1 N 1 sub {|i| px i  rand-real wr mul  put   py i  rand-real hr mul  put } for
+
+    opt-crack-relax 0 gt {
+        0 1 opt-crack-relax 1 sub {|pass|#+3
+            /nx N array local-def
+            /ny N array local-def
+            px py N wr hr -crack-build-buckets
+            0 1 N 1 sub {|i|#+3
+                /cnt i px py wr hr N -crack-cell-poly local-def
+                cnt 2 gt {
+                    cnt -poly-centroid
+                    /cyv exch local-def  /cxv exch local-def
+                    nx i cxv put  ny i cyv put
+                } { nx i px i get put  ny i py i get put } if-else
+            } for
+            /px nx store  /py ny store
+        } for
+    } if
+
+    /polys N array local-def
+    /cxs N array local-def
+    /cys N array local-def
+    /ebuf N 3 mul 12 add array local-def
+    /ec 0 local-def
+    px py N wr hr -crack-build-buckets
+    0 1 N 1 sub {|i|#+6
+        /cnt i px py wr hr N -crack-cell-poly local-def
+        /p cnt 2 mul array local-def
+        0 1 cnt 1 sub {|k| p k 2 mul ck-bx k get put  p k 2 mul 1 add ck-by k get put } for
+        polys i p put
+        cnt 2 gt {
+            cnt -poly-centroid  /cyv exch local-def  /cxv exch local-def
+            cxs i cxv put  cys i cyv put
+        } { cxs i px i get put  cys i py i get put } if-else
+        0 1 cnt 1 sub {|k|#+3
+            /o  ck-bo k get local-def
+            /kn k 1 add cnt mod local-def
+            o 0 lt {
+                ebuf ec  [ ck-bx k get ck-by k get ck-bx kn get ck-by kn get i -1 ]  put  /ec ec 1 add store
+            } {
+                o i gt {
+                    ebuf ec  [ ck-bx k get ck-by k get ck-bx kn get ck-by kn get i o ]  put  /ec ec 1 add store
+                } if
+            } if-else
+        } for
+    } for
+
+    /edges ec array local-def
+    0 1 ec 1 sub {|k| edges k ebuf k get put } for
+
+    /deg N array local-def
+    0 1 N 1 sub {|i| deg i 0 put } for
+    0 1 ec 1 sub {|k|#+3
+        /e edges k get local-def
+        /c1 e 5 get local-def
+        c1 0 ge {
+            deg e 4 get  deg e 4 get get 1 add  put
+            deg c1       deg c1 get 1 add        put
+        } if
+    } for
+    /adj N array local-def
+    0 1 N 1 sub {|i| adj i  deg i get 2 mul array  put } for
+    /cur N array local-def
+    0 1 N 1 sub {|i| cur i 0 put } for
+    0 1 ec 1 sub {|k|#+7
+        /e edges k get local-def
+        /c1 e 5 get local-def
+        c1 0 ge {
+            /c0 e 4 get local-def
+            /a0 adj c0 get local-def  /p0 cur c0 get local-def
+            a0 p0 c1 put  a0 p0 1 add k put  cur c0 p0 2 add put
+            /a1 adj c1 get local-def  /p1 cur c1 get local-def
+            a1 p1 c0 put  a1 p1 1 add k put  cur c1 p1 2 add put
+        } if
+    } for
+
+    /eopen ec array local-def
+    0 1 ec 1 sub {|k| eopen k 0 put } for
+    /vis N array local-def
+    0 1 N 1 sub {|i| vis i 0 put } for
+
+    [ w h N px py edges adj eopen cxs cys polys vis ]
+} def
+
+% (g cellpx wallpx -- pic)  Stroke box-border + closed-interior walls.
+/crack-mono-render {|g cellpx wallpx -- pic|#+9
+    /N g 2 get local-def
+    /edges g 5 get local-def
+    /eopen g 7 get local-def
+    /NE edges length local-def
+    /cpr cellpx /real-type cast local-def
+    /W g 0 get cellpx mul wallpx add local-def
+    /H g 1 get cellpx mul wallpx add local-def
+    /rows W H opt-bg-r opt-bg-g opt-bg-b make-pixel-rows-filled local-def
+    0 1 NE 1 sub {|i|#+5
+        /e edges i get local-def
+        e 5 get 0 lt  eopen i get 0 eq  or {
+            rows
+            e 0 get cpr mul round /integer-type cast  e 1 get cpr mul round /integer-type cast
+            e 2 get cpr mul round /integer-type cast  e 3 get cpr mul round /integer-type cast
+            wallpx opt-wall-r opt-wall-g opt-wall-b -draw-line
+        } if
+    } for
+    [ W H rows ]
+} def
+
+% ----- crack topology descriptor ------------------------------------------
+%   The irregular cell graph rides the SAME generic generators/solvers as the
+%   lattice grids by embedding it as a 1-row-of-N grid: cell id = cy*w + cx
+%   (and w*h = N, so the standard flat-index bijection labels the cells).
+%   `neighbors` returns each neighbour as (id mod w, id div w, globalEdgeIdx);
+%   the generators reconstruct the id as ny*w+nx unchanged, and `d` is the
+%   global edge index that link/open? use to carve/test that shared wall.
+
+% (g cx cy out -- count)
+/crack-neighbors {|g cx cy out -- count|#+5
+    /w g grid-w local-def
+    /a g 6 get  cy w mul cx add  get local-def
+    /deg a length 2 div local-def
+    0 1 deg 1 sub {|k|#+3
+        /nbr a k 2 mul get local-def
+        /b 3 k mul local-def
+        out b       nbr w mod put
+        out b 1 add nbr w div put
+        out b 2 add a k 2 mul 1 add get put
+    } for
+    deg
+} def
+
+% (g cx cy d -- )  carve the shared wall whose global edge index is d
+/crack-link {|g cx cy d| g 7 get d 1 put } def
+% (g cx cy d -- bool)  is that shared wall carved?
+/crack-open? {|g cx cy d -- bool| g 7 get d get 1 eq } def
+% (g cx cy -- bool) / (g cx cy -- )  visited flag, per cell id
+/crack-visited? {|g cx cy -- bool| g 11 get  cy g grid-w mul cx add  get 0 ne } def
+/crack-mark     {|g cx cy| g 11 get  cy g grid-w mul cx add  1 put } def
+
+% (g sx sy -- dist maxd)  BFS distance field over the carved cell graph;
+%   dist is an N-array indexed by cell id (-1 = unreached).
+/crack-bfs-distances {|g sx sy -- dist maxd|#+11
+    /N g 2 get local-def
+    /w g grid-w local-def
+    /adj g 6 get local-def
+    /eopen g 7 get local-def
+    /dist N array local-def
+    0 1 N 1 sub {|i| dist i -1 put } for
+    /q N array local-def
+    /start sy w mul sx add local-def
+    dist start 0 put
+    q 0 start put
+    /qh 0 local-def  /qt 1 local-def  /maxd 0 local-def
+    { qh qt lt } {||#+6
+        /c q qh get local-def  /qh qh 1 add store
+        /dc dist c get local-def
+        /a adj c get local-def
+        /deg a length 2 div local-def
+        0 1 deg 1 sub {|k|#+3
+            /eix a k 2 mul 1 add get local-def
+            eopen eix get 1 eq {
+                /nb a k 2 mul get local-def
+                dist nb get 0 lt {
+                    dist nb  dc 1 add  put
+                    dc 1 add maxd gt { /maxd dc 1 add store } if
+                    q qt nb put  /qt qt 1 add store
+                } if
+            } if
+        } for
+    } while
+    dist maxd
+} def
+
+% (g sx sy ex ey -- path)  shortest cell path as [cx cy] CENTROID coords
+%   (logical), so the overlay can stroke ribbon segments between cell centres.
+/crack-bfs-solve {|g sx sy ex ey -- path|#+12
+    /w g grid-w local-def
+    /cxs g 8 get local-def
+    /cys g 9 get local-def
+    /adj g 6 get local-def
+    /eopen g 7 get local-def
+    g sx sy crack-bfs-distances
+    /maxd exch local-def  /dist exch local-def
+    /endid ey w mul ex add local-def
+    dist endid get 0 lt {
+        [ ]
+    } {
+        /plen dist endid get 1 add local-def
+        /path plen array local-def
+        /cur endid local-def
+        /pi plen 1 sub local-def
+        { pi 0 ge } {||#+7
+            /pt 2 array local-def
+            pt 0 cxs cur get put  pt 1 cys cur get put
+            path pi pt put
+            /pi pi 1 sub store
+            pi 0 ge {
+                /dc dist cur get local-def
+                /a adj cur get local-def
+                /deg a length 2 div local-def
+                0 1 deg 1 sub {|k|#+4
+                    /eix a k 2 mul 1 add get local-def
+                    eopen eix get 1 eq {
+                        /nb a k 2 mul get local-def
+                        dist nb get  dc 1 sub  eq { /cur nb store exit } if
+                    } if
+                } for
+            } if
+        } while
+        path
+    } if-else
+} def
+
+% (rows p cpr W H r g b -- )  scanline-fill the convex cell polygon p (flat
+%   logical [x0 y0 x1 y1 ...]) scaled by cpr, clamped to the canvas.
+/-crack-fill-poly {|rows p cpr W H r g b|#+12
+    /nv p length 2 div local-def
+    nv 3 ge {
+        /ymin 1000000 local-def
+        /ymax -1000000 local-def
+        0 1 nv 1 sub {|k|#+1
+            /yy p k 2 mul 1 add get cpr mul round /integer-type cast local-def
+            yy ymin lt { /ymin yy store } if
+            yy ymax gt { /ymax yy store } if
+        } for
+        ymin 0 lt { /ymin 0 store } if
+        ymax H 1 sub gt { /ymax H 1 sub store } if
+        ymin 1 ymax {|yy|#+6
+            /yr yy /real-type cast local-def
+            /minx 1000000 local-def
+            /maxx -1000000 local-def
+            0 1 nv 1 sub {|k|#+8
+                /ax p k 2 mul get cpr mul local-def
+                /ay p k 2 mul 1 add get cpr mul local-def
+                /kn k 1 add nv mod local-def
+                /bx p kn 2 mul get cpr mul local-def
+                /by p kn 2 mul 1 add get cpr mul local-def
+                ay yr le  by yr gt  and    ay yr gt  by yr le  and    or {
+                    /t yr ay sub  by ay sub  div local-def
+                    /xi ax  t bx ax sub mul  add  round /integer-type cast local-def
+                    xi minx lt { /minx xi store } if
+                    xi maxx gt { /maxx xi store } if
+                } if
+            } for
+            minx maxx le {
+                minx 0 lt { /minx 0 store } if
+                maxx W 1 sub gt { /maxx W 1 sub store } if
+                minx maxx le { rows minx yy maxx yy r g b fill-rect } if
+            } if
+        } for
+    } if
+} def
+
+% (g cellpx wallpx dist maxd cmapbuf cmapstops -- pic)  distance heatmap:
+%   fill each cell polygon by its BFS distance, then stroke the walls on top.
+/crack-color-render {|g cellpx wallpx dist maxd cmapbuf cmapstops -- pic|#+12
+    /N g 2 get local-def
+    /polys g 10 get local-def
+    /edges g 5 get local-def
+    /eopen g 7 get local-def
+    /cpr cellpx /real-type cast local-def
+    /W g 0 get cellpx mul wallpx add local-def
+    /H g 1 get cellpx mul wallpx add local-def
+    /rows W H opt-bg-r opt-bg-g opt-bg-b make-pixel-rows-filled local-def
+    0 1 N 1 sub {|i|#+5
+        /d dist i get local-def
+        d 0 ge {
+            cmapbuf cmapstops d maxd cmap-color
+            /cb exch local-def  /cg exch local-def  /cr exch local-def
+            rows  polys i get  cpr W H  cr cg cb  -crack-fill-poly
+        } if
+    } for
+    /NE edges length local-def
+    0 1 NE 1 sub {|i|#+2
+        /e edges i get local-def
+        e 5 get 0 lt  eopen i get 0 eq  or {
+            rows
+            e 0 get cpr mul round /integer-type cast  e 1 get cpr mul round /integer-type cast
+            e 2 get cpr mul round /integer-type cast  e 3 get cpr mul round /integer-type cast
+            wallpx opt-wall-r opt-wall-g opt-wall-b -draw-line
+        } if
+    } for
+    [ W H rows ]
+} def
+
+% (rows path cellpx wallpx ribbonpx r g b -- )  ribbon between cell centroids
+/crack-draw-overlay {|rows path cellpx wallpx ribbonpx r g b|#+5
+    /cpr cellpx /real-type cast local-def
+    /np path length local-def
+    0 1 np 2 sub {|k|#+2
+        /pa path k get local-def
+        /pb path k 1 add get local-def
+        rows
+        pa 0 get cpr mul round /integer-type cast  pa 1 get cpr mul round /integer-type cast
+        pb 0 get cpr mul round /integer-type cast  pb 1 get cpr mul round /integer-type cast
+        ribbonpx r g b -draw-line
+    } for
+} def
+
+% ----- crack self-test ----------------------------------------------------
+%   The cell-adjacency graph must be connected, and every portable generator
+%   must carve it into a PERFECT maze: a spanning tree (every cell reachable
+%   AND exactly N-1 passages).  Pins backtracker, Kruskal (pre-collecting) and
+%   Wilson (walk-then-carve) on the irregular graph.
+/-crack-spanning? {|g -- bool|#+8
+    /N g 2 get local-def
+    g 0 0 crack-bfs-distances
+    /maxd exch local-def  /dist exch local-def
+    /reached 0 local-def
+    0 1 N 1 sub {|i| dist i get 0 ge { /reached reached 1 add store } if } for
+    /eo g 7 get local-def
+    /np 0 local-def
+    0 1 eo length 1 sub {|i| eo i get 1 eq { /np np 1 add store } if } for
+    reached N eq   np N 1 sub eq   and
+} def
+
+/test-crack {||#+7
+    1ul rand-seed
+    /gb 6 6 crack-make-grid local-def   crack-desc gb 0 0 g-backtracker
+    (crack: backtracker carves a perfect maze)  gb -crack-spanning?  expect
+    /gk 6 6 crack-make-grid local-def   crack-desc gk g-kruskal
+    (crack: kruskal carves a perfect maze)      gk -crack-spanning?  expect
+    /gw 6 6 crack-make-grid local-def   crack-desc gw 0 0 g-wilson
+    (crack: wilson carves a perfect maze)       gw -crack-spanning?  expect
+    % the generated graph is itself connected (every cell has >=1 neighbour)
+    /gc 5 5 crack-make-grid local-def
+    /adj gc 6 get local-def  /is0 true local-def
+    0 1 gc 2 get 1 sub {|i| adj i get length 0 eq { /is0 false store } if } for
+    (crack: every cell has at least one neighbour)  is0  expect
+} def
+
+% Every topology proc (including crack) is now defined.  Parse the CLI and
+% dispatch: bench, else metrics, else the self-test-or-render flow.  (run-metrics
+% builds each grid via its descriptor (make-grid), so those procs must precede
+% this -- which is why the dispatch lives here, after all the definitions.)
+command-line-args parse-args
+
+opt-bench {
+    run-bench
+} { opt-metrics {
+    run-metrics
+} {
 opt-self-test {
     /opt-quiet true store    % suppress eller's progress lines + phase timings during self-test
     test-adler32
@@ -8042,6 +8682,7 @@ opt-self-test {
     test-triangle-braid
     test-target-braid
     test-zeta
+    test-crack
     test-weave
     test-hex
     test-theta
@@ -8272,6 +8913,11 @@ opt-self-test {
             /as-ec exch def  /as-expl exch def
             sq { rows as-expl opt-w opt-h opt-cell-px opt-wall-px 16#A8#b 16#C0#b 16#F0#b tint-cells-square } if
         } if
+        opt-solver (tremaux) eq {
+            sdesc grid opt-start-x opt-start-y opt-end-x opt-end-y tremaux-solve
+            /tr-vc exch def  /tr-vis exch def
+            sq { rows tr-vis opt-w opt-h opt-cell-px opt-wall-px 16#A8#b 16#D0#b 16#A0#b tint-cells-square } if
+        } if
         % Solve path + ribbon are descriptor-driven: bfs-solve and draw-overlay
         % both live on the descriptor, so this is one path call + the ribbon.
         % theta is the lone special -- its polar overlay needs the grid for ring
@@ -8289,9 +8935,12 @@ opt-self-test {
         } { opt-solver (astar) eq {
             (solver astar: expanded {0} cells, solution {1}\n)
                 mark as-ec  path length  print-fmt pop pop
+        } { opt-solver (tremaux) eq {
+            (solver tremaux: visited {0} of {1} cells, solution {2}\n)
+                mark tr-vc  opt-w opt-h mul  path length  print-fmt pop pop
         } {
             (solver bfs: solution {0} cells\n) mark path length print-fmt pop pop
-        } if-else } if-else
+        } if-else } if-else } if-else
     } if-else
     } if
 

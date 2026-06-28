@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 121 PNGs
+#   examples/gallery.sh              Default: 133 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -110,13 +110,16 @@ run "feature-braid-0.5.png"  --algo backtrack --braid 0.5 --size 20x20
 run "feature-braid-1.0.png"  --algo backtrack --braid 1.0 --size 20x20
 run "feature-weave.png"      --algo backtrack --weave --size 25x25 --cell-px 18
 
-# Solver zoo: same maze + same seed, three solving methods.  dead-end-fill
+# Solver zoo: same maze + same seed, four solving methods.  dead-end-fill
 # drains every dead-end (grey) leaving the solution; A* tints the cells it
-# expanded (blue) -- a focused frontier vs BFS's flood; wall-follower traces
-# the left-hand walk (square only).  All three find the same solution ribbon.
+# expanded (blue) -- a focused frontier vs BFS's flood; Trémaux tints the cells
+# its depth-first walk visited (green) -- a wandering footprint between the two;
+# wall-follower traces the left-hand walk (square only).  All four find the same
+# solution ribbon.
 [[ "$QUIET" -eq 0 ]] && echo "Solver zoo (--solver, square):"
 run "solve-dead-end-fill.png" --solver dead-end-fill --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 run "solve-astar.png"         --solver astar         --size 25x25 --cell-px 16 --wall-px 2 --seed 42
+run "solve-tremaux.png"       --solver tremaux       --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 run "solve-wall-follower.png" --solver wall-follower --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 
 # Metric-targeted braiding: braid the maze toward a requested --metrics value.
@@ -174,11 +177,18 @@ run "grid-zeta.png"             --grid zeta --size 16x16 --cell-px 20 --wall-px 
 run "grid-zeta-turbo.png"       --grid zeta --color turbo --size 16x16 --cell-px 20 --wall-px 2 --seed 5
 run "grid-zeta-solve.png"       --grid zeta --color magma --solve --size 14x14 --cell-px 22 --wall-px 2 --seed 5
 
+# Crack grid: irregular Voronoi cells generated in-engine (half-plane clipping
+# + Lloyd relaxation), carved over the cell-adjacency graph.
+[[ "$QUIET" -eq 0 ]] && echo "Crack grid (irregular Voronoi cells):"
+run "grid-crack.png"            --grid crack --size 18x18 --cell-px 18 --wall-px 2 --seed 7
+run "grid-crack-turbo.png"      --grid crack --color turbo --size 20x20 --cell-px 18 --wall-px 2 --seed 7
+run "grid-crack-solve.png"      --grid crack --color viridis --solve --size 16x16 --cell-px 22 --wall-px 3 --seed 7
+
 # The capstone: every portable algorithm carving every non-square grid,
-# driven by the shared topology descriptor (Section 7D-ter).  5 grids x 8
-# portable algos = 40 colored tiles.
+# driven by the shared topology descriptor (Section 7D-ter).  6 grids x 8
+# portable algos = 48 colored tiles.
 [[ "$QUIET" -eq 0 ]] && echo "Algorithm x topology matrix (portable algos, viridis):"
-for grid in hex theta triangle upsilon zeta; do
+for grid in hex theta triangle upsilon zeta crack; do
     for algo in backtrack kruskal wilson aldous-broder prim hunt-kill growing-tree origin-shift; do
         run "matrix-${grid}-${algo}.png" --grid "$grid" --algo "$algo" \
             --color viridis --size 16x16 --cell-px 14
