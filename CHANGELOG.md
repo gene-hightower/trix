@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: four new colormaps + ramp shaping for large mazes.** The palette
+  set grows from ten to fourteen: `fire-ice` (a vivid hand-built diverging map, ice navy ->
+  white -> fire red), and matplotlib's `spectral`, `coolwarm`, and the cyclic `twilight`. Two
+  new knobs reshape the distance ramp, which a single linear sweep washes out past ~100x100:
+  `--color-curve G` applies a gamma (`t' = t^G`, `G>1` spreads near cells, `G<1` the far tail),
+  and `--color-cycles N` is a seamless sine-wave (raised-cosine) modulation that repeats the
+  palette as `N` contour bands -- "Sine-Wave-Modulation" -- pairing naturally with the cyclic
+  `twilight`. Both default to identity, so existing renders are byte-identical; the transforms
+  live in one `-color-transfer` helper ahead of `cmap-color`. Self-test +14 (232): both
+  endpoints of each new palette, plus the gamma and sine transforms. New gallery shots:
+  `color-{fire-ice,spectral,coolwarm,twilight}.png`, `color-curve-fire-ice.png`,
+  `color-cycles-twilight.png`.
 - **`examples/amazing.trx`: `--unicursal` single-path labyrinth.** A classical labyrinth -- one
   non-branching path that visits every cell, no junctions. Built by the textbook passage-doubling
   transform: generate a perfect maze, then weave its spanning tree into a single Hamiltonian path on

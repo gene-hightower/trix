@@ -465,14 +465,14 @@ gaps. (`--braid` is silently ignored on upsilon; color heatmaps *are* supported.
 
 ### 4.6 What works where
 
-| Feature            | square | hex | theta | triangle | upsilon |
-| ------------------ | :----: | --- | :---: | :------: | :-----: |
-| Full 10-algo zoo   |   ✓    | ·   |   ·   |    ·     |    ·    |
-| Backtracker        |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| Color heatmaps (6) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| `--solve` ribbon   |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
-| `--braid`          |   ✓    | ✓   |   ✓   |    ✓     |    ·    |
-| `--weave`          |   ✓    | ·   |   ·   |    ·     |    ·    |
+| Feature             | square | hex | theta | triangle | upsilon |
+| ------------------- | :----: | --- | :---: | :------: | :-----: |
+| Full 12-algo zoo    |   ✓    | ·   |   ·   |    ·     |    ·    |
+| Backtracker         |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
+| Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
+| `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
+| `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |
+| `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |
 
 ---
 
@@ -488,7 +488,7 @@ the unique path length; the field also records `max-d`, the eccentricity used to
 normalize colors. Every topology has its own BFS variant with the same shape but
 the right neighbor set.
 
-**The colormaps** (`--color NAME`, Section 9B). Ten are
+**The colormaps** (`--color NAME`, Section 9B). Fourteen are
 available; the default is `mono` (plain black/white, no distance field computed):
 
 | Name        | Stops | Source                                    |
@@ -503,12 +503,47 @@ available; the default is `mono` (plain black/white, no distance field computed)
 | `cubehelix` | 32    | matplotlib cubehelix (grayscale-safe)     |
 | `grayscale` | 2     | black → white luminance ramp              |
 | `two-tone`  | 2     | blue → orange ramp                        |
+| `fire-ice`  | 32    | hand-built vivid diverging ice ↔ fire     |
+| `spectral`  | 32    | matplotlib Spectral (diverging rainbow)   |
+| `coolwarm`  | 32    | matplotlib coolwarm (gentle diverging)    |
+| `twilight`  | 32    | matplotlib twilight (cyclic; ends match)  |
 
 A cell's color is found by normalizing `t = dist / max-d` into `[0,1]`, scaling
 to the stop range, and **linearly interpolating** each RGB channel between the
 two bracketing stops (`cmap-color` / `-lerp-byte`). The polar
 and octagon renderers precompute one color per cell so the per-pixel inner loop
 stays a pure byte lookup.
+
+### 5.1 Reshaping the ramp for large mazes
+
+The plain linear `t = dist / max-d` mapping is faithful to matplotlib at sizes up
+to ~100×100. On a larger maze `max-d` grows huge, so the whole palette is spent on
+one slow sweep and adjacent cells are nearly the same color -- the heatmap loses
+*local* contrast. Two optional transforms (`-color-transfer`) reshape `t` before
+it indexes the palette; both default to identity, so a render with neither flag is
+bit-for-bit the old linear mapping.
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--color-curve G` | `1.0` | Gamma on the ramp: `t' = t^G`. `G > 1` spreads near-start cells across more of the palette (compresses the far tail); `G < 1` does the inverse. |
+| `--color-cycles N` | `0` | Sine-wave (raised-cosine) modulation `t' = 0.5 − 0.5·cos(2π·N·t)`, repeating the palette as `N` seamless bands across the range. `0` = off. |
+
+`--color-cycles` is the *Sine-Wave-Modulation* mode: it bands the distance field
+into `N` smooth contour rings, restoring local contrast on a big maze without any
+hard seam. It pairs especially well with the cyclic `twilight` palette, whose two
+endpoints are identical so consecutive bands meet without a color jump. The two
+knobs compose -- the gamma curve reshapes the band spacing, then the cycles
+modulation bands the result.
+
+```bash
+# A 200x200 maze where one linear sweep would wash out; six contour bands:
+./trix --vm-size=64M examples/amazing.trx --size 200x200 \
+    --color twilight --color-cycles 6 --out rings.png
+
+# Gamma > 1 pushes the palette's bright end out toward the far cells:
+./trix --vm-size=64M examples/amazing.trx --size 120x120 \
+    --color fire-ice --color-curve 2.5 --out warm.png
+```
 
 ---
 
@@ -806,6 +841,8 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--flow-jitter` | int | Flow tie-break randomness: `0` = strict art, larger = twistier | `3` |
 | `--grid` | type | `square` / `hex` / `theta` / `triangle` / `upsilon` | `square` |
 | `--color` | name | `mono` or a colormap from [§5](#5-distance-fields-and-colormaps) | `mono` |
+| `--color-curve` | float | Gamma on the distance ramp; `>1` spreads near cells, `<1` the far tail ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `1.0` |
+| `--color-cycles` | int | Repeat the palette as `N` seamless sine-wave bands (`0` = off) ([§5.1](#51-reshaping-the-ramp-for-large-mazes)) | `0` |
 | `--start` | `X,Y` | Path/heatmap start cell | `0,0` |
 | `--end` | `X,Y` | Path end cell; `-1,-1` = far corner | `-1,-1` |
 | `--solve` | -- | Overlay the shortest-path ribbon in red | off |

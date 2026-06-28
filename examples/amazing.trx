@@ -31,9 +31,12 @@
 %                     through a shared topology descriptor (Section
 %                     7D-ter); Eller/binary-tree/sidewinder/division are
 %                     square-only.  40 portable combos.
-%   Colormaps (10):   viridis, magma, inferno, plasma, cividis, turbo,
-%                     rainbow, cubehelix, grayscale, two-tone (plus the
-%                     mono outline).  All work on every grid topology.
+%   Colormaps (14):   viridis, magma, inferno, plasma, cividis, turbo,
+%                     rainbow, cubehelix, grayscale, two-tone, fire-ice,
+%                     spectral, coolwarm, twilight (plus the mono outline).
+%                     All work on every grid topology; --color-curve (gamma)
+%                     and --color-cycles (sine-wave bands) reshape the ramp
+%                     for large mazes.
 %   Overlays:         Buck-style weave (overpasses with shoulder tint
 %                     + tunnel-wall stubs + drop shadow; square +
 %                     backtracker only); BFS solve ribbon; braid
@@ -3587,17 +3590,21 @@
 } def
 
 % ============================================================================
-%  Section 9B: Colormaps -- ten ramps (viridis/magma/inferno/plasma/cividis +
-%              turbo/rainbow + cubehelix + grayscale + two-tone)
+%  Section 9B: Colormaps -- fourteen ramps (viridis/magma/inferno/plasma/cividis
+%              + turbo/rainbow + cubehelix + grayscale + two-tone + fire-ice +
+%              spectral + coolwarm + twilight)
 % ============================================================================
 %
 %  Each colormap is a hex string of length stops*3, packed RGB-RGB-...  We
 %  linearly interpolate between adjacent stops based on the cell's BFS distance
-%  normalized to [0, 1].  Provenance: viridis/magma/inferno/plasma/cividis/turbo
-%  and cubehelix are sampled from matplotlib's colormaps at 32 evenly spaced
-%  indices; rainbow is a computed HSV cycle; grayscale + two-tone are 2-stop
-%  ramps.  All are rounded to 8-bit RGB; the gradients are faithful to matplotlib
-%  at maze sizes <= 100x100.
+%  normalized to [0, 1].  Provenance: viridis/magma/inferno/plasma/cividis/turbo/
+%  cubehelix/spectral/coolwarm/twilight are sampled from matplotlib's colormaps
+%  at 32 evenly spaced indices; rainbow is a computed HSV cycle; fire-ice is a
+%  hand-built vivid diverging ramp; grayscale + two-tone are 2-stop ramps.  All
+%  are rounded to 8-bit RGB.  The plain linear mapping is faithful to matplotlib
+%  at maze sizes <= 100x100; for larger mazes (where one linear sweep loses local
+%  contrast) reshape the ramp with --color-curve (gamma) or band it with
+%  --color-cycles (sine-wave repeats) -- see -color-transfer below.
 
 /viridis-cmap <
     44 01 54   46 0A 5C   47 13 65   48 1D 6E   48 28 76   48 33 7C   46 3E 81   43 4A 86
@@ -3696,10 +3703,86 @@
 > def
 /grayscale-stops 2 def
 
+% Fire-Ice: a vivid DIVERGING map -- deep ice navy -> blue -> cyan -> white
+% pivot -> gold -> orange -> fire red.  Deliberately more saturated than the
+% gentle matplotlib `coolwarm` below so the two read differently; the white
+% midpoint marks the median BFS distance, hot/cold ends the extremes.
+/fire-ice-cmap <
+    00 1A 4D   00 28 67   00 35 81   00 43 9B   01 53 B6   09 65 C2   10 78 CF   18 8B DB
+    24 9F E7   3A AC EB   4F B9 EE   65 C7 F2   83 D5 F5   A6 E1 F8   C8 ED FB   EB F8 FD
+    FF F9 E3   FF ED B2   FF E2 81   FF D7 50   FF C5 36   FF B3 2F   FF A1 27   FF 8F 20
+    F8 79 1B   F1 65 18   E9 51 15   E1 3D 12   D0 2D 0F   BF 20 0C   AF 13 09   9E 06 06
+> def
+/fire-ice-stops 32 def
+
+% Spectral: matplotlib's diverging red-orange-yellow-green-blue rainbow.
+% 32 stops at evenly spaced indices.  A softer alternative to `rainbow` with
+% a pale yellow middle that reads as the median band.
+/spectral-cmap <
+    9E 01 42   AF 14 46   C1 27 4A   D2 3A 4E   DE 4C 4B   E8 5B 48   F2 69 44   F6 7C 4A
+    F9 93 55   FC A8 5E   FD B9 6A   FE C8 77   FE DA 86   FE E6 95   FF F0 A6   FF FA B6
+    FB FD B8   F3 FA AC   EB F7 A0   DF F2 99   CA EA 9E   B8 E2 A1   A4 DA A4   8F D2 A4
+    76 C8 A5   62 BD A7   52 AB AE   41 99 B6   35 85 BB   42 73 B3   50 61 AA   5E 4F A2
+> def
+/spectral-stops 32 def
+
+% Coolwarm: matplotlib's gentle diverging blue -> light gray -> red.  Lower
+% saturation than `fire-ice`; the desaturated midpoint keeps mid-distance
+% cells calm so the extremes pop.  32 stops at evenly spaced indices.
+/coolwarm-cmap <
+    3B 4C C0   44 5A CC   4E 68 D8   58 75 E1   63 84 EB   6E 90 F2   79 9C F8   84 A7 FC
+    90 B2 FE   9B BC FF   A6 C4 FE   B1 CB FC   BC D2 F7   C6 D6 F1   CF DA EA   D8 DC E2
+    E1 DA D6   E9 D5 CB   EF CF BF   F3 C8 B2   F6 BE A4   F7 B4 97   F7 A9 8B   F5 9D 7E
+    F1 8F 71   EC 81 65   E6 72 59   DF 63 4E   D5 50 42   CB 3E 38   C0 28 2F   B4 04 26
+> def
+/coolwarm-stops 32 def
+
+% Twilight: matplotlib's CYCLIC map (pale lilac -> blue -> near-black ->
+% magenta-rose -> pale lilac).  Its two endpoints are identical, so it tiles
+% seamlessly under `--color-cycles N` -- the natural pairing for the sine-wave
+% palette modulation.  32 stops at evenly spaced indices.
+/twilight-cmap <
+    E2 D9 E2   D6 D7 DD   C2 CE D4   A9 C1 CB   92 B3 C6   7E A4 C3   70 94 C0   66 83 BD
+    61 71 B9   5F 5E B3   5E 4B A9   5C 37 9C   57 24 87   4D 17 6D   3F 12 51   34 11 3E
+    34 12 38   42 12 3E   57 16 47   6C 1B 4E   81 24 50   93 30 50   A2 40 50   AF 52 51
+    B9 64 56   C1 79 60   C7 8C 6F   CC A1 86   D1 B4 A0   D8 C6 BD   DE D3 D4   E2 D9 E2
+> def
+/twilight-stops 32 def
+
 % (a b t) -lerp-byte -- byte    (a, b are Byte; t is Real in [0, 1])
 /-lerp-byte {|a b t -- byte|#+1
     /v  a /real-type cast  b /real-type cast  t  lerp  round /integer-type cast local-def
     v 0 max 255 min /byte-type cast
+} def
+
+/TAU //:systemdict:numbers:real-type:pi 2.0r mul def   % 2*pi from the numbers dict (Real; the ramp math is float32 -- ample for 8-bit color), for the sine-wave cycle modulation
+
+% (t) -color-transfer -- t'   reshape a linear ramp position t in [0, 1].
+%
+%   Two optional, composable transforms applied to the normalized distance
+%   BEFORE it indexes the colormap.  Both default to identity, so a render
+%   with neither flag is bit-for-bit the old linear mapping.
+%
+%   * opt-color-curve (gamma): t' = t ^ curve.  curve > 1 spreads the
+%     near-start cells across more of the palette (and compresses the far
+%     tail); curve < 1 does the inverse.  This is the fix for big (>100x100)
+%     mazes, where the single linear sweep gives almost no local contrast.
+%   * opt-color-cycles N: a raised-cosine (sine-wave) modulation,
+%     t' = 0.5 - 0.5*cos(TAU*N*t), repeating the palette N times across the
+%     range as N seamless bands -- "Sine-Wave-Modulation".  Pairs especially
+%     well with a cyclic palette like `twilight`.
+%
+%   When both are set, the gamma curve reshapes the band spacing and the
+%   sine modulation then bands the result.
+/-color-transfer {|t -- t2|#+1
+    /t2 t local-def
+    opt-color-curve 1.0r ne {
+        /t2  t2 0.0r max  opt-color-curve  pow  local-def
+    } if
+    opt-color-cycles 0 gt {
+        /t2  0.5r  0.5r  TAU opt-color-cycles /real-type cast mul  t2 mul  cos  mul  sub  local-def
+    } if
+    t2  0.0r max  1.0r min
 } def
 
 % (cmap stops dist max-d) cmap-color -- r g b   (3 bytes, b on top)
@@ -3707,13 +3790,16 @@
 %   Maps the integer pair (dist, max-d) onto a fractional position in the
 %   colormap, locates the bracketing pair of stops, and lerps each RGB
 %   channel independently.  Edge cases: max-d=0 (single-cell maze) maps to
-%   the first stop; dist == max-d clamps to the final stop.
+%   the first stop; dist == max-d clamps to the final stop.  The raw linear
+%   position is reshaped by -color-transfer (gamma curve + sine-wave cycles)
+%   before it indexes the palette.
 /cmap-color {|cmap stops dist max-d|#+12
     /t-norm
         max-d 0u eq
             { 0.0r }
             { dist /real-type cast  max-d /real-type cast  div }
         if-else
+        -color-transfer
         local-def
     /scaled  t-norm  stops 1 sub /real-type cast  mul  local-def
     /seg     scaled trunc /integer-type cast  0 max  stops 2 sub min  local-def
@@ -3738,13 +3824,17 @@
     (cubehelix) { cubehelix-cmap cubehelix-stops }
     (grayscale) { grayscale-cmap grayscale-stops }
     (two-tone)  { two-tone-cmap  two-tone-stops  }
+    (fire-ice)  { fire-ice-cmap  fire-ice-stops  }
+    (spectral)  { spectral-cmap  spectral-stops  }
+    (coolwarm)  { coolwarm-cmap  coolwarm-stops  }
+    (twilight)  { twilight-cmap  twilight-stops  }
 >> def
 
 % (name) get-cmap -- cmap stops    (raises assert on unknown name)
 /get-cmap {|name|
     cmap-dispatch name known-get { exec } {
         (Unknown --color: ) print name print nl
-        (Valid: mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone) print nl
+        (Valid: mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone | fire-ice | spectral | coolwarm | twilight) print nl
         (unknown colormap) false assert
     } if-else
 } def
@@ -6011,6 +6101,36 @@
     (cmap cubehelix t=1 = white)      cubehelix-cmap cubehelix-stops 10u 10u 16#FF#b 16#FF#b 16#FF#b  -expect-cmap
     (cmap grayscale t=0 = black)      grayscale-cmap grayscale-stops 0u 2u   0b      0b      0b       -expect-cmap
     (cmap grayscale t=1 = white)      grayscale-cmap grayscale-stops 2u 2u   16#FF#b 16#FF#b 16#FF#b  -expect-cmap
+
+    % Diverging + cyclic ramps (fire-ice custom; spectral/coolwarm/twilight
+    % from matplotlib).  twilight is cyclic, so both endpoints are equal.
+    (cmap fire-ice  t=0 = ice navy)   fire-ice-cmap  fire-ice-stops  0u 10u  16#00#b 16#1A#b 16#4D#b  -expect-cmap
+    (cmap fire-ice  t=1 = fire red)   fire-ice-cmap  fire-ice-stops 10u 10u  16#9E#b 16#06#b 16#06#b  -expect-cmap
+    (cmap spectral  t=0 = deep red)   spectral-cmap  spectral-stops  0u 10u  16#9E#b 16#01#b 16#42#b  -expect-cmap
+    (cmap spectral  t=1 = violet)     spectral-cmap  spectral-stops 10u 10u  16#5E#b 16#4F#b 16#A2#b  -expect-cmap
+    (cmap coolwarm  t=0 = blue)       coolwarm-cmap  coolwarm-stops  0u 10u  16#3B#b 16#4C#b 16#C0#b  -expect-cmap
+    (cmap coolwarm  t=1 = red)        coolwarm-cmap  coolwarm-stops 10u 10u  16#B4#b 16#04#b 16#26#b  -expect-cmap
+    (cmap twilight  t=0 = lilac)      twilight-cmap  twilight-stops  0u 10u  16#E2#b 16#D9#b 16#E2#b  -expect-cmap
+    (cmap twilight  t=1 = lilac)      twilight-cmap  twilight-stops 10u 10u  16#E2#b 16#D9#b 16#E2#b  -expect-cmap
+} def
+
+% Exercise the -color-transfer reshaping (gamma curve + sine-wave cycles).
+% Mutates the two opt globals, then restores them to their defaults so the
+% rest of the suite (and any later render) sees the plain linear mapping.
+/test-color-transfer {||#+2
+    (transfer identity)         0.5r -color-transfer  0.5r sub abs 0.0001r lt  expect
+
+    /opt-color-curve 2.0r store
+    (transfer gamma 0.5^2)      0.5r -color-transfer  0.25r sub abs 0.001r lt  expect
+    /opt-color-curve 1.0r store
+
+    /opt-color-cycles 1 store
+    (transfer sine t=0 -> 0)    0.0r -color-transfer  0.0r sub abs 0.001r lt  expect
+    (transfer sine t=0.5 -> 1)  0.5r -color-transfer  1.0r sub abs 0.001r lt  expect
+    (transfer sine t=1 -> 0)    1.0r -color-transfer  0.0r sub abs 0.001r lt  expect
+    /opt-color-cycles 0 store
+
+    (transfer restored identity) 0.7r -color-transfer  0.7r sub abs 0.0001r lt  expect
 } def
 
 % ----- color-render end-to-end (Phase 3) ---------------------------------
@@ -6676,7 +6796,9 @@
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
 /opt-flow-jitter 3        def         % --flow tie-break randomness in buckets: 0 = strict art, high = twistier
-/opt-color    (mono)      def         % mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone
+/opt-color    (mono)      def         % mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone | fire-ice | spectral | coolwarm | twilight
+/opt-color-curve  1.0r    def         % gamma applied to the distance ramp (>1 spreads near cells, <1 spreads far); 1.0 = linear
+/opt-color-cycles 0       def         % sine-wave (raised-cosine) palette repeats across the range; 0 = off, N = N seamless bands
 /opt-start-x  0           def
 /opt-start-y  0           def
 /opt-end-x    -1          def         % -1 = (w-1)
@@ -6749,8 +6871,14 @@ OPTIONS
 
   Rendering:
     --color NAME        mono | viridis | magma | inferno | plasma | cividis |
-                        turbo | rainbow | cubehelix | grayscale | two-tone
-                        (default mono)
+                        turbo | rainbow | cubehelix | grayscale | two-tone |
+                        fire-ice | spectral | coolwarm | twilight (default mono)
+    --color-curve G     Gamma on the distance ramp (default 1.0 = linear):
+                        G>1 spreads near-start cells, G<1 spreads the far tail.
+                        Restores local contrast on large (>100x100) heatmaps.
+    --color-cycles N    Repeat the palette N times across the range as seamless
+                        sine-wave bands (default 0 = off). Banded local contrast
+                        for big mazes; pairs naturally with the cyclic `twilight`.
     --weave             Buck-style overpasses (square + backtrack only)
 
   Solving / loops:
@@ -6850,6 +6978,8 @@ EXAMPLES
                     /i i 2 add store }
     (--flow-image-dir){ /opt-flow-dir args i 1 add get store  /i i 2 add store }
     (--color)     { /opt-color args i 1 add get store  /i i 2 add store }
+    (--color-curve){ /opt-color-curve args i 1 add get to-number /real-type cast store  /i i 2 add store }
+    (--color-cycles){ /opt-color-cycles args i 1 add get to-number store  /i i 2 add store }
     (--start)     { ||#+1 /sparts args i 1 add get (,) split local-def
                     /opt-start-x sparts 0 get to-number store
                     /opt-start-y sparts 1 get to-number store  /i i 2 add store }
@@ -7265,6 +7395,7 @@ opt-self-test {
     test-metrics
     test-td-metrics
     test-cmap-endpoints
+    test-color-transfer
     test-png-viridis
     test-png-hex-color
     test-png-theta-color

@@ -85,6 +85,12 @@ examples/maze-gallery/*
 !examples/maze-gallery/color-turbo.png
 !examples/maze-gallery/color-cubehelix.png
 !examples/maze-gallery/color-grayscale.png
+!examples/maze-gallery/color-fire-ice.png
+!examples/maze-gallery/color-spectral.png
+!examples/maze-gallery/color-coolwarm.png
+!examples/maze-gallery/color-twilight.png
+!examples/maze-gallery/color-curve-fire-ice.png
+!examples/maze-gallery/color-cycles-twilight.png
 
 # Fuzz artifacts (binaries, auto-corpus, crashes)
 fuzz/fuzz_trix

@@ -5,7 +5,7 @@ pure-Trix maze generator (homage to Steve Capps' *Amazing* on the 128K Mac).
 Every image here is a real PNG whose format `amazing.trx` assembles itself in
 Trix -- no libpng, over the engine's native `deflate`/`crc32`/`adler32` ops --
 holding twelve maze algorithms across five grid topologies, distance-colored with
-ten colormaps.
+fourteen colormaps.
 
 This directory is otherwise generated output and git-ignored; the handful below
 is curated and tracked for the project README and docs. To render the full set
@@ -39,6 +39,12 @@ examples/gallery.sh
 | [`color-turbo.png`](color-turbo.png) | **turbo** colormap (perceptually-ordered rainbow) on a Kruskal maze |
 | [`color-cubehelix.png`](color-cubehelix.png) | **cubehelix** colormap (grayscale-safe monotone luminance) on a Kruskal maze |
 | [`color-grayscale.png`](color-grayscale.png) | **grayscale** colormap (smooth black→white ramp) on a Kruskal maze |
+| [`color-fire-ice.png`](color-fire-ice.png) | **fire-ice** colormap — a vivid hand-built diverging map (ice navy → white → fire red) on a Kruskal maze |
+| [`color-spectral.png`](color-spectral.png) | **spectral** colormap (matplotlib Spectral, diverging rainbow) on a Kruskal maze |
+| [`color-coolwarm.png`](color-coolwarm.png) | **coolwarm** colormap (matplotlib, gentle blue→white→red diverging) on a Kruskal maze |
+| [`color-twilight.png`](color-twilight.png) | **twilight** colormap (matplotlib, cyclic — endpoints match) on a Kruskal maze |
+| [`color-curve-fire-ice.png`](color-curve-fire-ice.png) | **Ramp gamma** — `--color-curve 2.5` on fire-ice: the gamma curve pushes the palette's hot end out toward the far cells (local contrast on a 60×60 maze) |
+| [`color-cycles-twilight.png`](color-cycles-twilight.png) | **Sine-wave modulation** — `--color-cycles 6` on the cyclic twilight: the palette repeats as six seamless contour bands, restoring local contrast a single linear sweep loses on big mazes |
 | [`mask-logo.png`](mask-logo.png) | **SVG masking** — the real Trix logo (`--mask logo`, turbo) cut out of a maze, rasterised from `assets/trix-logo.svg` by `tools/gen_mask_svg.py` |
 | [`mask-text-amazing.png`](mask-text-amazing.png) | **Text mask** — `--mask-text 'Amazing!'` (Roboto Bold, default font), inferno; mixed case + punctuation, descenders honored |
 | [`mask-font-roboto.png`](mask-font-roboto.png) | **Font select** — `--mask-text Trix --font roboto-mono-bold`, turbo (Apache-2.0 bitmap atlas) |
@@ -51,7 +57,9 @@ sidewinder, Aldous-Broder, Prim, Hunt-and-Kill, Growing Tree,
 Origin Shift (edge-reversal), recursive-division (the one wall-adding generator).
 Grids: square, hex, theta (polar), triangle, upsilon (octagon).
 Colormaps: viridis, magma, inferno, plasma, cividis, turbo, rainbow, cubehelix,
-grayscale, two-tone (plus the `mono` outline render).
+grayscale, two-tone, fire-ice, spectral, coolwarm, twilight (plus the `mono`
+outline render).  On large mazes `--color-curve` (gamma) and `--color-cycles`
+(seamless sine-wave bands) reshape the ramp for local contrast.
 
 The full-resolution **monster** — a 1000×1000-cell maze (3001×3001 px, ~0.9 MB)
 for panning and zooming — isn't tracked here; run `examples/gallery.sh --full`

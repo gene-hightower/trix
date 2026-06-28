@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 88 PNGs
+#   examples/gallery.sh              Default: 107 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -92,9 +92,17 @@ run "flow-image-logo.png"    --flow-image logo --flow-jitter 0 --color turbo --s
 run "flow-image-cat.png"     --flow-image cat --flow-jitter 0 --color turbo --size 100x100 --cell-px 7 --wall-px 1
 
 [[ "$QUIET" -eq 0 ]] && echo "Colormaps (kruskal, square 30x30):"
-for color in viridis magma inferno plasma cividis turbo rainbow cubehelix grayscale two-tone; do
+for color in viridis magma inferno plasma cividis turbo rainbow cubehelix grayscale two-tone fire-ice spectral coolwarm twilight; do
     run "color-${color}.png" --algo kruskal --color "$color" --size 30x30
 done
+
+# Ramp shaping for large mazes: a plain linear sweep loses local contrast past
+# ~100x100.  --color-curve (gamma) redistributes the single sweep; --color-cycles
+# repeats the palette as seamless sine-wave bands -- pairs best with the cyclic
+# `twilight`.  Shown on a 60x60 maze where the effect is legible.
+[[ "$QUIET" -eq 0 ]] && echo "Colormap ramp shaping (--color-curve / --color-cycles):"
+run "color-curve-fire-ice.png"   --algo kruskal --color fire-ice --color-curve 2.5 --size 60x60 --cell-px 7 --wall-px 1 --seed 7
+run "color-cycles-twilight.png"  --algo kruskal --color twilight --color-cycles 6 --size 60x60 --cell-px 7 --wall-px 1 --seed 7
 
 [[ "$QUIET" -eq 0 ]] && echo "Features:"
 run "feature-solve.png"      --algo backtrack --color viridis --solve --size 25x25
