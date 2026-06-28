@@ -2937,6 +2937,166 @@
 } def
 
 % ============================================================================
+%  Section 7E-bis: Metric-targeted braiding (v1)
+% ============================================================================
+%
+%  --metrics is read-only; this makes two of its numbers TARGETS.  Braiding
+%  is monotone: from the generated perfect maze, each braid step (knock one
+%  dead-end's closed wall through to an in-bounds neighbour) removes 1-2
+%  dead-ends, adds EXACTLY one independent loop, and never disconnects the
+%  maze.  So no annealer is needed -- enumerate the dead-ends once, shuffle,
+%  and knock them in random order until the chosen metric reaches its target,
+%  tracking the metric incrementally.  Reported best-effort: a target below
+%  the natural dead-end floor, or more loops than there are dead-ends to
+%  braid, lands at the closest reachable value.
+%
+%  Everything rides the topology descriptor (neighbors/open?/link), so the one
+%  implementation targets every grid that has one.  Loops use the same
+%  accounting as --metrics: edges = (sum of cell degrees)/2, and for a
+%  connected maze the loop count is edges - cells + 1 (0 perfect, +1 per braid).
+
+% (desc g x y) -cell-degree -- degree    open walls toward in-bounds neighbours
+/-cell-degree {|desc g x y -- degree|#+6
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /scratch 24 array local-def
+    /cnt g x y scratch nbrs local-def
+    /deg 0 local-def
+    0 1 cnt 1 sub {|k|#+1
+        g x y  scratch 3 k mul 2 add get  opn { /deg deg 1 add store } if
+    } for
+    deg
+} def
+
+% (desc g list) -collect-dead-ends -- count edges
+%   Append the flat index (y*w+x) of every degree-1 cell to `list`, and return
+%   the maze's edge count (sum of degrees / 2) from the SAME pass so the caller
+%   gets the starting loop count for free.
+/-collect-dead-ends {|desc g list -- count edges|#+12
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /scratch 24 array local-def
+    /count 0 local-def
+    /open-total 0 local-def
+    0 1 h 1 sub {|y|#+8
+        0 1 w 1 sub {|x|#+10
+            /cnt g x y scratch nbrs local-def
+            /deg 0 local-def
+            0 1 cnt 1 sub {|k|#+1
+                g x y  scratch 3 k mul 2 add get  opn { /deg deg 1 add store } if
+            } for
+            /open-total open-total deg add store
+            deg 1 eq {
+                list count  y w mul x add  chunked-put
+                /count count 1 add store
+            } if
+        } for
+    } for
+    count  open-total 2 div
+} def
+
+% (desc g mode tgt) -target-braid -- braids de0 deN loops0
+%   mode 0 = braid until the dead-end COUNT falls to <= tgt
+%   mode 1 = braid until the LOOP count reaches >= tgt
+%   Returns braids performed, dead-end count before/after, and the loop count
+%   the maze started with (total loops after = loops0 + braids).
+/-target-braid {|desc g mode tgt -- braids de0 deN loops0|#+18
+    /nbrs desc (neighbors) get local-def
+    /opn  desc (open?)     get local-def
+    /lnk  desc (link)      get local-def
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /cells w h mul local-def
+    /list cells chunked-array local-def
+    desc g list -collect-dead-ends
+    [ /de0 /edges0 ] bind-locals
+    /loops0 edges0 cells sub 1 add local-def
+
+    % Fisher-Yates over the de0 collected indices so loops scatter evenly.
+    de0 1 gt {
+        0 1 de0 2 sub {|e|#+3
+            /j e  de0 e sub rand-bound-int  add local-def
+            /tmp list e chunked-get local-def
+            list e  list j chunked-get  chunked-put
+            list j  tmp chunked-put
+        } for
+    } if
+
+    /braids 0 local-def
+    /deN de0 local-def
+    /scratch 24 array local-def
+    0 1 de0 1 sub {|t|#+12
+        mode 0 eq { deN tgt le } { loops0 braids add  tgt ge } if-else
+        { exit } if
+        /idx list t chunked-get local-def
+        /cx idx w mod local-def
+        /cy idx w div local-def
+        % Re-check: an earlier neighbour braid may have lifted this cell's degree.
+        /cnt g cx cy scratch nbrs local-def
+        /deg 0 local-def
+        0 1 cnt 1 sub {|k|#+1
+            g cx cy  scratch 3 k mul 2 add get  opn { /deg deg 1 add store } if
+        } for
+        deg 1 eq {
+            /done false local-def
+            0 1 cnt 1 sub {|k|#+8
+                done not {
+                    /kd scratch 3 k mul 2 add get local-def
+                    g cx cy kd opn not {
+                        /nx scratch 3 k mul       get local-def
+                        /ny scratch 3 k mul 1 add get local-def
+                        /ndeg desc g nx ny -cell-degree local-def
+                        g cx cy kd lnk
+                        /braids braids 1 add store
+                        /deN deN 1 sub store
+                        ndeg 1 eq { /deN deN 1 sub store } if
+                        /done true store
+                    } if
+                } if
+            } for
+        } if
+    } for
+    braids de0 deN loops0
+} def
+
+% (desc g) -maybe-target-braid -- apply --target-* braiding if requested.
+%   --target-loops N      braid until the loop count reaches N (one loop/braid)
+%   --target-dead-ends P  braid until dead-ends fall to <= P% of cells
+%   Mutually exclusive; --target-loops wins if both are set (warned).  Prints a
+%   one-line ACHIEVED-vs-REQUESTED report to stderr (suppressed by --quiet).
+/-maybe-target-braid {|desc g|#+12
+    opt-target-loops 0 ge  opt-target-deadends 0.0r ge  or {
+        /cells g grid-w  g grid-h  mul local-def
+        opt-target-loops 0 ge {
+            opt-target-deadends 0.0r ge {
+                stderr (amazing: --target-loops and --target-dead-ends both set; honoring --target-loops\n) write-string  stderr flush-stream
+            } if
+            /mode 1 local-def
+            /tgt  opt-target-loops local-def
+        } {
+            /mode 0 local-def
+            /tgt  opt-target-deadends cells /real-type cast mul 100.0r div round /integer-type cast local-def
+        } if-else
+        desc g mode tgt -target-braid
+        [ /tb-braids /tb-de0 /tb-deN /tb-loops0 ] bind-locals
+        /tb-loops  tb-loops0 tb-braids add local-def
+        /tb-depct  tb-deN 100 mul /real-type cast  cells /real-type cast  div local-def
+        opt-quiet not {
+            mode 1 eq {
+                stderr (    target: loops requested {0}, achieved {1}  ({2} braids over {3} dead-ends)\n)
+                    mark opt-target-loops tb-loops tb-braids tb-de0  fprint-fmt pop pop
+            } {
+                stderr (    target: dead-ends requested {0:.1f}%, achieved {1:.1f}%  ({2}/{3} cells; {4} braids -> {5} loops)\n)
+                    mark opt-target-deadends tb-depct tb-deN cells tb-braids tb-loops  fprint-fmt pop pop
+            } if-else
+            stderr flush-stream
+        } if
+    } if
+} def
+
+% ============================================================================
 %  Section 7D: BFS distance field
 % ============================================================================
 %
@@ -6387,6 +6547,46 @@
     (triangle-braid: p=1.0 reduces dead ends)           trbg-de-after  trbg-de-before  lt  expect
 } def
 
+% ----- Metric-targeted braid (Section 7E-bis) ----------------------------
+%   Drive a perfect maze toward a loop count / dead-end count and verify the
+%   incremental accounting against -td-degree-tally (the --metrics ground
+%   truth), that braiding stays connected, and that it works off-square
+%   (upsilon, via the shared descriptor).
+/test-target-braid {||#+22
+    7ul rand-seed
+    /gtb 16 16 make-grid local-def
+    square-desc gtb 0 0 g-backtracker
+    % loop target: braid a perfect 16x16 maze to exactly 12 loops.
+    square-desc gtb 1 12 -target-braid
+    [ /tbr /tde0 /tdeN /tlp0 ] bind-locals
+    (target-braid: perfect maze starts at 0 loops)   tlp0 0 eq        expect
+    (target-braid: 12 loops requested -> 12 braids)  tbr 12 eq        expect
+    (target-braid: dead-ends dropped)                tdeN tde0 lt     expect
+    (target-braid: stays connected)                  gtb -bfs-unreached 0 eq  expect
+    % cross-check the incremental metrics against a full degree tally.
+    square-desc gtb -td-degree-tally
+    [ /xde /xpa /xju /xed /xmx ] bind-locals
+    (target-braid: metric loop count = braids)  xed 256 sub 1 add  12 eq  expect
+    (target-braid: metric dead-ends = deN)      xde tdeN eq               expect
+
+    % dead-end COUNT target: drive a fresh maze to <= 10 dead-ends.
+    /gtb2 16 16 make-grid local-def
+    square-desc gtb2 0 0 g-backtracker
+    square-desc gtb2 0 10 -target-braid
+    [ /t2br /t2de0 /t2deN /t2lp0 ] bind-locals
+    (target-braid: dead-ends driven to target)  t2deN 10 le              expect
+    (target-braid: dead-end target stays connected)  gtb2 -bfs-unreached 0 eq  expect
+
+    % upsilon (descriptor-driven; no bespoke braid proc) -- 8 loops.
+    /gtu 8 8 upsilon-make-grid local-def
+    upsilon-desc gtu 0 0 g-backtracker
+    upsilon-desc gtu 1 8 -target-braid
+    [ /ubr /ude0 /udeN /ulp0 ] bind-locals
+    (target-braid: upsilon perfect maze 0 loops)  ulp0 0 eq      expect
+    (target-braid: upsilon 8 loops -> 8 braids)    ubr 8 eq       expect
+    (target-braid: upsilon stays connected)        gtu -upsilon-bfs-unreached 0 eq  expect
+} def
+
 % ----- Weave produces under-cells + stays connected (Phase 6) ------------
 
 /-count-under-cells {|g|#+5
@@ -6808,6 +7008,8 @@
 /opt-unicursal false      def         % single-path labyrinth (doubles the size; square only)
 /opt-hardest  false       def         % place start/end at the maze's diameter (square)
 /opt-braid    0.0r        def         % 0.0..1.0 fraction of dead-ends to braid
+/opt-target-loops    -1   def         % --target-loops N: braid until loop count reaches N; -1 = off
+/opt-target-deadends -1.0r def         % --target-dead-ends P: braid until dead-ends <= P% of cells; <0 = off
 /opt-weave    false       def         % enable Buck-style overpasses (backtrack only)
 /opt-compare  ()          def         % comma-separated algos: "" = single-maze mode
 /opt-quiet    false       def         % suppress progress + phase-timing output (stderr)
@@ -6893,6 +7095,10 @@ OPTIONS
     --start X,Y         Path start cell (default 0,0)
     --end X,Y           Path end cell (-1,-1 means far corner)
     --braid F           Knock down a fraction F of dead-ends (0.0..1.0)
+    --target-dead-ends P  Braid toward a target dead-end percentage (best-effort;
+                        reports achieved vs requested). Any grid.
+    --target-loops N    Braid toward an exact loop count N (one loop per braid).
+                        Mutually exclusive with --target-dead-ends. Any grid.
 
   Multi-panel:
     --compare A,B,C     Run several algos against the same seed and
@@ -6992,6 +7198,8 @@ EXAMPLES
     (--hardest)   { /opt-hardest true store  /i i 1 add store }
     (--braid)     { /opt-braid args i 1 add get to-number /real-type cast store
                     /i i 2 add store }
+    (--target-loops){ /opt-target-loops args i 1 add get to-number store  /i i 2 add store }
+    (--target-dead-ends){ /opt-target-deadends args i 1 add get to-number /real-type cast store  /i i 2 add store }
     (--weave)     { /opt-weave true store  /i i 1 add store }
     (--grid)      { /opt-grid args i 1 add get store  /i i 2 add store }
     (--compare)   { /opt-compare args i 1 add get store  /i i 2 add store }
@@ -7270,11 +7478,13 @@ EXAMPLES
         /g opt-w opt-h make-grid local-def
         g opt-algo opt-start-x opt-start-y dispatch-algo
         opt-braid 0.0r gt { g opt-braid braid } if
+        square-desc g -maybe-target-braid
         g opt-start-x opt-start-y mex mey maze-metrics
     } {
         /desc opt-grid td-descriptor-for local-def
         /g opt-w opt-h  desc (make-grid) get exec  local-def
         desc g opt-algo opt-start-x opt-start-y dispatch-algo-td
+        desc g -maybe-target-braid
         desc g opt-start-x opt-start-y mex mey -td-maze-metrics
     } if-else
     } if-else
@@ -7408,6 +7618,7 @@ opt-self-test {
     test-hex-braid
     test-theta-braid
     test-triangle-braid
+    test-target-braid
     test-weave
     test-hex
     test-theta
@@ -7528,6 +7739,7 @@ opt-self-test {
         /grid opt-w opt-h hex-make-grid def
         hex-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid hex-braid } if
+        hex-desc grid -maybe-target-braid
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px hex-mono-render def
         } {
@@ -7544,6 +7756,7 @@ opt-self-test {
         /grid opt-w opt-h theta-make-grid def
         theta-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid theta-braid } if
+        theta-desc grid -maybe-target-braid
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px theta-mono-render def
         } {
@@ -7559,6 +7772,7 @@ opt-self-test {
         /grid opt-w opt-h triangle-make-grid def
         triangle-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
         opt-braid 0.0r gt { grid opt-braid triangle-braid } if
+        triangle-desc grid -maybe-target-braid
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px triangle-mono-render def
         } {
@@ -7571,10 +7785,13 @@ opt-self-test {
             /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops triangle-color-render def
         } if-else
     } { opt-grid (upsilon) eq {
-        % Upsilon (octagon+square): portable algos + mono/color.  Braid
-        % is still deferred and silently ignored on this grid.
+        % Upsilon (octagon+square): portable algos + mono/color.  The
+        % probabilistic --braid pass is still deferred here, but the
+        % descriptor-driven --target-* braiding works (it rides neighbors/
+        % open?/link, which upsilon has).
         /grid opt-w opt-h upsilon-make-grid def
         upsilon-desc grid opt-algo opt-start-x opt-start-y dispatch-algo-td
+        upsilon-desc grid -maybe-target-braid
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px upsilon-mono-render def
         } {
@@ -7599,6 +7816,7 @@ opt-self-test {
         % AFTER algo so spanning-tree connectivity is preserved before
         % we add loops on top.  (Braid would break the unicursal single path.)
         opt-braid 0.0r gt  opt-unicursal not  and { grid opt-braid braid } if
+        opt-unicursal not { square-desc grid -maybe-target-braid } if
 
         % --hardest: place start/end at the maze's two most distant cells
         % (the diameter) and imply --solve.  Runs after braid so the loops

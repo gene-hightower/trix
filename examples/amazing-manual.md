@@ -472,6 +472,7 @@ gaps. (`--braid` is silently ignored on upsilon; color heatmaps *are* supported.
 | Color heatmaps (14) |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
 | `--solve` ribbon    |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
 | `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |
+| `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |
 | `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |
 
 ---
@@ -616,6 +617,46 @@ BFS, solve, and braid are all weave-agnostic; the tag bits are purely a render
 hint. The renderer stamps the under-cell with two black "bridge bands", a
 shoulder tint, and a drop shadow, producing the illusion of one corridor passing
 over the other.
+
+### 6.5 `--target-dead-ends P` / `--target-loops N` -- braiding to a metric
+
+`--braid P` knocks out a *fraction* of dead-ends; the **target** flags instead
+braid toward a requested **value** of one of the `--metrics` numbers and report
+how close they got. `--target-dead-ends P` braids until dead-ends fall to about
+`P`% of cells; `--target-loops N` braids until the maze has exactly `N`
+independent loops.
+
+The key fact that makes this reliable is that **braiding is monotone**. Starting
+from the generated perfect maze (0 loops, maximal dead-ends), each braid step --
+knock one dead-end's closed wall through to an in-bounds neighbor -- removes one
+or two dead-ends, adds **exactly one** independent loop, and **never
+disconnects** the maze. So no simulated annealing is needed: `amazing.trx`
+enumerates the dead-ends once, shuffles them, and knocks them in random order,
+tracking the metric incrementally, until the target is reached. The walk is
+**best-effort** and prints an achieved-vs-requested line to stderr:
+
+```
+amazing.trx --size 30x30 --target-loops 40
+    target: loops requested 40, achieved 40  (40 braids over 94 dead-ends)
+
+amazing.trx --grid upsilon --size 16x16 --target-dead-ends 5
+    target: dead-ends requested 5.0%, achieved 5.1%  (13/256 cells; 47 braids -> 47 loops)
+```
+
+Loop count is hittable exactly (one loop per braid); a dead-end percentage lands
+within one step (a single braid can clear two dead-ends at once). A target that is
+already satisfied -- `--target-loops 0`, or a dead-end percentage at or above the
+perfect maze's natural level -- is a no-op. Because the whole thing rides the
+topology descriptor (`neighbors`/`open?`/`link`), it works on **every** grid,
+including upsilon (whose probabilistic `--braid` is still deferred). The two flags
+are mutually exclusive; if both are given, `--target-loops` wins (with a warning).
+`--metrics` reflects the targeted maze, so `--target-loops 40 --metrics` reports
+`loops (cycles): 40`.
+
+This is "v1": the targets braiding can reach monotonically. Targets that braiding
+*cannot* reach -- lengthening the solution path, hitting a twistiness value --
+are non-monotone (they need wall *additions* with a connectivity guard and a real
+annealer) and are left for a future revision.
 
 ---
 
@@ -848,6 +889,8 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--solve` | -- | Overlay the shortest-path ribbon in red | off |
 | `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
 | `--braid` | float `0..1` | Fraction of dead-ends to remove | `0.0` |
+| `--target-dead-ends` | float `%` | Braid toward this dead-end percentage; best-effort, any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |
+| `--target-loops` | int | Braid toward this exact loop count; any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |
 | `--weave` | -- | Buck-style overpasses (square + backtrack only) | off |
 | `--unicursal` | -- | Single-path labyrinth; doubles the size, square only ([§3.7](#37-unicursal-mode---unicursal)) | off |
 | `--compare` | `A,B,C` | Side-by-side mono panels of several algorithms | -- |

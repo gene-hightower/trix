@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/amazing.trx`: metric-targeted braiding (`--target-dead-ends` / `--target-loops`).**
+  The `--metrics` numbers become targets: `--target-dead-ends P` braids the maze toward a dead-end
+  percentage, `--target-loops N` toward an exact loop count. Braiding is monotone -- from the
+  generated perfect maze, each step (knock one dead-end's closed wall through to an in-bounds
+  neighbour) removes 1-2 dead-ends, adds exactly one independent loop, and never disconnects -- so
+  this needs no annealer: enumerate the dead-ends once, shuffle, and knock them until the metric is
+  hit, tracked incrementally. Loop count is exact (one loop per braid); a dead-end percentage lands
+  within one step; an already-satisfied target is a no-op. Reports achieved-vs-requested to stderr,
+  and `--metrics` reflects the result. The whole thing rides the topology descriptor
+  (`neighbors`/`open?`/`link`), so it works on **every** grid including upsilon (whose probabilistic
+  `--braid` is still deferred). This is v1 -- the targets braiding can reach monotonically;
+  non-monotone targets (solution length, twistiness) that need wall additions + a real annealer are
+  left for a later revision. Self-test +11 (243): the loop/dead-end accounting is cross-checked
+  against a full degree tally, connectivity is verified, and upsilon is exercised through the shared
+  descriptor.
 - **`examples/amazing.trx`: four new colormaps + ramp shaping for large mazes.** The palette
   set grows from ten to fourteen: `fire-ice` (a vivid hand-built diverging map, ice navy ->
   white -> fire red), and matplotlib's `spectral`, `coolwarm`, and the cyclic `twilight`. Two

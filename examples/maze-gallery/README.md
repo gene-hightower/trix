@@ -33,6 +33,8 @@ examples/gallery.sh
 | [`solve-astar.png`](solve-astar.png) | **Solver: A\*** (`--solver astar`) — the cells A\* expanded tinted blue: a focused frontier toward the goal vs BFS's full flood (same maze/seed as the others) |
 | [`solve-wall-follower.png`](solve-wall-follower.png) | **Solver: wall-follower** (`--solver wall-follower`, square) — the left-hand-rule walk, with its dead-end excursions; finds *a* path, not the shortest |
 | [`unicursal-viridis.png`](unicursal-viridis.png) | **Unicursal labyrinth** (`--unicursal`) — a single non-branching path that visits every cell (a doubled perfect maze); the viridis gradient is distance-along-the-one-path, flowing continuously end to end (no junctions) |
+| [`target-deadends-20.png`](target-deadends-20.png) | **Metric-targeted braid** (`--target-dead-ends 20`) — the perfect maze braided down to ~20% dead-ends; monotone, connectivity-safe, best-effort (reports achieved vs requested) |
+| [`target-loops-80.png`](target-loops-80.png) | **Metric-targeted braid** (`--target-loops 80`) — same maze/seed braided to exactly 80 independent loops (one loop per braid); the heatmap smooths as braiding adds shortcuts |
 | [`monster-magma.png`](monster-magma.png) | **Monster** heatmap — a 400×400 maze (160k cells) in magma distance shading |
 | [`monster-division-rainbow.png`](monster-division-rainbow.png) | **Monster recursive-division** — 400×400 (160k cells), rainbow heatmap; the color blocks expose the recursive partition hierarchy |
 | [`color-cividis.png`](color-cividis.png) | **cividis** colormap (colorblind-friendly perceptual) on a Kruskal maze |

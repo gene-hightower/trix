@@ -7,7 +7,7 @@
 # demand -- the gallery itself is NOT committed to git (binary blobs).
 #
 # Usage:
-#   examples/gallery.sh              Default: 107 PNGs
+#   examples/gallery.sh              Default: 110 PNGs
 #   examples/gallery.sh --full       Adds the 200x200 --stress entry and the
 #                                    full-res 1000x1000 --monster (~3 min)
 #   examples/gallery.sh --quiet      Suppresses per-step echo
@@ -118,6 +118,15 @@ run "feature-weave.png"      --algo backtrack --weave --size 25x25 --cell-px 18
 run "solve-dead-end-fill.png" --solver dead-end-fill --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 run "solve-astar.png"         --solver astar         --size 25x25 --cell-px 16 --wall-px 2 --seed 42
 run "solve-wall-follower.png" --solver wall-follower --size 25x25 --cell-px 16 --wall-px 2 --seed 42
+
+# Metric-targeted braiding: braid the maze toward a requested --metrics value.
+# Same maze + seed, three dead-end targets -- the perfect maze (all dead-ends)
+# braids monotonically toward fewer dead-ends / more loops; the viridis heatmap
+# smooths as braiding adds shortcuts.  Reliable + connectivity-safe (no annealer).
+[[ "$QUIET" -eq 0 ]] && echo "Metric-targeted braid (--target-dead-ends / --target-loops):"
+run "target-deadends-20.png"  --target-dead-ends 20 --color viridis --size 25x25 --cell-px 16 --wall-px 2 --seed 8
+run "target-deadends-5.png"   --target-dead-ends 5  --color viridis --size 25x25 --cell-px 16 --wall-px 2 --seed 8
+run "target-loops-80.png"     --target-loops 80     --color viridis --size 25x25 --cell-px 16 --wall-px 2 --seed 8
 
 # Unicursal: a single-path labyrinth (a doubled perfect maze).  The viridis
 # gradient is BFS distance from the start = position along the one path, so the

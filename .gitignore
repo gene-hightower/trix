@@ -78,6 +78,8 @@ examples/maze-gallery/*
 !examples/maze-gallery/solve-astar.png
 !examples/maze-gallery/solve-wall-follower.png
 !examples/maze-gallery/unicursal-viridis.png
+!examples/maze-gallery/target-deadends-20.png
+!examples/maze-gallery/target-loops-80.png
 !examples/maze-gallery/flow-spiral-turbo.png
 !examples/maze-gallery/flow-image-logo.png
 !examples/maze-gallery/flow-image-cat.png
