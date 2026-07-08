@@ -170,27 +170,20 @@ if(TRIX_FUZZ)
     set(FUZZ_SANITIZERS "-fsanitize=fuzzer,address,undefined")
     set(FUZZ_LIBS ${READLINE_LIBRARY} Threads::Threads ZLIB::ZLIB)
 
-    # Scanner-only fuzzer
-    add_executable(fuzz_scanner fuzz/fuzz_scanner.cpp)
-    target_include_directories(fuzz_scanner PRIVATE ${READLINE_INCLUDE_DIR})
-    target_link_libraries(fuzz_scanner PRIVATE ${FUZZ_LIBS})
-    target_compile_options(fuzz_scanner PRIVATE
-        -fno-rtti -fexceptions -O1 -g
-        ${FUZZ_SANITIZERS}
-        -Wno-parentheses-equality
-    )
-    target_link_options(fuzz_scanner PRIVATE ${FUZZ_SANITIZERS})
-
-    # Full interpreter fuzzer
-    add_executable(fuzz_interpreter fuzz/fuzz_interpreter.cpp)
-    target_include_directories(fuzz_interpreter PRIVATE ${READLINE_INCLUDE_DIR})
-    target_link_libraries(fuzz_interpreter PRIVATE ${FUZZ_LIBS})
-    target_compile_options(fuzz_interpreter PRIVATE
-        -fno-rtti -fexceptions -O1 -g
-        ${FUZZ_SANITIZERS}
-        -Wno-parentheses-equality
-    )
-    target_link_options(fuzz_interpreter PRIVATE ${FUZZ_SANITIZERS})
+    # One executable per harness in fuzz/ (mirrors fuzz/build.sh).
+    #   fuzz_trix -- full interpreter, fuzz data fed as a script on stdin
+    #   fuzz_thaw -- snap-shot thaw path (--image), fuzz data fed as a VM image
+    foreach(harness fuzz_trix fuzz_thaw)
+        add_executable(${harness} fuzz/${harness}.cpp)
+        target_include_directories(${harness} PRIVATE ${READLINE_INCLUDE_DIR})
+        target_link_libraries(${harness} PRIVATE ${FUZZ_LIBS})
+        target_compile_options(${harness} PRIVATE
+            -fno-rtti -fexceptions -O1 -g
+            ${FUZZ_SANITIZERS}
+            -Wno-parentheses-equality
+        )
+        target_link_options(${harness} PRIVATE ${FUZZ_SANITIZERS})
+    endforeach()
 endif()
 
 # ── Install ──────────────────────────────────────────────────────────

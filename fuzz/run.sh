@@ -28,12 +28,21 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FUZZ_BIN="${SCRIPT_DIR}/fuzz_trix"
+# The binary / directory names default to the fuzz_trix harness but are
+# overridable via environment so run_thaw.sh (and any future harness) can reuse
+# this whole budget-loop + triage + merge machinery unchanged.  Defaults are
+# byte-identical to the historical values, so the fuzz_trix path is unaffected.
+FUZZ_BIN="${TRIX_FUZZ_BIN:-${SCRIPT_DIR}/fuzz_trix}"
 TRIAGE="${SCRIPT_DIR}/triage.sh"
-CORPUS="${SCRIPT_DIR}/corpus"
-SEEDS="${SCRIPT_DIR}/seeds"
-CRASHES="${SCRIPT_DIR}/crashes"
+CORPUS="${TRIX_FUZZ_CORPUS:-${SCRIPT_DIR}/corpus}"
+SEEDS="${TRIX_FUZZ_SEEDS:-${SCRIPT_DIR}/seeds}"
+CRASHES="${TRIX_FUZZ_CRASHES:-${SCRIPT_DIR}/crashes}"
 REJECTED="${SCRIPT_DIR}/crashes_rejected"
+# libFuzzer input/memory bounds.  A user-supplied -max_len / -rss_limit_mb in the
+# CLI args still wins (libFuzzer takes the last occurrence, and these are emitted
+# before the passthrough args below).
+FUZZ_MAX_LEN="${TRIX_FUZZ_MAX_LEN:-4096}"
+FUZZ_RSS_MB="${TRIX_FUZZ_RSS_MB:-512}"
 
 if [ ! -x "${FUZZ_BIN}" ]; then
     echo "Error: ${FUZZ_BIN} not found. Run fuzz/build.sh first."
@@ -109,11 +118,11 @@ while true; do
     # PIPESTATUS[0] is the fuzzer's exit code; PIPESTATUS[1] is tee's (ignored).
     "${FUZZ_BIN}" "${CORPUS}" "${SEEDS}" \
         -artifact_prefix="${CRASHES}/" \
-        -max_len=4096 \
+        -max_len="${FUZZ_MAX_LEN}" \
         -timeout=5 \
         -ignore_timeouts=1 \
         -ignore_ooms=1 \
-        -rss_limit_mb=512 \
+        -rss_limit_mb="${FUZZ_RSS_MB}" \
         -print_final_stats=1 \
         "${ITER_ARGS[@]}" 2>&1 | tee -a "${STATS_LOG}"
     STATUS=${PIPESTATUS[0]}

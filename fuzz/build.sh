@@ -49,4 +49,10 @@ ${CXX} ${CXXFLAGS} ${SANITIZERS} ${WARNINGS} ${INCLUDES} \
     ${LIBS} -o "${OUTDIR}/fuzz_trix"
 echo "  -> ${OUTDIR}/fuzz_trix"
 
+echo "Building fuzz_thaw..."
+${CXX} ${CXXFLAGS} ${SANITIZERS} ${WARNINGS} ${INCLUDES} \
+    "${SCRIPT_DIR}/fuzz_thaw.cpp" \
+    ${LIBS} -o "${OUTDIR}/fuzz_thaw"
+echo "  -> ${OUTDIR}/fuzz_thaw"
+
 echo "Done."

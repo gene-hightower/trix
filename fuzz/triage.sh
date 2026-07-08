@@ -41,8 +41,15 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FUZZ_BIN="${SCRIPT_DIR}/fuzz_trix"
+# Overridable so run_thaw.sh can point triage at the fuzz_thaw harness.  Defaults
+# reproduce the historical fuzz_trix behavior exactly.
+FUZZ_BIN="${TRIX_FUZZ_BIN:-${SCRIPT_DIR}/fuzz_trix}"
 TRIX_BIN="${SCRIPT_DIR}/../trix"
+# The fuzz_thaw artifacts are snap-shot images, not scripts, and they are keyed to
+# the fuzzing binary's exact operator-table signature -- the standalone ./trix
+# (a different build) cannot reproduce them, so run_thaw.sh sets this to skip the
+# trix pass and rely on the harness binary + signal-return-code detection below.
+SKIP_TRIX_PASS="${TRIX_FUZZ_SKIP_TRIX_PASS:-0}"
 
 # Patterns that indicate a real finding.  Each maps to a distinct bug class:
 #   SUMMARY: / ERROR: / *Sanitizer       -- ASan/UBSan/LSan/MSan/TSan
@@ -91,7 +98,9 @@ for artifact in "${ARGS[@]}"; do
 
     # Pass 1: trix (fast, no stderr redirect, no aarch64 signal race).
     # Catches asserts, sanitizer reports, and crashes that fuzz_trix masks.
-    if [ -x "${TRIX_BIN}" ]; then
+    # Skipped for image-based harnesses (fuzz_thaw): trix cannot re-thaw an
+    # image built by a different binary.
+    if [ "${SKIP_TRIX_PASS}" != "1" ] && [ -x "${TRIX_BIN}" ]; then
         timeout 15 "${TRIX_BIN}" "${artifact}" >"${TMPOUT}" 2>&1
         rc_trix=$?
         if grep -qE "${REAL_PATTERN}" "${TMPOUT}"; then
@@ -113,13 +122,19 @@ for artifact in "${ARGS[@]}"; do
         rc_fuzz=$?
         if grep -qE "${REAL_PATTERN}" "${TMPOUT}"; then
             classification="REAL"
-            diag_source="fuzz_trix rc=${rc_fuzz}"
+            diag_source="${FUZZ_BIN##*/} rc=${rc_fuzz}"
+        elif [ "${rc_fuzz}" -ge 128 ] && [ "${rc_fuzz}" -ne 143 ] && [ "${rc_fuzz}" -ne 124 ]; then
+            # Signal trap with the diagnostic swallowed by the harness's stderr
+            # redirect (134=SIGABRT, 139=SIGSEGV, 135=SIGBUS, 136=SIGFPE).  On
+            # x86_64 a real thaw crash lands here even when its report is silenced.
+            classification="REAL"
+            diag_source="${FUZZ_BIN##*/} rc=${rc_fuzz} (signal)"
         elif [ "${rc_fuzz}" -eq 124 ]; then
             classification="FALSE"
-            diag_source="fuzz_trix hang (no diagnostic within 15s)"
+            diag_source="${FUZZ_BIN##*/} hang (no diagnostic within 15s)"
         else
             classification="CLEAN"
-            diag_source="fuzz_trix rc=${rc_fuzz} no diagnostic"
+            diag_source="${FUZZ_BIN##*/} rc=${rc_fuzz} no diagnostic"
         fi
     fi
 

@@ -1,13 +1,24 @@
 # Fuzz Testing
 
-Coverage-guided fuzz testing for the Trix interpreter using
+Coverage-guided fuzz testing for Trix using
 [libFuzzer](https://llvm.org/docs/LibFuzzer.html).  Requires clang++-20
 (or later) with the fuzzer runtime.
+
+Two harnesses:
+
+| harness     | target                              | input fed as          | driver               |
+| ----------- | ----------------------------------- | --------------------- | -------------------- |
+| `fuzz_trix` | full interpreter pipeline           | a Trix script (stdin) | `./fuzz/run.sh`      |
+| `fuzz_thaw` | snap-shot **thaw** path (`--image`) | a VM image            | `./fuzz/run_thaw.sh` |
+
+Most of this document describes `fuzz_trix`; the thaw harness is covered in
+its own section below, but shares the same run-loop, triage, and reproduce
+machinery.
 
 ## Build
 
 ```bash
-./fuzz/build.sh
+./fuzz/build.sh          # builds both fuzz_trix and fuzz_thaw
 ```
 
 ## Run
@@ -170,3 +181,79 @@ covering all syntax forms, operator categories, and binary token types.
 libFuzzer mutates these to discover new coverage.
 
 The evolving corpus is stored in `fuzz/corpus/` (gitignored, auto-merged).
+
+## Snap-shot thaw harness (`fuzz_thaw`)
+
+`fuzz_thaw` targets `startup_image()` -- the `--image` / `-l` boot path in
+`ops_snapshot.inl`: header validation, the memory / user-file / VM-blob
+section reads, the overall and per-section CRC gates, `restore_from_header()`,
+`apply_fixup_streams()`, stdio reattach, and post-thaw execution over the
+restored (fuzzer-corrupted) heap.  The snap-shot format has been through 185
+revisions of conditional decode, and thaw runs on **untrusted** input whenever
+a user loads an image they did not produce.
+
+```bash
+./fuzz/run_thaw.sh                      # single-shot, stops on first event
+./fuzz/run_thaw.sh -max_total_time=300  # budget-aware loop, 5 minutes
+./fuzz/run_thaw.sh -overnight           # 8-hour run
+```
+
+Reproducers land in `fuzz/crashes_thaw/`; the evolving corpus in
+`fuzz/corpus_thaw/` (both gitignored).
+
+### Defeating the checksum gate
+
+A snap-shot image is guarded by a CRC-32 over the whole file.  Random mutation
+of a valid image essentially never reproduces a matching CRC, so a naive
+fuzzer would stall at the checksum arm and never reach the decode / relocation
+code that most rewards fuzzing.  A CRC-32 is an integrity check, **not** a
+security boundary: an attacker supplying a malicious `--image` recomputes it
+for free, so every crash reachable past the CRC with a structurally plausible
+header is a real, attacker-reachable defect.
+
+So `fuzz_thaw` installs a **custom mutator** that pins a valid header, fuzzes
+the VM-blob body, and re-stamps the fields that must stay internally consistent
+(`vm_used`, the VM-base sentinel, and the overall checksum) before handing the
+input to the target.  Every generated image therefore clears the gates and
+drives the decode path with a valid header whose root offsets point into
+corrupted heap data -- modelling the real threat (untrusted image, valid CRC).
+
+### Self-minted template (no committed seed)
+
+The header and a representative boot heap come from a template image the
+harness mints **at startup from its own linked engine** (it runs
+`(<tmpfile>) snap-shot` once), so the template's `snapshot_version` and
+operator-table signature always match the binary under test.  A committed seed
+image cannot serve this role -- it would be rejected the moment the format or
+operator set changes.  `run_thaw.sh` bootstraps the corpus by asking the
+harness to persist that template (`TRIX_THAW_SEED_OUT`), giving the mutator a
+full boot heap to corrupt.
+
+At startup the harness validates every structural offset it relies on (magic,
+`vm_used`, checksum position, and the CRC model) against the freshly minted
+template and aborts loudly on any layout drift -- the same contract as
+`tests/snapshot/patch_image.py`.
+
+### Reproduce / triage a thaw crash
+
+Thaw artifacts are images keyed to the fuzzing binary's exact operator-table
+signature, so -- unlike `fuzz_trix` artifacts -- the standalone `./trix` cannot
+replay them.  Reproduce with the harness binary itself:
+
+```bash
+./fuzz/triage.sh fuzz/crashes_thaw/crash-<hash>   # run_thaw.sh does this automatically
+./fuzz/fuzz_thaw fuzz/crashes_thaw/crash-<hash>   # full ASan/UBSan reproducer
+```
+
+`run_thaw.sh` runs triage with the trix pass skipped and signal-return-code
+detection on, so a silenced `SIGSEGV`/`SIGABRT` is still classified REAL on
+x86_64.  On aarch64 the libFuzzer signal-pipe race can turn a real, stderr-
+silenced assert into a 2-minute hang that triage records as FALSE; re-check any
+FALSE thaw artifact there by hand with `./fuzz/fuzz_thaw <artifact>`.
+
+### Note on size and throughput
+
+Snap-shot images are hundreds of KB, so `run_thaw.sh` raises `-max_len` and the
+RSS ceiling well above the `fuzz_trix` defaults, and each thaw+execute is
+heavier than a script run -- expect lower executions/second but deep per-unit
+coverage.

@@ -101,8 +101,11 @@ examples/maze-gallery/*
 
 # Fuzz artifacts (binaries, auto-corpus, crashes)
 fuzz/fuzz_trix
+fuzz/fuzz_thaw
 fuzz/corpus/
+fuzz/corpus_thaw/
 fuzz/crashes/
+fuzz/crashes_thaw/
 fuzz/crashes_rejected/
 .claude/
 
