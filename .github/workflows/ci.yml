@@ -104,6 +104,34 @@ jobs:
       - name: Verify reference/cheatsheet facts match the implementation
         run: ./tools/check_reference_facts.py
 
+  gc-stress:
+    name: GC-stress suite
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreadline-dev zlib1g-dev cmake ninja-build
+
+      # tests/test_gc_stress_*.trx drive vm-gc-stress / vm-gc-poison, which
+      # gvm_alloc uses to fire a full collection before EVERY global allocation
+      # -- turning a dropped GC root into a deterministic ASan use-after-free at
+      # the exact site instead of a timing-dependent latent fault.  Both ops are
+      # compiled out unless TRIX_DEBUGGER is defined, so the build-and-test legs
+      # above cannot run these tests and run_all.sh skips them.  This job is
+      # their only automated coverage.
+      - name: Configure (TRIX_DEBUGGER, sanitizers on)
+        run: cmake -B build-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug -DTRIX_DEBUGGER=ON
+
+      - name: Build
+        run: cmake --build build-dbg --target trix
+
+      - name: Run the GC-stress suite
+        run: TRIX_BIN=build-dbg/trix ./tests/run_gc_stress_tests.sh
+
   clang-format:
     name: clang-format check
     runs-on: ubuntu-24.04

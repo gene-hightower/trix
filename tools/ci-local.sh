@@ -9,6 +9,12 @@
 #     binary has vm-gc-stress / debug ops / heap-track keys that CI's cmake
 #     build does NOT.  Tests gated on those (e.g. test_gc_stress_*) behave
 #     differently -- they pass under build.sh and error under CI.
+#     Because of that gap the GC-stress tests ran in no automated gate at
+#     all: run_all.sh skips them and the primary cmake build cannot execute
+#     them.  This script therefore makes a SECOND cmake build with
+#     -DTRIX_DEBUGGER=ON and runs them against it (the "GC-stress suite"
+#     gate), so they are covered without the primary build drifting from
+#     CI's shipping configuration.
 #   * CI's clang-format check is a SEPARATE job (clang-format-20 --dry-run
 #     --Werror over all of src/), NOT part of runtests.sh (which runs the
 #     unrelated cpp_style.py linter).
@@ -69,6 +75,23 @@ fi
 cp build-ci/trix build-ci/tetrix build-ci/chip8 "$ROOT/"
 echo "  build OK -> ./trix ./tetrix ./chip8 (cmake)"
 
+# --- second build: TRIX_DEBUGGER, for the GC-stress gate -------------------
+# tests/test_gc_stress_*.trx drive vm-gc-stress / vm-gc-poison, which are
+# compiled out of the default build entirely -- run_all.sh skips them and the
+# primary cmake build above cannot run them at all.  Without this they execute
+# in no automated gate, which is how they sat for the whole GC perf campaign.
+# Built into its own tree so the primary binaries staged above are untouched.
+echo "== ci-local: cmake build #2 (TRIX_DEBUGGER, for GC-stress) =="
+DBG_TRIX=""
+if ! cmake -B build-ci-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug -DTRIX_DEBUGGER=ON >"$TMP" 2>&1; then
+    echo "  CONFIGURE FAILED"; tail -15 "$TMP" | sed 's/^/    /'; exit 1
+fi
+if ! cmake --build build-ci-dbg --target trix >"$TMP" 2>&1; then
+    echo "  BUILD FAILED"; tail -20 "$TMP" | sed 's/^/    /'; exit 1
+fi
+DBG_TRIX="$ROOT/build-ci-dbg/trix"
+echo "  build OK -> build-ci-dbg/trix (TRIX_DEBUGGER)"
+
 echo "== ci-local: gates (mirror of ci.yml) =="
 gate "Run full test suite"       ./runtests.sh
 gate "clang-format (--Werror)"   bash -c "find src trix.h trix.cpp -type f \( -name '*.inl' -o -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 '$CF' --style=file --dry-run --Werror"
@@ -87,6 +110,7 @@ gate "check_reference_facts"     ./tools/check_reference_facts.py
 gate "cpp_style --check"         ./tools/cpp_style.py --check
 gate "assert_blank_line --check" ./tools/assert_blank_line.py --check
 gate "check_signed_char --check" ./tools/check_signed_char.py --check
+gate "GC-stress suite"           env TRIX_BIN="$DBG_TRIX" ./tests/run_gc_stress_tests.sh
 
 echo "===================================="
 if [ ${#FAILED[@]} -eq 0 ]; then

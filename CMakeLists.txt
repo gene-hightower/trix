@@ -29,6 +29,7 @@ option(TRIX_WERROR     "Treat warnings as errors (-Werror)" ON)
 option(TRIX_FUZZ       "Build libFuzzer harnesses only (requires Clang)" OFF)
 option(TRIX_NO_ZLIB    "Build without zlib (deflate/inflate raise /unsupported)" OFF)
 option(TRIX_NO_READLINE "Build without GNU readline (REPL degrades to a plain prompt)" OFF)
+option(TRIX_DEBUGGER   "Build with the interactive debugger + GC fault-injection ops" OFF)
 
 # ── Dependencies ─────────────────────────────────────────────────────
 find_package(Threads REQUIRED)
@@ -65,6 +66,17 @@ foreach(tgt trix tetrix chip8)
         target_compile_definitions(${tgt} PRIVATE TRIX_NO_ZLIB)
     else()
         target_link_libraries(${tgt} PRIVATE ZLIB::ZLIB)
+    endif()
+
+    # The debugger is off by default, matching the shipping configuration.
+    # -DTRIX_DEBUGGER=ON additionally compiles in the interactive debugger and
+    # the GC fault-injection ops (vm-gc-stress / vm-gc-poison / vm-gc-profile),
+    # which tests/test_gc_stress_*.trx require.  Those tests cannot run against
+    # the default build at all -- the operators are simply absent -- so the
+    # GC-stress gate builds this variant separately rather than switching the
+    # primary build over to it.
+    if(TRIX_DEBUGGER)
+        target_compile_definitions(${tgt} PRIVATE TRIX_DEBUGGER)
     endif()
 
     # readline is optional: -DTRIX_NO_READLINE=ON drops the dependency and the
