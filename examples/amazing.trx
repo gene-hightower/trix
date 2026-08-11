@@ -7510,6 +7510,7 @@
 /opt-cell-set false       def         % did the user pass --cell-px? (auto-size hi-res masks if not)
 /opt-wall-px  2           def
 /opt-seed     0ul         def         % 0 = clock-seeded (ULong: --seed stores ulong, and eq is type-strict)
+/opt-seed-used 0ul        def         % the seed actually fed to rand-seed (resolves opt-seed 0 -> clock)
 /opt-grid     (square)    def         % square | hex | theta | triangle | upsilon | zeta | crack
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
@@ -7925,7 +7926,7 @@ EXAMPLES
         local-def
     /loop-note loops 0 eq { (   perfect maze) } { () } if-else local-def
 
-    (maze metrics: {0} {1}x{2}  (seed {3})\n)  mark opt-algo w h opt-seed  print-fmt pop pop
+    (maze metrics: {0} {1}x{2}  (seed {3})\n)  mark opt-algo w h opt-seed-used  print-fmt pop pop
     (  cells          : {0}\n)                          mark cells                print-fmt pop pop
     (  dead-ends      : {0}  ({1:.1f}%)\n)              mark deadends dead-pct    print-fmt pop pop
     (  passages       : {0}  (straight {1}, turns {2}; twistiness {3:.1f}%)\n)
@@ -7988,7 +7989,7 @@ EXAMPLES
     /dead-pct  deadends 100 mul /real-type cast  cells /real-type cast  div local-def
     /loop-note loops 0 eq { (   perfect maze) } { () } if-else local-def
 
-    (maze metrics: {0} {1} {2}x{3}  (seed {4})\n)  mark opt-algo opt-grid w h opt-seed  print-fmt pop pop
+    (maze metrics: {0} {1} {2}x{3}  (seed {4})\n)  mark opt-algo opt-grid w h opt-seed-used  print-fmt pop pop
     (  cells          : {0}\n)                          mark cells              print-fmt pop pop
     (  dead-ends      : {0}  ({1:.1f}%)\n)              mark deadends dead-pct  print-fmt pop pop
     (  passages       : {0}\n)                          mark passages          print-fmt pop pop
@@ -7999,11 +8000,35 @@ EXAMPLES
         mark soln sx sy ex ey  print-fmt pop pop
 } def
 
+% (--) -seed-rng -- resolve opt-seed (0 = clock) to the seed actually used,
+%   record it in opt-seed-used, seed the PRNG, and echo it when it came from
+%   the clock.
+%
+%   The echo is the point: without it a clock-seeded maze is a one-off.  You
+%   render, you like it, and you cannot get it back -- not larger, not
+%   recolored, not solved -- because the seed that produced it was never
+%   shown.  Printing it turns every roll into something `--seed N` can
+%   reproduce exactly.  An explicit --seed needs no echo; the user already
+%   has the number.
+%
+%   Defined at top level, NOT inside a caller's conditional: a proc defined
+%   inside a runtime conditional only exists when that branch runs, which is
+%   the trap that produced the crack --metrics bug.
+/-seed-rng {||#+4
+    /opt-seed-used  opt-seed 0ul eq { now } { opt-seed } if-else  store
+    opt-seed-used rand-seed
+    opt-quiet not  opt-seed 0ul eq  and {
+        stderr (amazing: seed {0}  \(clock-derived; pass --seed {0} to reproduce\)\n)
+            mark opt-seed-used  fprint-fmt pop pop
+        stderr flush-stream
+    } if
+} def
+
 % (--) run-metrics -- generate a maze per the CLI options and report.  Square
 %   keeps the full report (incl. twistiness); the other grids run the generic
 %   topology-driven report (no twistiness).
 /run-metrics {||#+8
-    opt-seed 0ul eq { now } { opt-seed } if-else  rand-seed
+    -seed-rng
     opt-unicursal {
         % the labyrinth is its own (square) maze at 2x the size; report on it.
         /gu opt-w opt-h make-unicursal local-def
@@ -8713,11 +8738,10 @@ opt-self-test {
     test-mask
     (amazing.trx self-test ok\n) print
 } {
-    % Seed the PRNG.  In compare mode we re-seed before EACH panel so
-    % every algo sees the same starting RNG state and the panels are
-    % directly comparable.
-    /-effective-seed
-        opt-seed 0ul eq { now } { opt-seed } if-else def
+    % Seed the PRNG.  In compare mode we re-seed before EACH panel (from
+    % opt-seed-used, resolved once here) so every algo sees the same starting
+    % RNG state and the panels are directly comparable.
+    -seed-rng
 
     % --flow-image: load the image field grid once (deferred to here so
     % --flow-image-dir may follow --flow-image on the command line).
@@ -8735,7 +8759,7 @@ opt-self-test {
             stderr (amazing: masking is square-grid only; ignoring --grid ) write-string
             stderr opt-grid write-string  stderr (\n) write-string  stderr flush-stream
         } if
-        -effective-seed rand-seed
+        opt-seed-used rand-seed
         /mask
             opt-mask (text) eq { opt-mask-word -build-text-mask }
             { opt-mask (logo) eq { (trix-logo) -load-mask-shape }
@@ -8790,12 +8814,12 @@ opt-self-test {
         /algos opt-compare (,) split def
         /panels algos length array def
         0 1 algos length 1 sub {|i|
-            -effective-seed rand-seed
+            opt-seed-used rand-seed
             panels i  algos i get -render-compare-panel  put
         } for
         /pic panels 16 12 algos -compose-compare def
     } {
-    -effective-seed rand-seed
+    opt-seed-used rand-seed
 
     % --unicursal: a single-path labyrinth.  Built by doubling a perfect maze
     % (Section 7D), so it is square-only and twice the requested size on each

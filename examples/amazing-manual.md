@@ -986,7 +986,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--wall-px` | int | Wall thickness in pixels | `2` |
 | `--wall-color` | `RRGGBB` | Maze line color (hex; `#` optional) | `000000` |
 | `--bg-color` | `RRGGBB` | Passage / background color (hex) | `FFFFFF` |
-| `--seed` | uint | RNG seed; `0` seeds from the clock | `0` |
+| `--seed` | uint | RNG seed; `0` seeds from the clock and echoes the seed it picked, so the maze can be reproduced ([§9.1](#91-reproducing-a-clock-seeded-maze)) | `0` |
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
 | `--algo` | name | Generation algorithm (8 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
 | `--flow` | name | Weighted-Kruskal flow maze: `radial` / `linear` / `spiral` / `sine` ([§3.2](#32-spanning-tree-family)) | -- |
@@ -1081,6 +1081,34 @@ cells and roughly ~4× the time, so a 2000×2000 maze is ten-plus minutes.
   viewer and explore it at 100%. For something that reads at small size, render a
   *colored* heatmap instead -- the BFS gradient gives it large-scale structure
   that survives shrinking.
+
+### 9.1 Reproducing a clock-seeded maze
+
+With no `--seed` (or `--seed 0`) the generator seeds itself from the clock, so
+every run gives a different maze. It prints the seed it picked:
+
+```console
+$ examples/amazing.trx --size 14x14 --color viridis
+amazing: seed 674055451  (clock-derived; pass --seed 674055451 to reproduce)
+Maze: 14x14 cells -> maze.png (254x254 px)
+```
+
+Feeding that number back reproduces the maze **byte for byte**, so you can roll
+until you get one you like and then re-render it larger, recolored, solved, or
+masked:
+
+```sh
+examples/amazing.trx --size 14x14 --color viridis --seed 674055451   # identical
+examples/amazing.trx --size 14x14 --color inferno --seed 674055451 --solve
+```
+
+The echo goes to stderr and only appears when the seed *was* clock-derived --
+passing `--seed N` yourself prints nothing, since you already have the number.
+`--quiet` suppresses it along with the other progress output; if you want the
+maze reproducible, do not use `--quiet` on the roll that produces it.
+
+`--compare` resolves the seed once and re-seeds each panel from it, so a
+compare sheet is reproducible from the same single number.
 
 ---
 
