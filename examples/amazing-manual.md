@@ -712,6 +712,38 @@ This is "v1": the targets braiding can reach monotonically. Targets that braidin
 are non-monotone (they need wall *additions* with a connectivity guard and a real
 annealer) and are left for a future revision.
 
+### 6.6 `--hardest` -- the longest possible solution
+
+By default the maze runs corner to corner. `--hardest` instead places the start
+and end at the maze's two most distant cells -- the **graph diameter** -- and
+implies `--solve`, so you get the hardest run the maze can offer rather than the
+one the corners happen to give you:
+
+```sh
+examples/amazing.trx --seed 42 --size 15x15 --hardest
+# solver bfs: solution 114 cells    (corner-to-corner on the same maze: 109)
+```
+
+It is computed with the standard double-BFS: the farthest cell from any start is
+an endpoint of some diameter, and the farthest cell from *that* one is the other
+endpoint. The search runs after braiding, so any loops `--braid` or `--target-*`
+introduced are reflected in the distances, and the resulting start also roots the
+`--color` heatmap -- a distance-field render with `--hardest` is measured from the
+hard start rather than the corner.
+
+`--hardest` is **square only**. On any other `--grid` it warns and is ignored,
+leaving the requested topology intact:
+
+```console
+$ examples/amazing.trx --grid hex --hardest
+amazing: --hardest is square-only; ignoring it on --grid hex
+```
+
+That differs deliberately from `--unicursal` and `--mask`, which warn and force
+the square grid: those decide what maze you get, whereas `--hardest` only chooses
+which two cells are the endpoints, so dropping the flag is less surprising than
+discarding your choice of topology.
+
 ---
 
 ## 7. Masking: Shape-Carved Mazes
@@ -943,6 +975,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--end` | `X,Y` | Path end cell; `-1,-1` = far corner | `-1,-1` |
 | `--solve` | -- | Overlay the shortest-path ribbon in red | off |
 | `--solver` | name | Solve method (implies `--solve`): `bfs` / `dead-end-fill` / `astar` / `tremaux` / `wall-follower` ([§6.2](#62---solver-name----a-zoo-of-solving-methods)) | `bfs` |
+| `--hardest` | -- | Put start/end at the two most distant cells (graph diameter); implies `--solve`. Square only -- warns and is ignored on other grids ([§6.6](#66---hardest----the-longest-possible-solution)) | off |
 | `--braid` | float `0..1` | Fraction of dead-ends to remove | `0.0` |
 | `--target-dead-ends` | float `%` | Braid toward this dead-end percentage; best-effort, any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |
 | `--target-loops` | int | Braid toward this exact loop count; any grid ([§6.5](#65---target-dead-ends-p----target-loops-n----braiding-to-a-metric)) | -- |

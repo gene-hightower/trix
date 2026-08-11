@@ -8810,6 +8810,20 @@ opt-self-test {
         /opt-h opt-h 2 mul store
     } if
 
+    % --hardest: the diameter search (hardest-pair) walks the square grid
+    % directly, so it cannot run on the other topologies.  Warn and drop the
+    % flag rather than forcing the square grid the way --unicursal and --mask
+    % do: those change what maze you get, whereas --hardest only chooses which
+    % two cells are start and end, so the user's --grid is the more fundamental
+    % choice and silently discarding it would be the bigger surprise.  Before
+    % this it failed silently -- the PNG came out byte-identical to an unsolved
+    % maze with no indication the flag had been dropped.
+    opt-hardest  opt-grid (square) ne  and {
+        stderr (amazing: --hardest is square-only; ignoring it on --grid ) write-string
+        stderr opt-grid write-string  stderr (\n) write-string  stderr flush-stream
+        /opt-hardest false store
+    } if
+
     % Generate the maze.  Each non-square topology builds its grid then
     % runs the requested --algo through its descriptor + dispatch-algo-td,
     % so the seven portable generators (backtrack/kruskal/wilson/aldous-
