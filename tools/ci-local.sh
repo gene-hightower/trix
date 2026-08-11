@@ -27,8 +27,15 @@
 # stashed, the cmake-built trio is staged for the run, and the dev binaries
 # are restored on exit.  Rebuild your dev tree afterward with ./build.sh.
 #
-# Usage:  tools/ci-local.sh            # cmake Debug (CI's representative leg)
+#   * cmake picks the SYSTEM DEFAULT compiler unless told otherwise, and the
+#     warning set in CMakeLists.txt includes GCC 14+ flags.  A box defaulting
+#     to gcc-14 configures fine while CI's ubuntu-24.04 default (gcc-13)
+#     rejects them, so this script pins CC/CXX to gcc-15 -- the compiler CI's
+#     representative leg uses -- and says so loudly if it has to fall back.
+#
+# Usage:  tools/ci-local.sh            # cmake Debug, gcc-15 (CI's representative leg)
 #   CLANG_FORMAT=clang-format tools/ci-local.sh   # override the formatter
+#   CC=clang-20 CXX=clang++-20 tools/ci-local.sh  # run CI's other matrix leg
 # ====================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -36,6 +43,27 @@ ROOT=$(pwd)
 
 CF=${CLANG_FORMAT:-clang-format-20}
 command -v "$CF" >/dev/null 2>&1 || CF=clang-format
+
+# --- pin the compiler to CI's gcc-15 leg ----------------------------------
+# CMakeLists.txt passes GCC 14+ warning flags (-Wnrvo among them), so which
+# compiler cmake picks decides whether the build even configures.  Leaving it
+# to the system default is what let a CI-red change through ci-local green:
+# this box defaulted to gcc-14, which accepts those flags, while CI's
+# ubuntu-24.04 default is gcc-13, which rejects them outright.
+#
+# Falling back is still allowed -- not every machine has gcc-15 -- but it is
+# announced rather than silent.  A silent fallback is precisely the failure
+# mode being fixed: the divergence from CI has to be visible, or "ci-local
+# green" means less than it claims.
+export CC=${CC:-gcc-15}
+export CXX=${CXX:-g++-15}
+if ! command -v "$CC" >/dev/null 2>&1 || ! command -v "$CXX" >/dev/null 2>&1; then
+    echo "== ci-local: WARNING -- $CC/$CXX not found; falling back to the system default =="
+    echo "   CI builds with gcc-15, so a toolchain-sensitive failure can still slip"
+    echo "   through this run.  Install with: sudo apt-get install -y gcc-15 g++-15"
+    echo "   (or set CC/CXX explicitly to pick a different compiler.)"
+    unset CC CXX
+fi
 
 TMP=$(mktemp)
 FAILED=()
@@ -83,6 +111,10 @@ echo "  build OK -> ./trix ./tetrix ./chip8 (cmake)"
 # Built into its own tree so the primary binaries staged above are untouched.
 echo "== ci-local: cmake build #2 (TRIX_DEBUGGER, for GC-stress) =="
 DBG_TRIX=""
+# Removed first: cmake caches CMAKE_CXX_COMPILER in an existing tree, so a
+# stale build-ci-dbg would keep whatever compiler configured it and quietly
+# ignore the CC/CXX pin above.
+rm -rf build-ci-dbg
 if ! cmake -B build-ci-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug -DTRIX_DEBUGGER=ON >"$TMP" 2>&1; then
     echo "  CONFIGURE FAILED"; tail -15 "$TMP" | sed 's/^/    /'; exit 1
 fi
