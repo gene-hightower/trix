@@ -890,6 +890,7 @@ enum struct SystemName : name_index_t {
     VmGlobalGc,                // "vm-global-gc"
     VmGlobalGcProbe,           // "vm-global-gc-probe"
     VmGlobalInfo,              // "vm-global-info"
+    VmHeapVerify,              // "vm-heap-verify"
 #ifdef TRIX_HEAP_TRACKING
     VmHeapSnapshot,  // "vm-heap-snapshot"
     VmHeapDiff,      // "vm-heap-diff"

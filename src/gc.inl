@@ -660,6 +660,96 @@ void mark_global_offset(vm_offset_t payload_offset) {
     }
 }
 
+// verify_expected_kind_for(type):  the ChunkKind a global block MUST carry
+// to legitimately back an Object of this Type, or ChunkKind::Other to mean
+// "no single kind implied -- do not check".
+//
+// Deliberately NOT expected_chunk_kind_for above: that one is total only
+// over the three offset-advancing types and calls std::unreachable() for
+// everything else, so handing it an arbitrary Type is undefined behaviour.
+// This mapping is total over Object::Type.
+//
+// Conservative by design.  Only 1:1 Type <-> ChunkKind pairs are asserted;
+// retired kinds (Stream, Continuation, Screen), the ExtValue / WideValue
+// scalars (whose offsets address their own cell heaps rather than a tagged
+// global block), and the non-VM types all return Other and are skipped.  A
+// verifier that reports a violation which is not one gets switched off, so
+// a missed check costs less here than a false positive.
+//
+// No default clause, matching walk_block_contents / gc_kind_has_no_children:
+// with -Wswitch-enum + -Werror a newly-added Object::Type becomes a
+// compile-time error here too, so the mapping cannot silently go stale.
+[[nodiscard]] static constexpr ChunkKind verify_expected_kind_for(Object::Type t) {
+    switch (t) {
+    // Composites and interned names: exactly one backing kind each.  These
+    // are the types whose mis-tagging would actually corrupt a traversal.
+    case Object::Type::Name:
+        return ChunkKind::Name;
+
+    case Object::Type::Dict:
+        return ChunkKind::Dict;
+
+    case Object::Type::Set:
+        return ChunkKind::Set;
+
+    case Object::Type::Array:
+        return ChunkKind::Array;
+
+    case Object::Type::Packed:
+        return ChunkKind::Packed;
+
+    case Object::Type::String:
+        return ChunkKind::String;
+
+    case Object::Type::Curry:
+        return ChunkKind::Curry;
+
+    case Object::Type::Thunk:
+        return ChunkKind::Thunk;
+
+    case Object::Type::Tagged:
+        return ChunkKind::Tagged;
+
+    case Object::Type::Record:
+        return ChunkKind::Record;
+
+    // Not checked -- see the conservatism note above.
+    case Object::Type::Null:
+    case Object::Type::Byte:
+    case Object::Type::Integer:
+    case Object::Type::UInteger:
+    case Object::Type::Long:
+    case Object::Type::ULong:
+    case Object::Type::Address:
+    case Object::Type::Real:
+    case Object::Type::Double:
+    case Object::Type::Boolean:
+    case Object::Type::Operator:
+    case Object::Type::Mark:
+    case Object::Type::Stream:
+    case Object::Type::SourceLoc:
+    case Object::Type::Coroutine:
+    case Object::Type::PipeBuffer:
+    case Object::Type::Cell:
+    case Object::Type::Continuation:
+    case Object::Type::Int128:
+    case Object::Type::UInt128:
+    case Object::Type::OpaqueHandle:
+    case Object::Type::SlotRef:
+        return ChunkKind::Other;
+    }
+    return ChunkKind::Other;  // unreachable: switch is exhaustive
+}
+
+// kind_mismatches_type(payload_offset, o):  true iff the block at
+// payload_offset carries a ChunkKind that contradicts o's Type.  Returns
+// false whenever the Type implies no specific kind, so an unchecked Type
+// can never register a violation.  Verifier-only; see m_gc_verify.
+[[nodiscard]] bool kind_mismatches_type(vm_offset_t payload_offset, Object o) {
+    auto expected = verify_expected_kind_for(o.type());
+    return ((expected != ChunkKind::Other) && (gvm_get_kind(payload_offset) != expected));
+}
+
 // Mark global refs reachable from a LOCAL-VM container payload (offset
 // below vm_global_off + GvmHeaderSize).  A local payload is never itself a
 // GC-managed global block, but it can hold Object refs INTO global VM that
@@ -1161,6 +1251,14 @@ void gc_mark_object(Object o) {
                 can_mark = false;
             }
 
+            // Verifier: a reachable slot whose reference did not resolve is a
+            // real defect, even though skipping it is the right call for the
+            // collector (see m_gc_verify in member_vars.inl).  Recording only;
+            // the marking decision above is unchanged.
+            if (m_gc_verify && !can_mark) {
+                m_gc_verify_stale_refs++;
+            }
+
             // Header sanity + mark.  Runs for both an advanceable type whose
             // owning payload resolved and an aligned non-advanceable type: the
             // block size must be aligned and the block must stay within the VM.
@@ -1179,6 +1277,19 @@ void gc_mark_object(Object o) {
                         error(Error::InternalError,
                               "GC: Object slot {} references a freed block (use-after-free?)",
                               static_cast<integer_t>(offset));
+                    } else if (m_gc_verify && kind_mismatches_type(offset, o)) {
+                        // Verifier-only: the block's ChunkKind disagrees with the
+                        // Type of the Object referencing it.  gvm_find_owning_payload
+                        // performs this check for advanceable types, but a
+                        // non-advanceable reference reaches its block with the tag
+                        // never compared -- so a Dict Object pointing at (say) an
+                        // Array block marks and traverses as a Dict.  Count it and
+                        // still mark, so one mismatch does not cascade into a sweep
+                        // of everything downstream of it.
+                        m_gc_verify_kind_mismatch++;
+                        if (gvm_get_mark_gen(offset) != m_gc_current_gen) {
+                            gc_mark_reached(offset, gvm_get_kind(offset));
+                        }
                     } else if (gvm_get_mark_gen(offset) != m_gc_current_gen) {
                         // Cycle break: block already marked at the current generation,
                         // contents enqueued / processed.  Mark FIRST so cyclic refs
@@ -1186,6 +1297,12 @@ void gc_mark_object(Object o) {
                         // counted but not enqueued (gc_mark_reached).
                         gc_mark_reached(offset, gvm_get_kind(offset));
                     }
+                } else if (m_gc_verify) {
+                    // Resolved to an offset whose block header is not sane
+                    // (zero / misaligned size, or a block running past the VM
+                    // limit).  Silently unmarked for the collector; a defect
+                    // for the verifier.
+                    m_gc_verify_stale_refs++;
                 }
             }
         }
@@ -2367,6 +2484,163 @@ GcProbeResult vm_global_gc_probe_impl() {
     }
 }
 
+// vm_heap_verify(): post-collection heap invariant walker.
+//
+// Runs a mark pass with the verifier armed, then reports how many times
+// each invariant was violated.  A healthy heap reports zero everywhere;
+// any non-zero count is a defect, not a tuning knob.
+//
+// Relationship to vm_global_gc_probe(): the probe answers "how much is
+// garbage", this answers "is the heap SELF-CONSISTENT".  Both are
+// mark-only dry runs that restore the heap exactly as they found it, and
+// both are present in ALL builds -- unlike vm-gc-stress / vm-gc-poison,
+// which are TRIX_DEBUGGER-only.  Being all-builds is the point: it lets
+// the invariant check run under CI's cmake configuration, which has no
+// TRIX_DEBUGGER, so a heap regression is caught by the standard gate set
+// rather than only by a developer's local debug binary.
+//
+// Invariants, and why each earns its place:
+//
+//   * stale-refs -- a reachable slot holding a reference that does not
+//     resolve to a sane block.  gc_mark_object already detects these and
+//     skips them (correct for a collector, which must not follow
+//     garbage); the verifier records them, because a LIVE object holding
+//     an unresolvable reference means a root was dropped and the block
+//     re-used underneath it.
+//
+//   * kind-mismatch -- a reachable block whose ChunkKind contradicts the
+//     Type of the Object referencing it.  Advanceable types get this
+//     check for free inside gvm_find_owning_payload; every other type
+//     reaches its block with the tag never compared, so a Dict Object
+//     aimed at an Array block would traverse as a Dict undetected.
+//
+//   * work-list-dirty -- a block whose intrusive m_next_in_work is not
+//     nulloffset once the pass has drained.  That field is shared by the
+//     mark queue and the sweep doomed-list, so a leaked link corrupts the
+//     NEXT collection rather than this one -- exactly the sort of bug
+//     that survives review and tests and then fires under timing change.
+//
+//   * dict-bucket-errors / dict-length-mismatch / dict-bad-bucket-count --
+//     Dict and Set bucket-chain consistency (see Dict::gc_verify_chains).
+//     An entry parked in the wrong bucket makes a key that is physically
+//     present read as absent, and a drifted m_length breaks put()'s
+//     expansion trigger.  Both are silent: the container still holds all
+//     its data and only the lookup path disagrees, which is exactly the
+//     shape a bucket-sizing or hash change leaves behind.
+//
+// Cost: one mark pass plus one linear heap walk.  Same order as the
+// probe; intended for gates and post-workload assertions, not steady use.
+struct GcVerifyResult {
+    vm_size_t stale_refs;
+    vm_size_t kind_mismatch;
+    vm_size_t work_list_dirty;
+    vm_size_t dict_bucket_errors;
+    vm_size_t dict_length_mismatch;
+    vm_size_t dict_bad_bucket_count;
+};
+
+GcVerifyResult vm_heap_verify() {
+    GcVerifyResult result{};
+    if (m_in_gc) {
+        return result;
+    } else {
+        auto temp_save = m_vm_temp_ptr;
+        m_in_gc = true;
+        m_gc_verify = true;
+        m_gc_verify_stale_refs = 0;
+        m_gc_verify_kind_mismatch = 0;
+        try {
+            result = vm_heap_verify_impl();
+        }
+        catch (...) {
+            m_vm_temp_ptr = temp_save;
+            m_gc_verify = false;
+            m_in_gc = false;
+            throw;
+        }
+        m_vm_temp_ptr = temp_save;
+        m_gc_verify = false;
+        m_in_gc = false;
+        return result;
+    }
+}
+
+GcVerifyResult vm_heap_verify_impl() {
+    GcVerifyResult result{};
+
+    // Same dry-run contract as vm_global_gc_probe_impl: flip the mark
+    // generation, mark the reachable set, then restore every block's
+    // m_mark_gen and the generation itself.  See that function for why the
+    // restore is mandatory with a 1-bit mark generation.
+    auto saved_gen = m_gc_current_gen;
+    gc_advance_generation();
+    auto total_live = gc_live_block_count();
+    if (total_live == 0) {
+        m_gc_current_gen = saved_gen;
+        return result;
+    } else if (m_gc_scratch_offset == nulloffset) {
+        m_gc_current_gen = saved_gen;
+        error(Error::InternalError, "heap-verify: scratch block missing -- did gvm_alloc skip ensure_gc_scratch?");
+        return result;
+    } else {
+        auto *scratch = offset_to_ptr<vm_offset_t>(m_gc_scratch_offset);
+        m_gc_local_visited = scratch;
+        m_gc_local_visited_capacity = gc_visited_capacity_from_scratch();
+        m_gc_local_visited_count = 0;
+        assert(m_gc_work_head == nulloffset);
+        assert(m_gc_visit_head == nulloffset);
+        m_gc_marked_count = 0;
+
+        walk_all_roots();
+        while (m_gc_work_head != nulloffset) {
+            walk_block_contents(gc_work_pop());
+        }
+
+        // Restore the off-list invariant on every visited Dict/Set before the
+        // linear pass below inspects link fields.
+        gc_visit_clear_all();
+
+        // Linear pass: tally the work-list invariant and restore marks.  The
+        // mark queue drained above, so every live block must now be off it.
+        gvm_for_each([&result, saved_gen, this](vm_offset_t payload_offset,
+                                                ChunkKind kind,
+                                                vm_size_t /*payload_size*/,
+                                                vm_size_t /*block_size*/,
+                                                bool is_free) {
+            if (!is_free) {
+                // GcScratch is skipped for the same reason the probe skips it:
+                // it survives every sweep by kind and its mark never tracks the
+                // generation, so it needs neither check nor restore.
+                if (kind != ChunkKind::GcScratch) {
+                    if (gvm_block_at(payload_offset)->m_next_in_work != nulloffset) {
+                        result.work_list_dirty++;
+                    }
+
+                    // Dict / Set bucket-chain invariants.  Checked on the
+                    // linear walk rather than from the mark phase so that
+                    // UNREACHABLE dicts are covered too: a dict whose chains
+                    // are corrupt is a defect whether or not it is currently
+                    // rooted, and the linear pass sees every live block.
+                    if ((kind == ChunkKind::Dict) || (kind == ChunkKind::Set)) {
+                        Dict::VerifyCounts counts{};
+                        offset_to_ptr<Dict>(payload_offset)->gc_verify(this, &counts);
+                        result.dict_bucket_errors += counts.bucket_errors;
+                        result.dict_length_mismatch += counts.length_mismatch;
+                        result.dict_bad_bucket_count += counts.bad_bucket_count;
+                    }
+
+                    gvm_set_mark_gen(payload_offset, saved_gen);
+                }
+            }
+        });
+        m_gc_current_gen = saved_gen;
+
+        result.stale_refs = m_gc_verify_stale_refs;
+        result.kind_mismatch = m_gc_verify_kind_mismatch;
+        return result;
+    }
+}
+
 //
 // vm-global-gc-probe:  -- dict
 //
@@ -2382,6 +2656,35 @@ static void vm_global_gc_probe_op(Trix *trx) {
     dict->put(trx, Name::make(trx, "dead"sv), Object::make_integer(static_cast<integer_t>(probe.dead_count)));
     dict->put(trx, Name::make(trx, "live-bytes"sv), Object::make_integer(static_cast<integer_t>(probe.live_bytes)));
     dict->put(trx, Name::make(trx, "dead-bytes"sv), Object::make_integer(static_cast<integer_t>(probe.dead_bytes)));
+    trx->require_op_capacity(1);
+    *++trx->m_op_ptr = Object::make_dict(dict_offset);
+}
+
+//
+// vm-heap-verify:  -- dict
+//
+// Returns a dict with /stale-refs, /kind-mismatch, /work-list-dirty,
+// /dict-bucket-errors, /dict-length-mismatch, /dict-bad-bucket-count --
+// the count of heap-invariant violations found by a mark-only pass.
+// Every value is 0 on a consistent heap.  See vm_heap_verify() for what
+// each invariant means and why it is checked.
+//
+// throws: opstack-overflow, vm-full
+static void vm_heap_verify_op(Trix *trx) {
+    auto verify = trx->vm_heap_verify();
+    auto [dict, dict_offset] = Dict::create_dict(trx, 6);
+    using namespace std::literals::string_view_literals;
+    dict->put(trx, Name::make(trx, "stale-refs"sv), Object::make_integer(static_cast<integer_t>(verify.stale_refs)));
+    dict->put(trx, Name::make(trx, "kind-mismatch"sv), Object::make_integer(static_cast<integer_t>(verify.kind_mismatch)));
+    dict->put(trx, Name::make(trx, "work-list-dirty"sv), Object::make_integer(static_cast<integer_t>(verify.work_list_dirty)));
+    dict->put(
+            trx, Name::make(trx, "dict-bucket-errors"sv), Object::make_integer(static_cast<integer_t>(verify.dict_bucket_errors)));
+    dict->put(trx,
+              Name::make(trx, "dict-length-mismatch"sv),
+              Object::make_integer(static_cast<integer_t>(verify.dict_length_mismatch)));
+    dict->put(trx,
+              Name::make(trx, "dict-bad-bucket-count"sv),
+              Object::make_integer(static_cast<integer_t>(verify.dict_bad_bucket_count)));
     trx->require_op_capacity(1);
     *++trx->m_op_ptr = Object::make_dict(dict_offset);
 }

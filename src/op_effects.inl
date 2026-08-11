@@ -47,7 +47,7 @@ struct OpEffectRow {
     uint8_t m_out;
 };
 
-// 595 operators with a statically reliable fixed arity.
+// 596 operators with a statically reliable fixed arity.
 static constexpr OpEffectRow sm_op_effect_rows[] = {
         {                SystemName::SingleEq, 1, 0}, // =
         {                SystemName::DoubleEq, 1, 0}, // ==
@@ -366,6 +366,7 @@ static constexpr OpEffectRow sm_op_effect_rows[] = {
         {                  SystemName::VMSize, 1, 1}, // vm-size
         {              SystemName::VmGlobalGc, 0, 1}, // vm-global-gc
         {         SystemName::VmGlobalGcProbe, 0, 1}, // vm-global-gc-probe
+        {            SystemName::VmHeapVerify, 0, 1}, // vm-heap-verify
         {            SystemName::VmGlobalInfo, 0, 1}, // vm-global-info
         {               SystemName::IsRawMode, 0, 1}, // raw-mode?
         {               SystemName::KeyReadyQ, 0, 1}, // key-ready?

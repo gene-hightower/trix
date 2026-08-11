@@ -877,6 +877,7 @@ The C++ side exposes ~25 ops, all gated behind `#ifdef TRIX_DEBUGGER`
 | `vm-gc-poison` | `bool --` | GC test harness: poison freed slots to catch use-after-free |
 | `vm-gc-profile` | `bool --` | GC timing harness: toggle per-section accumulation (true resets) |
 | `vm-gc-profile-report` | `-- dict` | Per-section GC timing: `{ passes, by-section }` |
+| `vm-heap-verify` | `-- dict` | Heap-invariant violation counts (all builds, not debugger-gated) |
 
 Everything else — the rendering, the key handling, the command
 dispatch, the conditional-bp predicate eval, the sandbox, the watches,

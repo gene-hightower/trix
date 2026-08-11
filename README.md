@@ -462,14 +462,14 @@ user-operator and interrupt APIs, and the complete Config table.
 | Reactive Cells (incremental computation)                            | 21        |
 | Composability (protocols, matching, GenServer, transducers, ...)    | 36        |
 | Infix expressions, modules, contracts                               | 34        |
-| **Total**                                                           | **839**   |
+| **Total**                                                           | **840**   |
 
 ## Metrics
 
 | Metric               | Value                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | Source               | ~87,400 lines C++23 (69 .inl files)                             |
-| Operators            | 839                                                             |
+| Operators            | 840                                                             |
 | Test assertions      | 20,700+ across 263 test files                                   |
 | Fuzz testing         | libFuzzer harness (full interpreter)                            |
 | Interpreter dispatch | ~47M ops/sec (representative mix; see [benchmark/](benchmark/)) |

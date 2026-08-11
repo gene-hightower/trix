@@ -1102,6 +1102,123 @@ public:
         m_length = 0;
     }
 
+    // ---------------------------------------------------------------
+    // Verifier support (vm-heap-verify).  See Trix::vm_heap_verify.
+    // ---------------------------------------------------------------
+
+    // Violation tallies for ONE dict/set.  Scalars, accumulated across the
+    // heap walk by the caller -- the verifier reports counts per invariant,
+    // never a list of sites, so no growable storage is involved.
+    struct VerifyCounts {
+        vm_size_t bucket_errors;
+        vm_size_t length_mismatch;
+        vm_size_t bad_bucket_count;
+    };
+
+    // bucket_count_is_valid(count): true iff `count` is one of the bucket
+    // counts the creation path can actually produce (the primes in
+    // bucket_count_for_capacity's table).
+    //
+    // MUST be checked before bucket_magic_for(): that function is a switch
+    // over exactly these values ending in std::unreachable(), so handing it
+    // any other count is undefined behaviour.  A collector never does --
+    // it only ever sees dicts it built -- but a VERIFIER exists precisely
+    // to run against a heap that might be wrong, so it validates the count
+    // before trusting it as a divisor.
+    [[nodiscard]] static constexpr bool bucket_count_is_valid(dict_bucket_count_t count) {
+        switch (count) {
+        case 1:
+        case 2:
+        case 3:
+        case 5:
+        case 11:
+        case 17:
+        case 37:
+        case 67:
+        case 131:
+        case 257:
+        case 521:
+        case 1031:
+        case 2053:
+        case 4099:
+        case 8209:
+        case 16411:
+        case 32771:
+            return true;
+
+        default:
+            return false;
+        }
+    }
+
+    // gc_verify_chains<EntryT>(trx, counts): check this dict's bucket
+    // chains against the invariants the lookup path depends on.
+    //
+    //   * every entry parked in bucket i must re-hash to bucket i.  If it
+    //     does not, get/known?/undef will look in the wrong bucket and
+    //     report a key that is physically present as absent.  This is the
+    //     failure mode a bucket-count or hash change introduces silently:
+    //     the data is all still there, and only the lookup path disagrees.
+    //   * m_length must equal the number of entries actually reachable from
+    //     the buckets.  A drifted length breaks the (m_length == m_maxlength)
+    //     expansion trigger in put(), so the dict either expands early or
+    //     never expands and overruns its pool.
+    //
+    // Chain traversal is bounded by m_maxlength (the pool holds at most that
+    // many entries, so any longer walk means the chain has a cycle).  On
+    // hitting the bound the walk stops and records a bucket error rather
+    // than spinning -- a verifier must terminate on a corrupt heap, that
+    // being the case it was written for.
+    template<typename EntryT>
+    void gc_verify_chains(Trix *trx, VerifyCounts *counts) {
+        if (!bucket_count_is_valid(m_bucket_count)) {
+            counts->bad_bucket_count++;
+        } else {
+            auto magic = bucket_magic_for(m_bucket_count);
+            vm_size_t seen = 0;
+            for (dict_bucket_count_t i = 0; i < m_bucket_count; ++i) {
+                auto offset = m_buckets[i];
+                length_t steps = 0;
+
+                // Both termination conditions live in the loop condition: the
+                // chain ends, or it has run past the number of entries the pool
+                // can hold.  The bound is what makes the walk terminate on a
+                // cyclic chain -- the case a verifier exists to survive.
+                while ((offset != nulloffset) && (steps <= m_maxlength)) {
+                    auto entry = trx->offset_to_ptr<EntryT>(offset);
+                    if (fastmod_u32(entry->m_key.hash(trx), magic, m_bucket_count) != i) {
+                        counts->bucket_errors++;
+                    }
+                    seen++;
+                    steps++;
+                    offset = entry->m_next;
+                }
+
+                // Left the loop with a live offset in hand: the chain never
+                // reached nulloffset within the pool bound, so it is cyclic.
+                if (offset != nulloffset) {
+                    counts->bucket_errors++;
+                }
+            }
+
+            if (seen != static_cast<vm_size_t>(m_length)) {
+                counts->length_mismatch++;
+            }
+        }
+    }
+
+    // Entry-layout dispatch for gc_verify_chains: Sets thread SetEntry
+    // (12 bytes, no value), Dicts thread DictEntry (20 bytes).  Reading a
+    // Set's pool as DictEntry would stride wrong and manufacture bogus
+    // violations, so the SetFlag decides.
+    void gc_verify(Trix *trx, VerifyCounts *counts) {
+        if (is_set_data()) {
+            gc_verify_chains<SetEntry>(trx, counts);
+        } else {
+            gc_verify_chains<DictEntry>(trx, counts);
+        }
+    }
+
     // Set variant of quiet_flush -- same rationale as Dict's, but for SetEntry layout.
     void quiet_flush_set(Trix *trx) {
         assert(is_set_data());

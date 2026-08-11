@@ -636,6 +636,31 @@ vm_offset_t m_gc_work_head{nulloffset};
 // of every pass.  Not snapshot/thaw'd.
 vm_size_t m_gc_marked_count{0};
 
+// Heap-invariant verification (vm-heap-verify).  m_gc_verify arms
+// recording for the duration of ONE verify pass; the counters tally
+// reference-level violations that the mark phase detects but would
+// otherwise discard silently.
+//
+// gc_mark_object already classifies every reference it is handed --
+// it resolves advanceable types through gvm_find_owning_payload,
+// range-checks the offset, and sanity-checks the block header -- but
+// a reference that fails any of those is simply not marked, on the
+// documented grounds that skipping stale garbage is correct for the
+// COLLECTOR.  It is not correct for a VERIFIER: a reachable slot
+// holding an unresolvable reference is a real defect (a dropped root
+// that was re-used, a stale offset surviving a resize).  Arming
+// m_gc_verify keeps the collector's behaviour identical and only
+// records what it was already deciding.
+//
+// Scalars rather than a container by deliberate design: the verifier
+// reports COUNTS per invariant, not a list of sites, so no growable
+// storage is needed (and none is permitted in production paths).
+//
+// All reset to 0 on each verify-pass entry.  Not snapshot/thaw'd.
+bool m_gc_verify{false};
+vm_size_t m_gc_verify_stale_refs{0};
+vm_size_t m_gc_verify_kind_mismatch{0};
+
 // LOCAL-VM Dict/Set visit list head.  Intrusive linked list threaded
 // through Dict::m_next_in_visit on every local Dict/Set visited from
 // a global walk.  Dict + Set (the most common local-VM containers

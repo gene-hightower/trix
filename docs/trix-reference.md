@@ -1274,7 +1274,7 @@ follow.
 | 3.44 | Operator error reference | *(generated)* | Per-operator table of the errors each operator may raise |
 | 3.45 | Host introspection (DWARF) | `dwarf-open peek-bytes leb128-decode module-load-bias module-load-bias-for dwarf-read-die dwarf-line-lookup dwarf-munmap` | Parse the host's own ELF/DWARF + read its live memory by name -- Layer 1 of the `lib/dwarf.trx` reader; see [DWARF Host Introspection](dwarf.md) |
 
-Total user-facing ops: 839.  See the corresponding subsection
+Total user-facing ops: 840.  See the corresponding subsection
 below for exact stack effects, error conditions, and worked examples.
 
 ### 3.1 Stack Manipulation
@@ -4758,7 +4758,7 @@ ops are not registered and resolve to `/undefined` if invoked:
 | Family A -- the 14 `debug-*` / `breakpoint` ops | `ops_debugger.inl` (`#ifdef TRIX_DEBUGGER`) | **No** -- `/undefined` |
 | Family B -- the 8 introspection / disasm ops | `ops_debugger.inl` (`#ifdef TRIX_DEBUGGER`) | **No** -- `/undefined` |
 | Family C -- `vm-gc-stress`, `vm-gc-poison`, `vm-gc-profile`, `vm-gc-profile-report` | `gc.inl` (`#ifdef TRIX_DEBUGGER`) | **No** -- `/undefined` |
-| Family C -- `vm-global-gc-probe` | `gc.inl` (not gated) | **Yes** -- present in all builds |
+| Family C -- `vm-global-gc-probe`, `vm-heap-verify` | `gc.inl` (not gated) | **Yes** -- present in all builds |
 
 Test files that use these ops must run under the debug binary (or guard
 the call with `{ ... } try /undefined eq` for portability).  Only
@@ -4940,7 +4940,7 @@ clear
 These ops make global-VM GC-rooting bugs deterministic; they are the
 project's own GC-bug-detection idiom (see §6.7).  `vm-gc-stress`,
 `vm-gc-poison`, and the `vm-gc-profile` pair exist only in `TRIX_DEBUGGER`
-builds; `vm-global-gc-probe` is present in all builds.
+builds; `vm-global-gc-probe` and `vm-heap-verify` are present in all builds.
 
 ```
 vm-gc-stress          bool --           % (debug-only) GC before every global alloc
@@ -4948,6 +4948,7 @@ vm-gc-poison          bool --           % (debug-only) scribble freed blocks wit
 vm-gc-profile         bool --           % (debug-only) toggle per-section GC timing (true resets)
 vm-gc-profile-report  -- dict           % (debug-only) { passes, by-section: { sec: { total-ns, ns-per-pass } } }
 vm-global-gc-probe    -- dict           % mark-only reachability census (no sweep)
+vm-heap-verify        -- dict           % mark-only heap-invariant check (no sweep)
 ```
 
 - **`vm-gc-stress true`** makes `gvm_alloc` run a full `vm-global-gc`
@@ -4968,12 +4969,47 @@ vm-global-gc-probe    -- dict           % mark-only reachability census (no swee
   estimate what a real GC would reclaim.  It visits the heap three times
   (clear, mark, tabulate), so it is *slower* than a real `vm-global-gc`,
   not faster.
+- **`vm-heap-verify`** runs the mark phase without the sweep and returns a
+  Dict of violation counts: `/stale-refs`, `/kind-mismatch`,
+  `/work-list-dirty`, `/dict-bucket-errors`, `/dict-length-mismatch`,
+  `/dict-bad-bucket-count` (all Integer).  Every count is `0` on a
+  consistent heap; a non-zero value is a defect, not a tuning knob.  Where
+  `vm-global-gc-probe` answers *how much is garbage*, this answers *is the
+  heap self-consistent*:
+  - `/stale-refs` -- a reachable slot holding a reference that does not
+    resolve to a sane block.  The collector skips these (correct: it must
+    not follow garbage), which means a live object referencing a re-used
+    block is otherwise silent.
+  - `/kind-mismatch` -- a reachable block whose `ChunkKind` contradicts the
+    Type of the Object referencing it.
+  - `/work-list-dirty` -- a block left linked on the GC's intrusive work
+    list after the pass drained.  That field is shared by the mark queue
+    and the sweep doomed-list, so a leaked link corrupts the *next*
+    collection rather than this one.
+  - `/dict-bucket-errors`, `/dict-length-mismatch`,
+    `/dict-bad-bucket-count` -- Dict and Set bucket-chain consistency.  An
+    entry parked in the wrong bucket makes a key that is physically
+    present read as absent, and a drifted length breaks `put`'s expansion
+    trigger.  Both are silent: the container still holds all its data and
+    only the lookup path disagrees.
+
+  Like the probe it is a dry run -- it restores every block's mark before
+  returning -- and costs one mark pass plus one linear heap walk.  Intended
+  for gates and post-workload assertions, not steady-state use.
 
 ```trix
 % Runnable (all builds): probe global-VM reachability, no sweep.
 vm-global-gc-probe
 dup /live known? (probe reports a live count) exch assert
 /dead get is-integer (dead count is an Integer) exch assert
+```
+
+```trix
+% Runnable (all builds): a consistent heap violates no invariant.
+${ <</a 1 /b 2>> } /d exch def
+vm-heap-verify
+dup /stale-refs get 0 eq (no unresolvable references) exch assert
+/dict-bucket-errors get 0 eq (every entry hashes to its own bucket) exch assert
 ```
 
 <!-- doctest: skip (debug-build-only ops; absent from the optimized binary) -->
@@ -5819,6 +5855,7 @@ error).  `(none)` means the operator raises no error.
 | `vm-global-gc` | `opstack-overflow` |
 | `vm-global-gc-probe` | `opstack-overflow`, `vm-full` |
 | `vm-global-info` | `opstack-overflow` |
+| `vm-heap-verify` | `opstack-overflow`, `vm-full` |
 | `vm-size` | `opstack-underflow` |
 | `watch` | `invalid-access`, `opstack-underflow`, `type-check`, `vm-full` |
 | `when` | `execstack-overflow`, `opstack-overflow`, `opstack-underflow`, `type-check`, `vm-full` |

@@ -1,0 +1,151 @@
+% ====================================================================
+% test_gc_heap_verify.trx -- vm-heap-verify heap-invariant walker
+% ====================================================================
+% vm-heap-verify runs a mark-only pass with the verifier armed and
+% reports how many times each heap invariant was violated.  Every count
+% is 0 on a consistent heap, so these tests are all "build a heap shape,
+% assert six zeros".
+%
+% That makes the suite worth stating plainly: it is a REGRESSION net,
+% not a demonstration that the checks can fire.  A check that silently
+% stopped evaluating would still pass every case here.  Non-vacuity is
+% established separately, by inverting each comparison in the source and
+% confirming the counts become non-zero (documented in the commit); this
+% file's job is to catch a real heap regression later.
+%
+% Surface used:
+%   * vm-heap-verify      (-- dict) : /stale-refs /kind-mismatch
+%                                     /work-list-dirty /dict-bucket-errors
+%                                     /dict-length-mismatch
+%                                     /dict-bad-bucket-count
+%   * vm-global-gc        (-- int)  : run a real pass; returns reclaimed bytes
+%   * vm-global-gc-probe  (-- dict) : mark-only census, no sweep
+%
+% Present in ALL builds (not TRIX_DEBUGGER-gated), so this file runs
+% under run_all.sh and under CI's cmake build -- unlike test_gc_stress_*.
+% ====================================================================
+
+% rt-ok counts failures in a restore-immune slot; see test_gc.trx for the
+% rationale (unjournaled string byte writes survive save scopes).
+/rt-fails 1 string def
+rt-fails 0 16#0#b put
+/rt-ok { exch { = } { (FAILED: ) print = rt-fails 0  rt-fails 0 get /integer-type cast 1 add dup 255 gt { pop 255 } if /byte-type cast  put } if-else } def
+
+% verify-clean: run vm-heap-verify and assert all six counters are 0.
+% Takes a label string, concatenated into each of the six messages so a
+% failure names the case that produced it -- a literal (label: ...) would
+% print the same text for every section and say nothing about which one.
+/verify-clean {
+    /vc-label exch def
+    vm-heap-verify /vc exch def
+    vc /stale-refs get 0 eq            vc-label (: stale-refs 0) concat rt-ok
+    vc /kind-mismatch get 0 eq         vc-label (: kind-mismatch 0) concat rt-ok
+    vc /work-list-dirty get 0 eq       vc-label (: work-list-dirty 0) concat rt-ok
+    vc /dict-bucket-errors get 0 eq    vc-label (: dict-bucket-errors 0) concat rt-ok
+    vc /dict-length-mismatch get 0 eq  vc-label (: dict-length-mismatch 0) concat rt-ok
+    vc /dict-bad-bucket-count get 0 eq vc-label (: dict-bad-bucket-count 0) concat rt-ok
+} def
+
+% ====================================================================
+% 1. Baseline: a heap with nothing user-allocated in it globally.
+% ====================================================================
+(1) verify-clean
+
+% ====================================================================
+% 2. One global block of each major composite kind.  Covers the
+%    kind-mismatch check across the types that have a 1:1 Type <->
+%    ChunkKind mapping (Array, String, Dict, Set, Packed).
+% ====================================================================
+${ [1 2 3 4 5] }        /g-array  exch def
+${ (a global string) }  /g-string exch def
+${ <</a 1 /b 2 /c 3>> } /g-dict   exch def
+${ mark /x /y /z set-from-mark } /g-set exch def
+${ { 1 2 add } }        /g-proc   exch def
+
+% Sanity: the containers really are populated, so the walk below has
+% something to traverse (an empty heap would pass vacuously).
+g-array length 5 eq       (2: array has 5 elements) rt-ok
+g-dict /b get 2 eq        (2: dict lookup works) rt-ok
+g-set /y set-member?      (2: set membership works) rt-ok
+
+(2) verify-clean
+
+% ====================================================================
+% 3. Nested + shared structure: a dict holding arrays, and one array
+%    referenced from two places.  Exercises refs that are reached more
+%    than once, so the mark-phase cycle break is on the path.
+% ====================================================================
+${ [10 20 30] } /shared exch def
+${ <</left shared /right shared /tag (both)>> } /g-nest exch def
+
+g-nest /left get length 3 eq (3: nested array reachable) rt-ok
+
+(3) verify-clean
+
+% ====================================================================
+% 4. A dict large enough to put several entries in the same bucket.
+%    Bucket counts are primes chosen for load factor 1-2 at capacity,
+%    so a dict this size guarantees real chains -- which is what the
+%    bucket-index invariant is actually about (an entry parked in the
+%    wrong bucket reads as absent even though it is present).
+% ====================================================================
+${ <</k00 0 /k01 1 /k02 2 /k03 3 /k04 4 /k05 5 /k06 6 /k07 7
+     /k08 8 /k09 9 /k10 10 /k11 11 /k12 12 /k13 13 /k14 14
+     /k15 15 /k16 16 /k17 17 /k18 18 /k19 19>> } /g-big exch def
+
+% Every key must still be findable -- this is the property the
+% bucket-index invariant protects, asserted directly.
+g-big /k00 get 0 eq   (4: first key found) rt-ok
+g-big /k09 get 9 eq   (4: middle key found) rt-ok
+g-big /k19 get 19 eq  (4: last key found) rt-ok
+g-big length 20 eq    (4: length is 20) rt-ok
+
+(4) verify-clean
+
+% ====================================================================
+% 5. After a real collection.  This is the "post-collection" case the
+%    walker is named for: a sweep has just run, blocks have been freed
+%    and coalesced, and the survivors must still satisfy every
+%    invariant.
+% ====================================================================
+${ [1 2 3] } pop            % allocate an unreachable global, then drop it
+vm-global-gc pop            % real mark-sweep pass; reclaims the above
+
+(5) verify-clean
+
+% ====================================================================
+% 6. vm-heap-verify is side-effect-free.  It flips the mark generation,
+%    marks, then restores every block's mark -- so a probe taken before
+%    and after must agree.  If the restore regressed, the next real GC
+%    would alias generations and either collect live data or leak.
+% ====================================================================
+vm-global-gc-probe /live get /live-before exch def
+vm-heap-verify pop
+vm-global-gc-probe /live get /live-after exch def
+
+live-before live-after eq (6: verify left the live count unchanged) rt-ok
+
+% Running it twice in a row must also agree -- a restore that was merely
+% incomplete rather than absent shows up on the second pass.
+vm-heap-verify pop
+vm-global-gc-probe /live get live-before eq (6: still unchanged after a second verify) rt-ok
+
+(6) verify-clean
+
+% ====================================================================
+% 7. Verify still reports clean while a real GC has work to do, i.e.
+%    with genuine garbage present but not yet collected.  Unreachable
+%    blocks are not an invariant violation -- they are just garbage.
+% ====================================================================
+${ <</junk [1 2 3]>> } pop
+vm-global-gc-probe /dead get 0 gt (7: garbage is present) rt-ok
+
+(7) verify-clean
+
+vm-global-gc pop
+(7-after-gc) verify-clean
+
+% ====================================================================
+rt-fails 0 get /integer-type cast 0 gt { /rt-assertions-failed throw } if
+(test_gc_heap_verify: ALL TESTS PASSED) =
+(__test_ok__) =

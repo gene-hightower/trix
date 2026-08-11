@@ -877,6 +877,7 @@ struct SysOperatorRow {
             {                      SystemName::VMSize,                            vmsize_op,                         "vm-size"sv},
             {                  SystemName::VmGlobalGc,                      vm_global_gc_op,                    "vm-global-gc"sv},
             {             SystemName::VmGlobalGcProbe,                vm_global_gc_probe_op,              "vm-global-gc-probe"sv},
+            {                SystemName::VmHeapVerify,                    vm_heap_verify_op,                  "vm-heap-verify"sv},
 #ifdef TRIX_DEBUGGER
             {                  SystemName::VmGcStress,                      vm_gc_stress_op,                    "vm-gc-stress"sv},
             {                  SystemName::VmGcPoison,                      vm_gc_poison_op,                    "vm-gc-poison"sv},
