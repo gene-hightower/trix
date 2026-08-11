@@ -507,7 +507,8 @@ so the eight portable generators, the generic solvers, `--metrics`,
 lines along each closed cell boundary; the color path **scanline-fills** each
 convex cell polygon with its BFS-distance color, then strokes the walls on top,
 and the `--solve` ribbon runs between cell **centroids**. (`--mask` and `--weave`
-are square-only and ignored here, as on the other non-square grids.)
+are both square-only here, as on the other non-square grids -- but they resolve
+the conflict in opposite directions; see [§4.8](#48-what-works-where).)
 
 ### 4.8 What works where
 
@@ -520,6 +521,32 @@ are square-only and ignored here, as on the other non-square grids.)
 | `--braid`           |   ✓    | ✓   |   ✓   |    ✓     |    ·    |  ·   |   ·   |
 | `--target-*` braid  |   ✓    | ✓   |   ✓   |    ✓     |    ✓    |  ✓   |   ✓   |
 | `--weave`           |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |   ·   |
+| `--mask`            |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |   ·   |
+| `--hardest`         |   ✓    | ·   |   ·   |    ·     |    ·    |  ·   |   ·   |
+
+The three square-only flags in that table do **not** all resolve the conflict the
+same way, so it is worth being explicit about which side gives way:
+
+- **`--mask` wins over `--grid`.** Masking carves a shape out of the square grid
+  and has no equivalent on the other topologies, so the *grid* is dropped and you
+  get a square masked maze, with a warning:
+
+  ```console
+  $ examples/amazing.trx --grid hex --mask disc
+  amazing: masking is square-grid only; ignoring --grid hex
+  ```
+
+  `--unicursal` behaves the same way, for the same reason (§3.7).
+
+- **`--weave` loses to `--grid`.** Weaving needs the square over/under geometry,
+  but unlike masking it is an overlay rather than the point of the render, so the
+  requested topology is kept and the weave is dropped -- silently, today.
+
+- **`--hardest` also loses to `--grid`**, and says so ([§6.6](#66---hardest----the-longest-possible-solution)).
+
+The rule of thumb: a flag that determines *what maze you get* (`--mask`,
+`--unicursal`) overrides `--grid`; a flag that only *decorates or annotates* one
+(`--weave`, `--hardest`) yields to it.
 
 ---
 
