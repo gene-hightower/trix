@@ -27,7 +27,7 @@ whose file format is assembled in Trix.
 
 This manual is self-contained: read it end to end and you will come away
 understanding how each maze algorithm works, what kind of maze it produces and
-why, how those algorithms generalize off the square grid, and how ~6,600 lines
+why, how those algorithms generalize off the square grid, and how ~9,000 lines
 of Trix turn the result into a real `.png` on disk. No prior background assumed;
 the only Trix-specific idea you need is the [save/restore arena and global
 VM](../docs/local-global-vm.md), which shows up where the hot loops touch a
@@ -763,16 +763,16 @@ so the carve runs per connected component:
 
 - **Kruskal** lists every in-mask wall in a single pass; its union-find naturally
   yields one spanning tree per component (a spanning *forest*).
-- The other six generators are **seeded once per component** over an isolated
+- The other seven generators are **seeded once per component** over an isolated
   grid -- the cells of every other component are temporarily marked visited, so a
   seeded backtracker / Wilson / Aldous-Broder / Prim / Hunt-and-Kill /
-  Growing-Tree fills exactly its own piece. (Wilson and Aldous-Broder terminate
+  Growing-Tree / Origin-Shift fills exactly its own piece. (Wilson and Aldous-Broder terminate
   when the region is fully visited, so they count the *unvisited* cells through
   the descriptor first -- on a full grid that is every cell, under a mask it is
   one component.)
 
 The result is a perfect maze in every connected piece: the self-test asserts
-`open-edges == in-mask-cells - components` for all seven algorithms, which also
+`open-edges == in-mask-cells - components` for all eight algorithms, which also
 certifies that no cell was left stranded. Masking composes with every `--color`
 (each component is shaded by its own internal BFS distance) and any `--algo`;
 `--solve`, `--braid`, and `--weave` are square-rectangle overlays and are skipped
@@ -929,7 +929,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--bg-color` | `RRGGBB` | Passage / background color (hex) | `FFFFFF` |
 | `--seed` | uint | RNG seed; `0` seeds from the clock | `0` |
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
-| `--algo` | name | Generation algorithm (7 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
+| `--algo` | name | Generation algorithm (8 portable to all grids; eller/binary-tree/sidewinder/division square-only) | `backtrack` |
 | `--flow` | name | Weighted-Kruskal flow maze: `radial` / `linear` / `spiral` / `sine` ([§3.2](#32-spanning-tree-family)) | -- |
 | `--flow-image` | `NAME` | Flow maze steered by an image field `flow-fields/<NAME>.trx` (`logo` / `cat` bundled; from `tools/gen_flow_field.py`) ([§3.2](#32-spanning-tree-family)) | -- |
 | `--flow-image-dir` | dir | Where to find `flow-fields/*.trx` | auto |
@@ -960,7 +960,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--mask-margin` | int | With `--mask-invert`, surrounding-maze thickness | auto |
 | `--stress` | -- | Preset: 200×200 Eller's | -- |
 | `--monster` | -- | Preset: 1000×1000 Eller's (needs a large VM) | -- |
-| `--bench` | -- | Time all twelve algorithms; write no PNG | off |
+| `--bench` | -- | Time all twelve algorithms at 100x100 and 200x200; write no PNG (needs `--vm-size=64M`; ~4 min) | off |
 | `--metrics` | -- | Print a quality report (degree histogram, loops, solution length) on any grid; twistiness is square-only; no PNG | off |
 | `--quiet` | -- | Suppress stderr progress and phase timings | off |
 
@@ -1055,7 +1055,7 @@ lowercase folded to uppercase and unknown characters rendered blank.
 
 ### 10.3 Self-test
 
-`--self-test` runs **179 assertions** across 29 test procedures (the `opt-self-test` block):
+`--self-test` runs **268 assertions** (the `opt-self-test` block):
 Adler-32 vectors, chunked-array primitives, cell bit-encoding, a PNG checkerboard
 round-trip, a per-algorithm connectivity invariant (every algorithm must yield a
 fully connected spanning tree), the recursive-division and Origin Shift
@@ -1073,14 +1073,14 @@ eight portable algorithms. Run it with a large VM:
 
 ### 10.4 The gallery
 
-[`gallery.sh`](gallery.sh) renders a curated showcase -- by default **41 PNGs**
+[`gallery.sh`](gallery.sh) renders a curated showcase -- by default **133 PNGs**
 (every algorithm, every colormap, plus solve/braid/weave feature shots) into
 `examples/maze-gallery/` at a fixed seed (42) for bit-exact reproducibility. The
 gallery directory is git-ignored except for a handful of curated images tracked
 for the project README; see [`maze-gallery/README.md`](maze-gallery/README.md).
 
 ```sh
-examples/gallery.sh          # 41 PNGs
+examples/gallery.sh          # 133 PNGs
 examples/gallery.sh --full   # adds the slow 200×200 stress render
 ```
 

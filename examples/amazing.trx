@@ -5772,8 +5772,8 @@
     MASK-FONTS name known? not {
         /path name -font-path local-def
         path file-exists? not {
-            (amazing: font not found: ) print name print ( (looked in ) print path print
-            (); use --font-dir, or run from the repo root) print nl
+            (amazing: font not found: ) print name print ( \(looked in ) print path print
+            (\); use --font-dir, or run from the repo root) print nl
             (font not found) false assert
         } if
         path require
@@ -5803,8 +5803,8 @@
     MASK-SHAPES name known? not {
         /path name -mask-shape-path local-def
         path file-exists? not {
-            (amazing: mask shape not found: ) print name print ( (looked in ) print path print
-            (); use --mask-dir, or run from the repo root) print nl
+            (amazing: mask shape not found: ) print name print ( \(looked in ) print path print
+            (\); use --mask-dir, or run from the repo root) print nl
             (mask shape not found) false assert
         } if
         path require
@@ -5836,8 +5836,8 @@
     FLOW-FIELDS name known? not {
         /path name -flow-field-path local-def
         path file-exists? not {
-            (amazing: flow field not found: ) print name print ( (looked in ) print path print
-            (); use --flow-image-dir, or run from the repo root) print nl
+            (amazing: flow field not found: ) print name print ( \(looked in ) print path print
+            (\); use --flow-image-dir, or run from the repo root) print nl
             (flow field not found) false assert
         } if
         path require
@@ -7509,7 +7509,7 @@
 /opt-cell-px  16          def
 /opt-cell-set false       def         % did the user pass --cell-px? (auto-size hi-res masks if not)
 /opt-wall-px  2           def
-/opt-seed     0u          def         % 0 = clock-seeded
+/opt-seed     0ul         def         % 0 = clock-seeded (ULong: --seed stores ulong, and eq is type-strict)
 /opt-grid     (square)    def         % square | hex | theta | triangle | upsilon | zeta | crack
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
@@ -7669,7 +7669,7 @@ EXAMPLES
     trix examples/amazing.trx --size 25x25 --color viridis --solve out.png
     trix examples/amazing.trx --grid hex --size 16x16 --cell-px 14
     trix examples/amazing.trx --grid upsilon --size 12x10 --cell-px 24
-    trix --vm-size=32M examples/amazing.trx --bench
+    trix --vm-size=64M examples/amazing.trx --bench
 )  print
     quit
 } def
@@ -7768,8 +7768,11 @@ EXAMPLES
 
 % --bench harness: run each algo at 100x100 and 200x200, print timings to
 % stderr.  Generate-only: no rendering, no PNG.  Used to spot regressions
-% from the chunked-array refactor.  Needs --vm-size=32M or larger (the
-% sequence accumulates allocations across iterations).
+% from the chunked-array refactor.  Needs --vm-size=64M or larger: growing-tree
+% alone exceeds 32M at 200x200, independently of the loop (the per-iteration
+% save/restore below keeps the peak at one algorithm's working set, not the
+% running total).  A full run takes about four minutes; hunt-kill dominates it
+% at ~100s for the 200x200 leg.
 /run-bench {||#+5
     /opt-quiet true store    % silence eller's per-row progress chatter
     1ul rand-seed
@@ -7783,7 +7786,15 @@ EXAMPLES
     stderr  (-----------------  ----------     ----------\n)  write-string
     stderr flush-stream
 
-    0 1 algos length 1 sub {|ai|#+10
+    0 1 algos length 1 sub {|ai|#+11
+        % Each iteration allocates a fresh 100x100 and 200x200 grid.  Without a
+        % save/restore barrier those accumulate across all twelve algorithms and
+        % the run dies of vm-full partway through -- at the 32M the --help
+        % example itself recommends, it got only eight algorithms in.  Restoring
+        % at the end of each iteration returns both grids to the arena, so the
+        % peak is one algorithm's working set rather than the running total.
+        % The timings are printed before the restore, so nothing is lost.
+        save /bench-save exch local-def
         /algo algos ai get local-def
 
         /g100 100 100 make-grid local-def
@@ -7804,6 +7815,7 @@ EXAMPLES
                  us200 /double-type cast 1000000.0d div
             fprint-fmt pop pop
         stderr flush-stream
+        bench-save restore
     } for
 } def
 
@@ -7991,7 +8003,7 @@ EXAMPLES
 %   keeps the full report (incl. twistiness); the other grids run the generic
 %   topology-driven report (no twistiness).
 /run-metrics {||#+8
-    opt-seed 0u eq { now } { opt-seed } if-else  rand-seed
+    opt-seed 0ul eq { now } { opt-seed } if-else  rand-seed
     opt-unicursal {
         % the labyrinth is its own (square) maze at 2x the size; report on it.
         /gu opt-w opt-h make-unicursal local-def
@@ -8009,6 +8021,12 @@ EXAMPLES
         /desc opt-grid td-descriptor-for local-def
         /g opt-w opt-h  desc (make-grid) get exec  local-def
         desc g opt-algo opt-start-x opt-start-y dispatch-algo-td
+        % Probabilistic --braid, via the descriptor's (braid) key -- the same
+        % dispatch the render path uses.  Without it the report described a
+        % perfect maze while the rendered PNG was braided.  Grids that defer
+        % probabilistic braiding (upsilon/zeta/crack) map (braid) to a no-op,
+        % so they stay unbraided here exactly as they do when rendering.
+        opt-braid 0.0r gt { g opt-braid  desc (braid) get exec } if
         desc g -maybe-target-braid
         desc g opt-start-x opt-start-y mex mey -td-maze-metrics
     } if-else
@@ -8699,7 +8717,7 @@ opt-self-test {
     % every algo sees the same starting RNG state and the panels are
     % directly comparable.
     /-effective-seed
-        opt-seed 0u eq { now } { opt-seed } if-else def
+        opt-seed 0ul eq { now } { opt-seed } if-else def
 
     % --flow-image: load the image field grid once (deferred to here so
     % --flow-image-dir may follow --flow-image on the command line).
