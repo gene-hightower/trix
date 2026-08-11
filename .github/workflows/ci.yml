@@ -111,6 +111,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The warning set in CMakeLists.txt includes GCC 14+ flags (-Wnrvo among
+      # them), so the toolchain has to be installed explicitly -- ubuntu-24.04's
+      # default /usr/bin/c++ is gcc-13 and rejects them outright.  The
+      # build-and-test legs get this from their matrix; this job needs its own.
+      - name: Install gcc-15 (toolchain PPA)
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y gcc-15 g++-15
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -124,6 +134,9 @@ jobs:
       # above cannot run these tests and run_all.sh skips them.  This job is
       # their only automated coverage.
       - name: Configure (TRIX_DEBUGGER, sanitizers on)
+        env:
+          CC:  gcc-15
+          CXX: g++-15
         run: cmake -B build-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug -DTRIX_DEBUGGER=ON
 
       - name: Build
