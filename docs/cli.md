@@ -631,10 +631,32 @@ Hello from the image
 ```
 
 Open file streams are reconnected to their files at their saved positions on
-resume. `snap-shot` and `thaw` are both disabled under `--sandbox`
-([section 5](#5-the---sandbox-flag)). For the in-script `thaw` operator,
-images with open streams, PRNG state, and the on-disk format, see
-[snapshot-thaw.md](snapshot-thaw.md).
+resume. For the in-script `thaw` operator, images with open streams, PRNG
+state, and the on-disk format, see [snapshot-thaw.md](snapshot-thaw.md).
+
+### `-l/--image` and `--sandbox`
+
+`--sandbox` ([section 5](#5-the---sandbox-flag)) disables the in-script
+`snap-shot` and `thaw` **operators**. It does **not** refuse `-l/--image`:
+`trix --sandbox -l image.img` thaws the image and runs it.
+
+That is deliberate. The `thaw` operator is blocked because it lets script
+code that is *already running* swap in whole new VM state mid-execution.
+`-l` is a different position: the image is the initial state chosen by
+whoever invoked the binary, exactly like the script filename argument, and
+`--sandbox script.trx` does not refuse to run `script.trx` either.
+
+Confinement does apply to the resumed program -- the sandbox flag survives
+the thaw, so a restored image that calls `snap-shot` still gets
+`unsupported 'snap-shot': snap-shot: disabled in sandbox mode`.
+
+**`--sandbox` is not a defense against a hostile image file.** It guards
+operators, and the image decoder runs before any operator executes: a
+malformed image attacks the restore path itself (version-conditional decode
+and pointer fixups), where operator-level checks cannot reach. Use `-l` only
+with images you trust, whether or not `--sandbox` is set. `--sandbox`
+protects you from what a *trusted* image's code then does, not from the act
+of decoding an *untrusted* one.
 
 ---
 
