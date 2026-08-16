@@ -437,7 +437,12 @@ public:
                 };
                 std::string boot;
                 boot.reserve(256);
-                boot.append("(lib/debugger.trx) require\n");
+                // Bare name, not "lib/debugger.trx": require resolves a bare
+                // relative name through the module search path, whose
+                // binary-relative arms find the module in both a build tree
+                // and an install.  A "lib/" prefix would only ever resolve
+                // against cwd, so --inspect worked solely from a checkout root.
+                boot.append("(debugger.trx) require\n");
                 if (trx->m_no_color) {
                     boot.append("dbg-set-mono-theme\n");
                 }

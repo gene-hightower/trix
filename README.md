@@ -12,7 +12,7 @@
 
 [![CI](https://github.com/mcguidarelli/trix/actions/workflows/ci.yml/badge.svg)](https://github.com/mcguidarelli/trix/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-0.11.0-green.svg)](https://github.com/mcguidarelli/trix/releases)
+[![Version](https://img.shields.io/badge/version-0.12.0-green.svg)](https://github.com/mcguidarelli/trix/releases)
 
 C++23 | Single-Header | ASan/UBSan clean | Apache 2.0
 
@@ -612,12 +612,13 @@ The language and runtime are feature-complete.  All concurrency layers
 (coroutines, pipelines, actors, supervision) and computation features
 (logic, reactive cells) are implemented and tested.
 
-Current release: 0.11.0 -- scan-time stack-effect (arity) checking for
-procedures, new CLI modes (`-e`/`--eval`, `-c`/`--check`, `--timeout`,
-`--seed`), and the `string-from-bytes` operator with byte-array-accepting
-output sinks, plus an internals cleanup sweep -- on top of 0.10.x's `override`
-operator and DWARF host introspection.  Remaining before 1.0: an API-stability
-soak.
+Current release: 0.12.0 -- the `examples/amazing.trx` maze generator grows a
+seventh grid topology, a solver zoo and metric-targeted braiding; the
+interactive inspector can now halt anywhere (`let` / `destructure` scopes are
+growable, `--inspect` halts at a fatal error, and it runs from any working
+directory); plus a snapshot-thaw fuzz harness and an all-builds heap-invariant
+verifier -- on top of 0.11.0's scan-time stack-effect checking and new CLI
+modes.  Remaining before 1.0: an API-stability soak.
 
 61 reference documents cover all subsystems, indexed at
 [docs/index.md](docs/index.md).  See

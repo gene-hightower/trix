@@ -207,6 +207,13 @@ public:
     // escaped to user code.
     void set_frame_no_save() { m_access |= IsFrame; }
 
+    // Tag a freshly-created dict as growable (`let` / `destructure` binding
+    // scopes).  Set without journaling, on the same terms as
+    // set_frame_no_save: the dict is not yet observable anywhere else, so
+    // there is no prior state to preserve.  Do not call on a dict that has
+    // escaped to user code.
+    void set_dynamic_no_save() { m_access |= DynamicFlag; }
+
     [[nodiscard]] Object::access_t access() const {
         return (((m_access & ReadWriteAccess) != 0) ? Object::ReadWriteAccess : Object::ReadOnlyAccess);
     }

@@ -80,6 +80,13 @@ static void let_op(Trix *trx) {
 
     auto [dict, dict_offset] = Dict::create_or_recycle(trx, names_length);
 
+    // Growable, not fixed.  The scope is sized to exactly the bound names, so
+    // a fixed dict would be full the instant it is pushed and the FIRST `def`
+    // in the body -- or in any callback that interrupts the body, which is how
+    // the debugger halts here -- would raise /dict-full.  Dynamic keeps those
+    // writes inside the scope, where `end` reclaims them.
+    dict->set_dynamic_no_save();
+
     // Keep the names array rooted at m_op_ptr across the bind loop -- its
     // backing storage is read through names_ptr, and put()/make_clone() can
     // allocate (and fire a GC).  The N value slots sit just below the array
@@ -122,6 +129,10 @@ static void destructure_op(Trix *trx) {
     }
 
     auto [dict, dict_offset] = Dict::create_or_recycle(trx, names_length);
+
+    // Growable for the same reason as let: sized to the extracted names, a
+    // fixed scope rejects the body's first `def`.
+    dict->set_dynamic_no_save();
 
     if (value_obj.is_array()) {
         auto [elem_ptr, _] = value_obj.array_value(trx);

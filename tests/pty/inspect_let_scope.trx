@@ -1,0 +1,12 @@
+% inspect_let_scope.trx -- PTY gate for github issue #14 (S12).
+% The inspector halts inside a `[/name] let` scope.  That scope dict is
+% sized to exactly its bound names, so while it was a FIXED dict the
+% debugger's own `def` -- it runs Trix code in the interrupted program's
+% dict context -- overflowed it, and the session died before drawing a
+% single frame.  Keep this file free of the error name the scenario
+% greps for as a FORBIDDEN marker: the source pane renders these very
+% comments into the capture.  The feeder's q ends the session.
+/log-msg { [/msg] let msg = end } def
+
+(inside-let) log-msg
+(after-let) =

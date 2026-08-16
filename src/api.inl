@@ -381,7 +381,9 @@ static ParseResult parse_args(int argc, char *argv[]) {
                      "  -h, --help                 Show this help message and exit\n"
                      "  -v, --version              Show version + build info and exit\n"
 #ifdef TRIX_DEBUGGER
-                     "  -d, --debug                Enable interactive debugger\n"
+                     "  -d, --debug                Arm the debugger substrate (debug-* ops, breakpoints)\n"
+                     "                             for a script to drive itself; for the full-screen\n"
+                     "                             inspector use --inspect (see below)\n"
 #endif
                      "  -e, --eval EXPR            Execute EXPR as inline source instead of a file\n"
                      "                             (tokens after EXPR become the script's args)\n"

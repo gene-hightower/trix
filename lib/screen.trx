@@ -31,7 +31,9 @@
 % the ANSI spec).  Mixing the two libraries means keeping the two
 % conventions straight in your head.
 
-(lib/ansi.trx) require
+% Bare name: resolves through the module search path (build tree or install),
+% not just against cwd.
+(ansi.trx) require
 
 % --- with-screen --------------------------------------------------------------
 

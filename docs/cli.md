@@ -85,7 +85,7 @@ Two flags exit immediately after printing:
 
 ```console
 $ trix --version
-trix 0.11.0 — the cat in concatenative
+trix 0.12.0 — the cat in concatenative
 build: debug; sanitizers: address; features: heap-tracking debugger backtrace zlib readline
 
 $ trix --help
@@ -148,7 +148,7 @@ version, VM size, operator count, and snapshot-image version, then a
 
 ```console
 $ trix -i
-Trix 0.11.0 -- 1M VM -- 839 ops (997 total) +3 user, image v181
+Trix 0.12.0 -- 1M VM -- 870 ops (1029 total) +3 user, image v185
 (ctrl-D or 'quit' to exit)
 Trix> 2 3 mul =
 6
@@ -390,7 +390,7 @@ Notes on the less obvious knobs:
 
   ```console
   $ trix -i --vm-size=2M
-  Trix 0.11.0 -- 2M VM -- 839 ops (997 total) +3 user, image v181
+  Trix 0.12.0 -- 2M VM -- 870 ops (1029 total) +3 user, image v185
   (ctrl-D or 'quit' to exit)
   Trix>
   ```
@@ -480,13 +480,23 @@ For a `require` argument, `trix` resolves the file in this order:
 2. **Each `--module-path` entry, in order.** If step 1 fails *and* the name
    is relative, `trix` tries `<entry>/<name>` for each colon-separated entry,
    left to right, and takes the first that exists.
-3. **The binary-relative `lib/` directory, last.** Finally `trix` tries
-   `<dir-of-trix-binary>/lib/<name>`. This is how the shipped standard
-   libraries (`lib/keys.trx`, `lib/screen.trx`, `lib/ansi.trx`, ...) are
-   found without any configuration.
+3. **The two binary-relative directories, last.** Finally `trix` tries
+   `<dir-of-trix-binary>/lib/<name>` (a build tree, where `trix` sits beside
+   `lib/`), then `<dir-of-trix-binary>/../lib/trix/<name>` (an install, where
+   the binary is `<prefix>/bin/trix` and the modules are under
+   `<prefix>/lib/trix`). This is how the shipped standard libraries
+   (`keys.trx`, `screen.trx`, `ansi.trx`, `debugger.trx`, ...) are found
+   without any configuration, from either layout.
 
 An **absolute** `require` argument (`/abs/path.trx`) skips the search path
 entirely and is resolved as given.
+
+Note that steps 2 and 3 only apply to a **bare** relative name. A name that
+already carries a directory prefix -- `(lib/screen.trx)` -- is resolved by
+step 1 against the CWD and nothing else, because `<entry>/lib/screen.trx`
+is not where any search root keeps it. Require the shipped libraries by
+bare name (`(screen.trx) require`) so they resolve from any CWD; the
+`lib/`-prefixed spelling works only with the CWD at a source checkout root.
 
 Worked example. Given a module:
 
@@ -582,6 +592,20 @@ release build that compiles it out). There are two distinct facilities:
   `--inspect-at=/NAME` runs until `/NAME` is invoked and halts there. All
   three require a script filename and are mutually exclusive with `-i` and
   `--image`. **`--no-color`** disables ANSI color in the inspector UI.
+
+All three variants halt on a fatal error rather than ending the session at
+it, so an error while you are stepping leaves you looking at the fault
+point. The status bar switches to `FATAL error` and every resume key then
+ends the session, letting the error finish with its usual diagnostic and
+exit code -- you can inspect, but not resume past it. The difference
+between the variants is only *where they first stop*, not what happens
+when the script throws.
+
+The inspector loads its own implementation with `require`, through the
+module search path of [section 4](#4-module-search-path-and---module-path),
+so `--inspect` works with the CWD anywhere. A checkout finds
+`lib/debugger.trx` beside the binary; an installed `trix` finds it under
+`<prefix>/lib/trix`.
 
 The inspector is an interactive terminal program; do not pipe it. For the
 full walkthrough of both the substrate and the TUI -- panes, stepping,

@@ -177,6 +177,39 @@ if "$TRIX" --version 2>/dev/null | grep -q ' debugger'; then
     run_scenario "inspect-on-error (S11: inspector halts at fatal error)" \
         "$TRIX --inspect-on-error tests/pty/break_on_error.trx; test \$? -eq $(err undefined)" feed_s11 20 \
         "FATAL error" "before-error" "no-such-op-zzz is not associated"
+
+    # S12: a halt INSIDE a `[/name] let` scope must render the TUI (github
+    # issue #14).  The scope dict is sized to exactly its bound names, so
+    # while it was fixed-capacity the inspector's own `def` -- the debugger
+    # runs Trix code in the interrupted program's dict context -- overflowed
+    # it and the session died with /dict-full before drawing a frame; the
+    # reporter saw only "the debugger doesn't come up".  Three signals: the
+    # status bar rendered, the script's output survived to the re-emit, and
+    # the overflow is gone (forbidden marker).
+    feed_s12() { sleep 3; printf 'c'; sleep 2; printf 'q'; sleep 2; }
+    run_scenario "inspect-let-scope (S12: halt inside a let scope)" \
+        "$TRIX --inspect tests/pty/inspect_let_scope.trx" feed_s12 20 \
+        "F11=step" "inside-let" "after-let" '!dict-full'
+
+    # S13: plain --inspect (not --inspect-on-error) must ALSO halt at a fatal
+    # error rather than tearing the session down mid-inspection -- the second
+    # half of issue #14.  c resumes past the first step halt into the error;
+    # the FATAL bar proves the halt, and the error still finishes on the real
+    # terminal with its diagnostic and /undefined exit code.
+    feed_s13() { sleep 3; printf 'c'; sleep 3; printf 'q'; sleep 2; }
+    run_scenario "inspect-error-halt (S13: --inspect halts at fatal error)" \
+        "$TRIX --inspect tests/pty/break_on_error.trx; test \$? -eq $(err undefined)" feed_s13 25 \
+        "FATAL error" "before-error" "no-such-op-zzz is not associated"
+
+    # S14: --inspect must work with cwd anywhere.  The boot requires the
+    # debugger module by BARE name so the module search path's binary-relative
+    # arms resolve it; a "lib/" prefix only ever resolved against cwd, so this
+    # died with /filename-not-found outside a checkout root.
+    feed_s14() { sleep 3; printf 'q'; sleep 2; }
+    TRIX_ABS="$(cd "$(dirname "$TRIX")" && pwd)/$(basename "$TRIX")"
+    run_scenario "inspect-foreign-cwd (S14: --inspect off the checkout root)" \
+        "cd / && $TRIX_ABS --inspect $PROJECT_DIR/tests/pty/inspect_let_scope.trx" feed_s14 20 \
+        "F11=step" '!filename-not-found'
 else
     echo "  SKIP  inspect-on-error -- no debugger feature in this build"
 fi

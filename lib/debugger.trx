@@ -27,8 +27,10 @@
 %   row  N-5..-2  op / exec / dict / err preview rows (top items, format-object)
 %   row  N-1      status bar (key hints + focused-pane indicator)
 
-(lib/keys.trx) require
-(lib/screen.trx) require
+% Bare names so these resolve through the module search path (which covers
+% both a build tree and an install), not just against cwd.
+(keys.trx) require
+(screen.trx) require
 
 % --- Color theme ------------------------------------------------------------
 %
@@ -66,8 +68,8 @@
 /_dbg-theme _dbg-theme-color def
 
 % Color tuple lookup: /key -- fg bg attrs
-/_dbg-color {|key|
-    /tuple _dbg-theme key get def
+/_dbg-color {|key|#+1
+    /tuple _dbg-theme key get local-def
     tuple 0 get tuple 1 get tuple 2 get
 } def
 
@@ -225,8 +227,8 @@
 } def
 
 % Safe array index.  src-lines idx(1-based) -- str
-/_dbg-get-line {|lines idx|
-    /i idx 1 sub def
+/_dbg-get-line {|lines idx|#+1
+    /i idx 1 sub local-def
     i 0 ge i lines length lt and
     { lines i get }
     { () }
@@ -244,35 +246,35 @@
 % --- Source pane ------------------------------------------------------------
 
 % Render one source row.  screen row marker lineno text --
-/_dbg-render-source-row {|screen row marker lineno text|
+/_dbg-render-source-row {|screen row marker lineno text|#+2
     /content
         marker lineno _dbg-fmt-lineno concat ( ) concat text concat
-    def
-    /key marker (>) eq { /pc } { /normal } if-else def
+    local-def
+    /key marker (>) eq { /pc } { /normal } if-else local-def
     screen row content key _dbg-write-row
 } def
 
 % screen src-lines pc-line dbg-render-source --
 % Render the top portion of the screen: terminal height minus (stack panes +
 % output pane + status bar).
-/dbg-render-source {|screen src-lines pc-line|
-    /rows         screen screen-rows  def
+/dbg-render-source {|screen src-lines pc-line|#+7
+    /rows         screen screen-rows  local-def
     /source-rows
         rows 7 _dbg-output-pane-rows add _dbg-watch-pane-height add sub
-        def
-    source-rows 1 lt { /source-rows 1 def } if
+        local-def
+    source-rows 1 lt { /source-rows 1 local-def } if
 
-    /first-line   pc-line source-rows 2 div sub def
-    first-line 1 lt { /first-line 1 def } if
+    /first-line   pc-line source-rows 2 div sub local-def
+    first-line 1 lt { /first-line 1 local-def } if
 
-    /screen-row 0 def
+    /screen-row 0 local-def
     {
         screen-row source-rows ge { exit } if
-        /src-line first-line screen-row add def
-        /marker   src-line pc-line eq { (>) } { ( ) } if-else def
-        /text     src-lines src-line _dbg-get-line def
+        /src-line first-line screen-row add local-def
+        /marker   src-line pc-line eq { (>) } { ( ) } if-else local-def
+        /text     src-lines src-line _dbg-get-line local-def
         screen screen-row marker src-line text _dbg-render-source-row
-        /screen-row screen-row 1 add def
+        /screen-row screen-row 1 add local-def
     } loop
 } def
 
@@ -307,7 +309,7 @@
 % Render the header row: " op[a] exec[b] dict[c] err[d] "
 % Focused pane gets /focused color, others /unfocused.
 % screen row op-depth exec-depth dict-depth err-depth --
-/_dbg-render-stack-header {|screen row op-d exec-d dict-d err-d|
+/_dbg-render-stack-header {|screen row op-d exec-d dict-d err-d|#+1
     screen 0 row screen screen-cols 1 32 7 0 0 screen-fill-rect
     pop
 
@@ -318,7 +320,7 @@
         (exec[) concat exec-d _dbg-itos concat (] ) concat
         (dict[) concat dict-d _dbg-itos concat (] ) concat
         (err[)  concat err-d  _dbg-itos concat (])  concat
-    def
+    local-def
 
     screen 0 row title-text /title _dbg-color screen-put-string
     pop
@@ -341,7 +343,7 @@
 % Render a single stack-preview row: "label: item item ..."
 % Focused pane label uses /focused; otherwise /unfocused.
 % screen row /pane-key snap-array --
-/_dbg-render-stack-row {|screen row pane snap|
+/_dbg-render-stack-row {|screen row pane snap|#+5
     /label
         pane /op   eq { ( op: ) }
         { pane /exec eq { (exec: ) }
@@ -349,11 +351,11 @@
         { pane /err  eq { ( err: ) }
         { ( ?  : ) }
         if-else } if-else } if-else } if-else
-    def
-    /per-item screen screen-cols _dbg-stack-item-width def
-    /preview snap 4 per-item _dbg-stack-preview def
-    /content label preview concat def
-    /key _dbg-focus pane eq { /focused } { /unfocused } if-else def
+    local-def
+    /per-item screen screen-cols _dbg-stack-item-width local-def
+    /preview snap 4 per-item _dbg-stack-preview local-def
+    /content label preview concat local-def
+    /key _dbg-focus pane eq { /focused } { /unfocused } if-else local-def
     screen row content key _dbg-write-row
 } def
 
@@ -365,14 +367,14 @@
 % Capture first into stack-local temporaries via `exch`, then bind to
 % named locals, so the captured op snapshot doesn't include the snapshot-
 % arrays we'd push for the other three.
-/dbg-render-stacks {|screen|#+4
+/dbg-render-stacks {|screen|#+6
     op-stack-snapshot   /op-snap   exch local-def
     exec-stack-snapshot /exec-snap exch local-def
     dict-stack-snapshot /dict-snap exch local-def
     err-stack-snapshot  /err-snap  exch local-def
 
-    /rows       screen screen-rows def
-    /header-row rows 6 sub def
+    /rows       screen screen-rows local-def
+    /header-row rows 6 sub local-def
 
     screen header-row
         op-snap   length
@@ -437,33 +439,33 @@
 % Shows the most recent K lines = (completed-lines + partial-if-nonempty),
 % truncated from the front so the freshest line is always visible.
 % screen dbg-render-output --
-/dbg-render-output {|screen|
-    /rows screen screen-rows def
-    /K _dbg-output-pane-rows def
-    /header-row rows 7 K add _dbg-watch-pane-height add sub def
+/dbg-render-output {|screen|#+10
+    /rows screen screen-rows local-def
+    /K _dbg-output-pane-rows local-def
+    /header-row rows 7 K add _dbg-watch-pane-height add sub local-def
 
     /header-text _dbg-output-truncated
         { (-- output (truncated) --) }
         { (-- output --) }
-        if-else def
+        if-else local-def
     screen header-row header-text /title _dbg-write-row
 
     /display
         _dbg-output-partial length 0 gt
         { _dbg-output-lines _dbg-output-partial append }
         { _dbg-output-lines }
-        if-else def
+        if-else local-def
 
-    /n display length def
-    /start n K gt { n K sub } { 0 } if-else def
+    /n display length local-def
+    /start n K gt { n K sub } { 0 } if-else local-def
 
-    /screen-row 0 def
+    /screen-row 0 local-def
     {
         screen-row K ge { exit } if
-        /idx start screen-row add def
-        /text idx n lt { display idx get } { () } if-else def
+        /idx start screen-row add local-def
+        /text idx n lt { display idx get } { () } if-else local-def
         screen header-row screen-row 1 add add text /normal _dbg-write-row
-        /screen-row screen-row 1 add def
+        /screen-row screen-row 1 add local-def
     } loop
 } def
 
@@ -678,9 +680,9 @@
 } def
 
 % screen dbg-render-status-bar --
-/dbg-render-status-bar {|screen|
-    /rows screen screen-rows def
-    /row  rows 1 sub def
+/dbg-render-status-bar {|screen|#+2
+    /rows screen screen-rows local-def
+    /row  rows 1 sub local-def
     screen row _dbg-status-text /status _dbg-write-row
 } def
 
@@ -826,7 +828,7 @@
 % Up/Down arrows step through _dbg-cmd-history; any other key resets the
 % navigation cursor so the live buffer is decoupled from history nav.
 % Stack: key buf -- buf' status
-/_dbg-cmd-line-edit {|key buf|
+/_dbg-cmd-line-edit {|key buf|#+1
     key /up eq
     { buf _dbg-history-up }
     {
@@ -857,7 +859,7 @@
                             % 1-char names for bytes 0x21..0x7E (and /
                             % for 32 has its own /space).  Multi-char
                             % names (/home /f5 ...) are ignored.
-                            /text key (                    ) to-string def
+                            /text key (                    ) to-string local-def
                             text length 1 eq
                             { buf text concat /editing }
                             { buf /editing }
@@ -881,18 +883,18 @@
 % Plus, the row above the cmd line shows /_dbg-cmd-result (the most
 % recent command's output), when non-empty.
 % screen dbg-render-cmd-line --
-/dbg-render-cmd-line {|screen|
-    /rows screen screen-rows def
-    /cmd-row rows 1 sub def
-    /content (: ) _dbg-cmd-buf concat (_) concat def
+/dbg-render-cmd-line {|screen|#+3
+    /rows screen screen-rows local-def
+    /cmd-row rows 1 sub local-def
+    /content (: ) _dbg-cmd-buf concat (_) concat local-def
     screen cmd-row content /normal _dbg-write-row
 } def
 
 % Render the most-recent command result (one row above the cmd line).
 % screen dbg-render-cmd-result --
-/dbg-render-cmd-result {|screen|
-    /rows screen screen-rows def
-    /res-row rows 2 sub def
+/dbg-render-cmd-result {|screen|#+2
+    /rows screen screen-rows local-def
+    /res-row rows 2 sub local-def
     screen res-row _dbg-cmd-result /normal _dbg-write-row
 } def
 
@@ -913,14 +915,14 @@
 % /_dbg-source-cache keyed by sid.  Returns the cached array (or [] on
 % failure).
 % sid -- src-lines
-/_dbg-load-source-for-sid {|sid|
+/_dbg-load-source-for-sid {|sid|#+2
     _dbg-source-cache sid known?
     { _dbg-source-cache sid get }
     {
-        /path sid stream-name def
+        /path sid stream-name local-def
         path null eq
         { [] }
-        { /lines path _dbg-read-source-file def
+        { /lines path _dbg-read-source-file local-def
           _dbg-source-cache sid lines put
           lines
         }
@@ -930,9 +932,9 @@
 } def
 
 % Read a file path and split into lines.  path -- lines
-/_dbg-read-source-file {|path|
-    /src path 114b stream def
-    src read-all /text exch def
+/_dbg-read-source-file {|path|#+2
+    /src path 114b stream local-def
+    src read-all /text exch local-def
     src close-stream
     text (\n) split
 } def
@@ -1486,18 +1488,18 @@
 % Parse `verb [SPACE arg...]` from cmd-buf and dispatch.
 % Returns the result string.
 % cmd-buf -- result-str
-/dbg-execute-command {|cmd|
+/dbg-execute-command {|cmd|#+3
     cmd length 0 eq { () }
     {
-        /space-idx cmd ( ) string-index-of def
+        /space-idx cmd ( ) string-index-of local-def
         space-idx 0 lt
         {
             % No space: just a verb, no arg.
             cmd () _dbg-cmd-dispatch
         }
         {
-            /verb cmd 0 space-idx get-interval def
-            /arg  cmd space-idx 1 add cmd length space-idx sub 1 sub get-interval def
+            /verb cmd 0 space-idx get-interval local-def
+            /arg  cmd space-idx 1 add cmd length space-idx sub 1 sub get-interval local-def
             verb arg _dbg-cmd-dispatch
         }
         if-else
@@ -1586,8 +1588,8 @@
     if-else
 } def
 
-/_dbg-on-event {|event|
-    /payload event tag-value def
+/_dbg-on-event {|event|#+5
+    /payload event tag-value local-def
     /_dbg-on-event-line payload 1 get store
 
     % /error events come from break-on-error: the error is fatal and
@@ -1610,7 +1612,7 @@
     _dbg-capture-stream null eq not
     {
         stdout set-stdout pop
-        /drained _dbg-capture-stream get-string-stream def
+        /drained _dbg-capture-stream get-string-stream local-def
         _dbg-capture-stream clear-string-stream
         drained _dbg-drain-into-lines
     } if
@@ -1641,8 +1643,8 @@
         % Resolve sid -> source lines (cached).  Falls back to the install-
         % time source when stream-name can't resolve (e.g. user code halts
         % inside a proc defined in an already-closed `require`'d file).
-        /sid payload 0 get def
-        /lines sid _dbg-load-source-for-sid def
+        /sid payload 0 get local-def
+        /lines sid _dbg-load-source-for-sid local-def
         lines length 0 gt
         { /_dbg-source-lines lines store }
         { /_dbg-source-lines _dbg-source-cache _dbg-install-sid get store }
@@ -1655,7 +1657,7 @@
 
         _dbg-redraw
 
-        /action /unknown def
+        /action /unknown local-def
         {
             % Fatal halt (break-on-error): the error has already committed,
             % so every resume action ends the session the same way --
@@ -1679,7 +1681,7 @@
             {
                 _dbg-set-breakpoint-at-pc
                 _dbg-redraw
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /focus-next eq
@@ -1687,14 +1689,14 @@
                 dbg-modal-active? not
                 { dbg-focus-next _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /enter-cmd eq
             {
                 dbg-modal-active? not
                 { _dbg-run-cmd-mode _dbg-redraw } if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             % Modal control: /expand opens on focused stack pane; /collapse
@@ -1706,7 +1708,7 @@
                 dbg-modal-active? not
                 { dbg-modal-open _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /collapse eq
@@ -1714,7 +1716,7 @@
                 dbg-modal-active?
                 { dbg-modal-close _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /scroll-up eq
@@ -1722,7 +1724,7 @@
                 dbg-modal-active?
                 { -1 dbg-modal-scroll _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /scroll-down eq
@@ -1730,7 +1732,7 @@
                 dbg-modal-active?
                 { 1 dbg-modal-scroll _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /page-up eq
@@ -1738,7 +1740,7 @@
                 dbg-modal-active?
                 { _dbg-screen screen-rows 2 sub neg dbg-modal-scroll _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             action /page-down eq
@@ -1746,14 +1748,14 @@
                 dbg-modal-active?
                 { _dbg-screen screen-rows 2 sub      dbg-modal-scroll _dbg-redraw }
                 if
-                /action /unknown def
+                /action /unknown local-def
             } if
 
             % Read next key.
             /action
                 { read-key-byte } { 50 read-key-byte-timeout } decode-key
                 dbg-key-to-action
-            def
+            local-def
         } loop
     }
     if-else
@@ -1775,8 +1777,8 @@
 % raw-mode + Screen, installs the cb.  Does NOT arm any halt mode --
 % the wrapper picks step / on-error / breakpoint.
 % path -- (caller picks how to arm)
-/_dbg-install-common {|path|
-    /lines path _dbg-read-source-file def
+/_dbg-install-common {|path|#+1
+    /lines path _dbg-read-source-file local-def
     /_dbg-source-lines lines store
     % Seed the cache under sid 0 -- the fallback for halts whose sid can't
     % be resolved via stream-name (e.g. closed `require`d files).
@@ -1810,9 +1812,16 @@
 } def
 
 % path install-debugger --
+% Break-on-error is armed alongside StepIn: without it a fatal error in the
+% stepped script tears the session down mid-inspection, which reads as "the
+% debugger quit on me" exactly where the user most wants to look.  The halt
+% is the same one --inspect-on-error gets -- FATAL status bar, inspect
+% freely, any resume key lets the error finish with its usual diagnostic and
+% exit code.
 /install-debugger {
     _dbg-install-common
     /_dbg-last-mode /step store
+    true debug-break-on-error
     debug-step
 } def
 

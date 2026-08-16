@@ -620,7 +620,8 @@ static void packed_op(Trix *trx) {
 
 // Search `raw` against the module search path: each colon-separated entry of
 // trx->m_module_path is tried first (joined as `<entry>/<raw>`), then the
-// implicit binary-relative `lib/<raw>` if trx->m_bin_dir is set.  Absolute
+// implicit binary-relative `lib/<raw>` and `../lib/trix/<raw>` if
+// trx->m_bin_dir is set (build tree and install layout).  Absolute
 // paths return false (search-path doesn't apply -- caller falls back to
 // realpath of `raw` itself).  `cand_buf` and `resolved_buf` are caller-
 // supplied scratch buffers of size PATH_MAX (kept out of this function to
@@ -657,20 +658,25 @@ static bool require_search_path(Trix *trx, const char *raw, size_t raw_len, char
             }
         }
         if (trx->m_bin_dir != nullptr) {
-            // <bin_dir>/lib/<raw> -- compose directly into cand_buf to skip an
-            // intermediate "<bin>/lib" buffer.
-            constexpr std::string_view lib_seg = "/lib";
+            // Two binary-relative layouts, tried in order.  Compose each
+            // directly into cand_buf to skip an intermediate "<bin>/..." buffer.
+            //   <bin_dir>/lib/<raw>            -- build tree: trix sits beside lib/
+            //   <bin_dir>/../lib/trix/<raw>    -- install: <prefix>/bin/trix with the
+            //                                     .trx modules under <prefix>/lib/trix
             auto bin_len = std::strlen(trx->m_bin_dir);
-            if ((bin_len + lib_seg.size() + 1 + raw_len + 1) > PATH_MAX) {
-                return false;
-            } else {
-                std::memcpy(cand_buf, trx->m_bin_dir, bin_len);
-                std::memcpy(cand_buf + bin_len, lib_seg.data(), lib_seg.size());
-                cand_buf[bin_len + lib_seg.size()] = '/';
-                std::memcpy(cand_buf + bin_len + lib_seg.size() + 1, raw, raw_len);
-                cand_buf[bin_len + lib_seg.size() + 1 + raw_len] = '\0';
-                return (::realpath(cand_buf, resolved_buf) != nullptr);
-            }
+            auto try_seg = [&](std::string_view seg) -> bool {
+                if ((bin_len + seg.size() + 1 + raw_len + 1) > PATH_MAX) {
+                    return false;
+                } else {
+                    std::memcpy(cand_buf, trx->m_bin_dir, bin_len);
+                    std::memcpy(cand_buf + bin_len, seg.data(), seg.size());
+                    cand_buf[bin_len + seg.size()] = '/';
+                    std::memcpy(cand_buf + bin_len + seg.size() + 1, raw, raw_len);
+                    cand_buf[bin_len + seg.size() + 1 + raw_len] = '\0';
+                    return (::realpath(cand_buf, resolved_buf) != nullptr);
+                }
+            };
+            return (try_seg("/lib") || try_seg("/../lib/trix"));
         }
         return false;
     }

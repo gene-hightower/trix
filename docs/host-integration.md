@@ -1071,7 +1071,7 @@ line via `parse_args` (see [Command-Line Argument Parsing](#command-line-argumen
 | `m_sleep_budget_ms` | 0 | `--sleep-budget` | Cumulative wall-clock park grant in ms; spent budget turns timed parks into immediate wakes (0 = unlimited) |
 | `m_timeout_ms` | 0 | `--timeout` | Wall-clock deadline in ms; raises `/time-limit` once exceeded while executing (0 = unlimited) |
 | `m_module_path` | nullptr | `--module-path` | Colon-separated `require` / `require-module` search path |
-| `m_debug` | false | `-d`, `--debug` | Enable interactive debugger |
+| `m_debug` | false | `-d`, `--debug` | Arm the debugger substrate (`debug-*` ops + breakpoints) for a script to drive itself; the full-screen inspector is `--inspect`, not this |
 | `m_quiet` | false | `-q`, `--quiet` | Suppress startup banner AND all diagnostic stderr (error messages, backtraces, warnings) |
 | `m_no_banner` | false | `--no-banner` | Suppress only the startup banner; diagnostics unaffected |
 | *(vm_size)* | 1M | `--vm-size` | VM heap size (separate constructor arg) |

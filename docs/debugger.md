@@ -77,7 +77,7 @@ The debugger is gated behind four mutually-cooperating CLI flags:
 
 | Flag | Effect |
 | --- | --- |
-| `--inspect FILE` | Load `FILE`, arm step-in at line 1, hand the user control before any user code runs. |
+| `--inspect FILE` | Load `FILE`, arm step-in at line 1, hand the user control before any user code runs. Break-on-error is armed alongside step-in, so an error part-way through a stepping session halts in place rather than ending it. |
 | `--inspect-on-error FILE` | Load `FILE`, run normally at full speed, halt when an error is about to go *uncaught* (`try`-caught errors never halt). The session is post-mortem: the FATAL status bar replaces the resume hints, inspection commands all work, and any resume key ends the session -- the error then finishes on the real terminal with its diagnostic and `Error`-enum exit code. Errors in actors/coroutines halt too, on the dying coroutine's own stacks. |
 | `--inspect-at=/NAME FILE` | Load `FILE`, pre-set a name-resolution breakpoint on `/NAME`, run until that name is dispatched. |
 | `--no-color` | Switch the UI to a bold-only theme (no ANSI 16-color escapes). Useful for monochrome terminals. |
@@ -88,6 +88,18 @@ is rejected) and they are mutually exclusive with `-i` / `--stdedit`
 (interactive REPL mode). The flags themselves are accepted *only* in
 TRIX_DEBUGGER-enabled builds (see [§8](#8-conditional-compilation));
 release builds reject them with a CLI error.
+
+All three also share the fatal-halt behaviour described for
+`--inspect-on-error` above: they differ in *where they first stop*, not in
+what happens when the script throws. Whichever flag started the session,
+an uncaught error halts the inspector at the fault point instead of tearing
+the session down under you.
+
+The session bootstraps by `require`-ing `debugger.trx` **by bare name**, so
+it resolves through the module search path (see
+[cli.md §4](cli.md#4-module-search-path-and---module-path)) rather than
+against the CWD: `--inspect` works from any directory, in a source checkout
+(`lib/` beside the binary) or from an install (`<prefix>/lib/trix`).
 
 After `FILE`, any remaining argv tail is forwarded verbatim to the
 script via `command-line-args` exactly as it would be in non-inspect
@@ -843,6 +855,25 @@ the first name dispatch after `@call` is built. This is why the user
 frame's `|locals|` are still in scope at cb time, which is in turn
 why conditional bp predicates and `:p` expressions can read user
 locals directly without any frame-restoration glue.
+
+**The cb runs in the interrupted program's dict context — so it must
+never `def`.** That same inline-ness means the dict stack at cb time is
+whatever the user's code left there, and `def` writes to the topmost
+*non-frame* dict on it. A cb that `def`s therefore writes its scratch
+names into the user's scope: it pollutes the program it is supposed to
+be observing, and it dies outright with `/dict-full` whenever that scope
+is a fixed dict with no room (a `begin`-pushed `N dict` that is already
+full — and, before the scope dicts became growable, *every* `let` /
+`destructure` scope, which is sized to exactly its bound names). This is
+what github issue #14 reported as "the TUI doesn't come up": the
+inspector died inside `log-msg`'s `[/msg] let` before drawing a frame.
+
+Every proc on the halt path therefore declares its own frame capacity
+(`|args|#+N`) and binds working variables with **`local-def`**, which
+writes into the frame instead of past it. `def` in `lib/debugger.trx` is
+reserved for genuine top-level definitions; the only in-proc exception is
+the deliberate `def-persist` of `/_dbg-cmd-save-token`, which must outlive
+the frame. Keep that discipline when adding to the halt path.
 
 ### 9.2 C intrinsics
 

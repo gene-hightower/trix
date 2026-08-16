@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-16
+
+- **Snapshot-thaw fuzz harness (`fuzz/fuzz_thaw.cpp`).** Targets `startup_image()` -- the
+  `--image` / `-l` boot thaw path: header validation, section reads, CRC gates,
+  `restore_from_header()`, `apply_fixup_streams()`, stdio reattach, and post-thaw execution
+  over the restored heap. Thaw runs on untrusted input whenever a user loads an image they
+  did not produce, across 185 revisions of conditional decode. The image is guarded by a
+  whole-file CRC-32 that random mutation never reproduces, so a naive fuzzer stalls at the
+  checksum arm; a custom mutator pins a valid header, fuzzes the VM blob, and re-stamps
+  `vm_used`, the VM-base sentinel, and the checksum, so every generated image clears the
+  gates and drives decode with root offsets pointing into corrupted heap -- the real threat
+  model, since a CRC-32 is an integrity check, not a security boundary. The template header
+  is minted at startup from the harness's own linked engine, so the snapshot version and
+  operator-table signature always match the binary under test rather than rotting in-tree.
+  Build with `fuzz/build.sh`, run with `fuzz/run_thaw.sh`.
+- **`vm-heap-verify`: an all-builds heap-invariant walker.** Runs a mark-only pass with a
+  verifier armed and returns a dict of violation counts (`/stale-refs`, `/kind-mismatch`,
+  `/work-list-dirty`, `/dict-bucket-errors`, `/dict-length-mismatch`,
+  `/dict-bad-bucket-count`), all zero on a consistent heap. Where `vm-global-gc-probe`
+  answers "how much is garbage", this answers "is the heap self-consistent". Present in
+  every build rather than behind `TRIX_DEBUGGER`, so it runs under CI's cmake configuration
+  and a heap regression is caught by the standard gate set instead of only a developer's
+  local debug binary. A reachable slot holding an unresolvable reference means a root was
+  dropped and the block reused underneath it; the verifier records what `gc_mark_object` was
+  already deciding, leaving marking behaviour unchanged.
+- **The GC-stress suite is now a CI gate.** `tests/test_gc_stress_*.trx` drive
+  `vm-gc-stress` / `vm-gc-poison`, which make `gvm_alloc` collect before every global
+  allocation so a dropped GC root surfaces as a deterministic use-after-free at the exact
+  site. Both ops compile out unless `TRIX_DEBUGGER` is defined, so these tests ran in no
+  automated gate at all -- including through the GC perf campaign and the
+  localdict/globaldict split, exactly the changes they exist to guard. A `TRIX_DEBUGGER`
+  cmake option now builds a second tree in both `ci-local` and a new `ci.yml` job, leaving
+  the primary build on the shipping configuration.
+- **`tools/ci-local.sh`: mirror the full CI gate set before pushing.** `build.sh` compiles
+  with `-DTRIX_DEBUGGER -DTRIX_HEAP_TRACKING`, so its binary carries ops CI's cmake build
+  does not, and CI runs a standalone `clang-format --Werror` check that `runtests.sh` does
+  not -- repeated "green locally, red in CI" came from that gap. `ci-local.sh` builds the CI
+  way, stashes the dev binaries so the run matches CI, executes every `ci.yml` gate, and
+  restores the dev binaries on exit. It also pins `gcc-15` to match CI's compiler leg, with
+  a loud warning on fallback: a `-Wnrvo` change that was green locally turned CI red under
+  its default gcc-13.
+- **`tetrix` and `chip8` are built in CI and shipped in the release tarballs.** Both are the
+  trix VM with a native kernel registered for their showcase, but cmake built `trix` alone,
+  so CI skipped the cross-binary tests (snapshot user-operator mismatch, chip8 native
+  lockstep) and the tarballs shipped `trix` only. All three host targets now share one
+  compile/link configuration, run in CI, and are stripped, version-verified, and packaged
+  for both x86_64 and arm64.
+- **`examples/zmachine`: 20 more Z-code stories in the catalog.** Added to the fetch
+  manifest, the in-interpreter recognition table, and `CATALOG.md`, all verified to boot and
+  self-identify. Nine were already documented and recognized but absent from the manifest,
+  so `fetch-stories.py` could not retrieve them. Also corrects a pre-existing mislabel --
+  IFhd `9:010613` was recorded as *All Things Devours* but is *Dangerous Curves* (confirmed
+  by the story's own banner) -- and adds an "Out of scope -> Glulx" section for requested
+  titles that target a different VM. Story files remain unbundled and fetched on demand.
+- **The interactive inspector can halt anywhere — four fixes from
+  [#14](https://github.com/mcguidarelli/trix/issues/14).** Reported as "the debugger TUI
+  doesn't come up", which turned out to be four independent defects, each on its own
+  sufficient to kill a session before it drew a frame.
+  - **`let` / `destructure` scopes are growable.** The scope dict was created at exactly
+    its bound-name count and fixed there, so it was full the instant it was pushed and the
+    body's first `def` raised `/dict-full`. That also made the scopes undebuggable: the
+    inspector halts by running Trix in the interrupted program's dict context, so no halt
+    inside any `let` could survive. `def` inside a scope now binds in the scope and is
+    reclaimed by the matching `end`.
+  - **`stream-name` honours its documented contract.** It returned the synthetic source
+    name (`--memory--`, `--stdin--`, `--string--`) for non-file-backed streams instead of
+    `null`, so the debugger's null-guarded source lookup sailed past the guard and tried to
+    open `--memory--` as a file. `--inspect` died with `/filename-not-found` on any
+    top-level-only script.
+  - **`--inspect` halts at a fatal error** instead of tearing the session down at the one
+    moment you most want to look, matching `--inspect-on-error`. The variants now differ
+    only in where they *first* stop.
+  - **`--inspect` works with the CWD anywhere.** The session bootstrap required its own
+    implementation as `lib/debugger.trx`, a prefixed relative name only ever resolved
+    against the CWD, so the inspector ran solely from a source checkout root. It now
+    requires by bare name through the module search path, which gained a second
+    binary-relative arm (`<bin>/../lib/trix`) for installed layouts — and `lib/*.trx` is
+    now installed, which it previously never was.
+- **`lib/debugger.trx` keeps its scratch out of the inspected program.** Every proc on the
+  halt path declares its own frame capacity (`|args|#+N`) and binds with `local-def`.
+  Previously the callback `def`'d ~66 working variables into whatever scope the interrupted
+  program left topmost, polluting it, and dying outright whenever that scope was a full
+  fixed dict.
+- **`-d` / `--debug` is described accurately** in `--help`: it arms the debugger *substrate*
+  (the `debug-*` ops and breakpoint machinery a script drives itself), which is not the
+  full-screen inspector. Promising "interactive debugger" is what sent #14's reporter
+  looking for a TUI that flag never starts.
+
 - **`examples/amazing.trx`: crack grid (`--grid crack`) -- a seventh topology, irregular Voronoi
   cells.** A "crack" maze tessellates the plane into irregular polygons (the cracked-mud look) and
   carves a maze over the cell-adjacency graph. The Voronoi geometry is generated **entirely in
@@ -532,7 +620,8 @@ a performance pass).
 - Dependencies are readline and zlib, both opt-out (`--no-readline` / `--no-zlib`).
 - Apache 2.0 licensed.
 
-[Unreleased]: https://github.com/mcguidarelli/trix/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mcguidarelli/trix/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mcguidarelli/trix/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mcguidarelli/trix/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/mcguidarelli/trix/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mcguidarelli/trix/compare/v0.9.0...v0.10.0

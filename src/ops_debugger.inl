@@ -811,7 +811,12 @@ static void stream_name_op(Trix *trx) {
         auto target_sid = static_cast<stream_id_t>(sid_val);
         for (auto s = trx->m_stream_inuse_list; s != nullptr; s = s->next_stream(trx)) {
             if (s->m_sid == target_sid) {
-                if (s->m_source.is_string()) {
+                // is_file() gates the m_source read: every stream carries a
+                // String m_source, but the non-file kinds hold a synthetic
+                // placeholder ("--memory--", "--stdin--", "--string--") that
+                // is not a path.  Returning one would hand a caller a name it
+                // will try -- and fail -- to open.
+                if (s->is_file() && s->m_source.is_string()) {
                     auto sv = s->source(trx);
                     *trx->m_op_ptr = Object::make_string(trx, sv);
                     return;

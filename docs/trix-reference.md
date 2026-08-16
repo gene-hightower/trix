@@ -4174,6 +4174,24 @@ match-all       value pairs-array -- result-array
 1 2 3 [/a /b /c] let a b c add add end 6 eq (a + b + c = 6) exch assert
 ```
 
+**The `let` / `destructure` scope is an ordinary growable dict.**  It is
+*not* a `|...|` frame dict: `def` targets it (rather than writing past it,
+as it does for a frame), `end` pops it, and it takes part in `save` /
+`restore` like any `begin`-pushed dict.  Because it is growable, the body
+may `def` working variables beyond the bound names, and those die with the
+matching `end`:
+
+```trix
+% def inside a let scope binds in the scope and is reclaimed by `end`.
+1 2 [/a /b] let /acc a b add def acc 3 eq (acc bound in scope) exch assert end
+{ acc } try /undefined eq (acc died with end) exch assert clear
+```
+
+The scope is created at exactly the bound-name count, so growth happens on
+the first extra `def`.  Prefer `|...|#+N` frame locals in hot code if that
+allocation matters; `let` optimizes for reading clearly, not for zero-alloc
+inner loops.
+
 ### 3.36 Transducer Operations
 
 Composable transformations applied to any sequence type. Each step is a
@@ -4905,7 +4923,10 @@ stream-name         sid -- str | null % source filename for a stream id
   first scans open streams, then a persistent sid->path cache populated at
   file-open time, so file procs scanned via `require` and then closed are
   still resolvable.  Returns `null` for non-file-backed streams (stdio,
-  in-memory) or an unknown sid.  Stream ids are surfaced by
+  in-memory, string) or an unknown sid -- those carry a synthetic source
+  name (`--stdin--`, `--memory--`, `--string--`), never a path, and it is
+  never returned: a caller that got one back would only try, and fail, to
+  open it.  Stream ids are surfaced by
   `debug-pc-source`, `frame-source-locs`, and the disasm rows.  Raises
   `/opstack-underflow`, `/range-check`, `/type-check`.
 
@@ -4931,7 +4952,8 @@ clear
 ```trix
 % Runnable: format-object pretty-prints to a capped-width String.
 [1 2 3] 40 format-object ([1i 2i 3i]) eq (format-object renders) exch assert
-% Runnable: stream-name on a non-file stream id (stdin) is null.
+% Runnable: stream-name is null for every non-file-backed stream id --
+% stdio and in-memory streams carry a synthetic source name, never a path.
 0 stream-name null eq (stdin sid has no filename) exch assert
 ```
 

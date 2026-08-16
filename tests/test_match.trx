@@ -432,6 +432,83 @@ null match-type (null) eq                   (types: null) rt-ok  clear
 end clear
 
 % =================================================================
+% SECTION 40: SCOPE -- `def` inside a let / destructure scope
+% =================================================================
+%
+% The scope dict is sized to exactly the bound names, so a FIXED one is
+% full the instant it is pushed and the body's first `def` raised
+% /dict-full.  That also killed any callback interrupting the body --
+% the debugger halts by running Trix code in the interrupted program's
+% dict context, so `--inspect` could not stop anywhere inside a `let`
+% (github issue #14).  The scope is dynamic; these writes must land in
+% it and die with the matching `end`.
+%
+% NOTE the `ls-` prefix on every probe name.  test_all.trx runs each test
+% file into ONE shared localdict, so a bare name like /w1 or /acc is very
+% likely already bound by an earlier file -- and then the post-`end`
+% /undefined checks below resolve that outer binding instead of failing,
+% which is a false PASS standalone and a false FAIL in the aggregate run.
+
+1 2 [/a /b] let
+  /ls-extra 99 def
+  ls-extra 99 eq                            (let-scope: def inside let) rt-ok
+  a 1 eq                                    (let-scope: binding intact) rt-ok
+end
+{ ls-extra } try /undefined eq              (let-scope: def died with end) rt-ok  clear
+
+% Same for a single-name scope -- capacity 1, the tightest case, and two
+% extra defs so the scope grows twice (each growth is its own block).
+(hi) [/msg] let
+  /ls-w1 1 def
+  /ls-w2 2 def
+  ls-w1 ls-w2 add 3 eq                      (let-scope: several defs, capacity 1) rt-ok
+  msg (hi) eq                               (let-scope: single binding intact) rt-ok
+end
+{ ls-w1 } try /undefined eq                 (let-scope: several defs died) rt-ok  clear
+
+[7 8] [/p /q] destructure
+  /ls-extra 5 def
+  ls-extra 5 eq                             (destr-scope: def inside destructure) rt-ok
+  p 7 eq                                    (destr-scope: binding intact) rt-ok
+end
+{ ls-extra } try /undefined eq              (destr-scope: def died with end) rt-ok  clear
+
+% The scope must still be an ordinary poppable dict, not a |...| frame:
+% `end` rejects frames outright and slot-refs resolve against the nearest
+% frame, so tagging it IsFrame would break both.  current-dict is the
+% first NON-frame dict from the top, so it names the let scope itself
+% only while that scope is untagged.
+1 2 [/a /b] let
+  /ls-extra 99 def
+  current-dict /ls-extra known? true eq     (let-scope: not a locals frame) rt-ok
+  current-dict /a       known? true eq      (let-scope: holds its bindings) rt-ok
+end
+clear
+
+% A let scope nested inside a |...| proc must not capture the proc's own
+% slot-indexed locals.
+/nested-let {|outer|
+    1 [/inner] let
+        /ls-scratch 3 def
+        outer inner add ls-scratch add
+    end
+} def
+10 nested-let 14 eq                         (let-scope: nested in |...| proc) rt-ok
+
+% A scope that grows twice, popped while a coroutine is live.  Popping a
+% dict has to drop the name-binding cache entries pointing into it, and
+% growth puts the later entries in separately-allocated blocks -- so this
+% pins the multi-coroutine clear path against a non-contiguous scope.
+/live-coro [ { { 0 coroutine-sleep } loop } coroutine-launch def
+(x) [/cm] let
+  /ls-c1 11 def
+  /ls-c2 22 def
+  ls-c1 ls-c2 add 33 eq                     (let-scope: grown scope w/ live coro) rt-ok
+end
+{ ls-c1 } try /undefined eq                 (let-scope: grown binding cleared) rt-ok  clear
+live-coro coroutine-kill
+
+% =================================================================
 % INTEGRITY
 % =================================================================
 

@@ -204,3 +204,7 @@ if(NOT TRIX_FUZZ)
 endif()
 install(FILES trix.h DESTINATION include)
 install(DIRECTORY src/ DESTINATION include/trix FILES_MATCHING PATTERN "*.inl")
+# Trix-source modules loaded at runtime by `require` (lib/debugger.trx backs
+# --inspect).  lib/trix is the second binary-relative arm of the module search
+# path, so <prefix>/bin/trix finds these with no --module-path.
+install(DIRECTORY lib/ DESTINATION lib/trix FILES_MATCHING PATTERN "*.trx")
