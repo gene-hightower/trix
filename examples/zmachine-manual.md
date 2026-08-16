@@ -110,10 +110,17 @@ register set (everything is stack or memory), and a clever
 text-encoding scheme that packs printable ASCII into 5-bit Z-characters
 to save bytes on 1980s floppy disks.
 
-This implementation targets versions **V1, V2, V3, V4, V5, V7, and V8**.
-V6 is the graphical Z-Machine -- pictures, mouse, fonts, windowed UI --
-a different surface from the V1-V5/V7/V8 prose interpreters.  V6 is
-intentionally out of scope.
+This implementation targets versions **V3, V4, V5, V7, and V8**.  V6 is
+the graphical Z-Machine -- pictures, mouse, fonts, windowed UI -- a
+different surface from the prose interpreters, and is intentionally out
+of scope.
+
+V1 and V2 files load and largely run, but are **untested and not
+claimed**: no V1/V2 story is freely distributable, so nothing in the
+self-test or the catalog exercises them, and V1's shift-once alphabet
+semantics (Z-characters 2 and 3) are not implemented -- in V1 a
+Z-character 1 is a newline rather than an abbreviation prefix, and this
+decoder drops it.
 
 ---
 

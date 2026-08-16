@@ -1,7 +1,11 @@
 % examples/zmachine.trx -- Infocom Z-Machine interpreter.
 %
-% A Z-Machine interpreter implemented in pure Trix.  Targets V1-V5, V7,
+% A Z-Machine interpreter implemented in pure Trix.  Targets V3-V5, V7,
 % and V8 (V6 graphical is intentionally out of scope, as is sound).
+% V1/V2 story files load and mostly run, but are UNTESTED -- no V1/V2
+% story is freely distributable, so nothing here exercises them, and
+% V1's shift-once alphabet semantics are not implemented (see §2).  Do
+% not read "V1" in the version table below as a support claim.
 % End-to-end runner: reads a story file, runs the bytecode, plays the
 % game via stdin/stdout with a top-of-screen status line and (V4+) a
 % game-controlled upper window.
@@ -1227,8 +1231,8 @@ clear
         % Normal Z-character.
         zc 0 eq { 16#20 z-emit-byte } {
         zc 1 eq h-version 1 gt and { /zd-abbrev-set 0 store } {
-        zc 2 eq h-version 2 ge and { /zd-abbrev-set 1 store } {
-        zc 3 eq h-version 2 ge and { /zd-abbrev-set 2 store } {
+        zc 2 eq h-version 3 ge and { /zd-abbrev-set 1 store } {
+        zc 3 eq h-version 3 ge and { /zd-abbrev-set 2 store } {
         zc 4 eq { /zd-alpha 1 store } {
         zc 5 eq { /zd-alpha 2 store } {
         zc 6 eq zd-alpha 2 eq and { /zd-esc-state 1 store } {
@@ -5207,11 +5211,20 @@ dispatch-var 16#15 {|instr| } put
 % Search the dictionary for an entry whose encoded key matches.
 % Linear-scan implementation; binary search would be better when
 % count > 0 but we keep the code small for now.
-/z-dict-find {|key|#+10
-    /entry-len z-dict-entry-length local-def
-    /count z-dict-entry-count local-def
+% z-dict-find-at key dict-base -- addr
+% As z-dict-find, but searches the dictionary at `dict-base` rather than
+% the story's own.  A user dictionary (tokenise's optional third operand,
+% §15) has the identical layout -- separator count, separators, entry
+% length, entry count, entries -- so only the base address changes.  The
+% count is stored negative when the entries are unsorted; we take the
+% magnitude either way because this is a linear scan.
+/z-dict-find-at {|key dict-base|#+10
+    /nsep dict-base z-rb local-def
+    /entry-len dict-base 1 add nsep add z-rb local-def
+    /count dict-base 1 add nsep add 1 add z-rw local-def
+    count 16#8000 ge { /count count 16#10000 sub store } if
     count 0 lt { /count count neg store } if
-    /entries z-dict-entries-addr local-def
+    /entries dict-base 1 add nsep add 3 add local-def
     /found 0 local-def
     /i 0 local-def
     { i count lt found 0 eq and } {
@@ -5226,6 +5239,8 @@ dispatch-var 16#15 {|instr| } put
     } while
     found
 } def
+
+/z-dict-find {|key| key h-dict-addr z-dict-find-at } def
 
 % ----- tokenization
 %
@@ -5318,6 +5333,66 @@ dispatch-var 4 {|instr|#+16
         pe-off 3 add tok-off 1 add z-wb              % offset is 1-based in V3 (after the max-len byte)
     } for
 } put
+
+% z-text-buf-string text-buf -- str
+% Recover the typed text back out of a text buffer (§10.3).  V5+ keeps
+% the length in byte 1 with the characters from byte 2; V1-4 keeps a
+% 0-terminated string from byte 1.  Needed by tokenise, which re-parses
+% a buffer it did not fill itself.  Bounded by the buffer's own declared
+% capacity (byte 0) so a malformed V1-4 buffer with no terminator cannot
+% run away.
+/z-text-buf-string {|text-buf|#+6
+    /max text-buf z-rb local-def
+    /n 0 local-def
+    /base 0 local-def
+    h-version 5 ge {
+        /n    text-buf 1 add z-rb store
+        /base text-buf 2 add store
+    } {
+        /base text-buf 1 add store
+        { n max lt  base n add z-rb 0 ne  and } { /n n 1 add store } while
+    } if-else
+    n max gt { /n max store } if
+    /out n string local-def
+    0 1 n 1 sub {
+        /i exch local-def
+        out i  base i add z-rb /byte-type cast  put
+    } for
+    out
+} def
+
+% z-fill-parse-buf text parse-buf dict-base skip-unknown --
+% Tokenize `text` and write the parse buffer per §13.6.1: byte 0 is the
+% caller's max-token capacity, byte 1 the token count, then one 4-byte
+% entry per token (dictionary address word, letter count, text offset).
+%
+% dict-base selects the dictionary to search; skip-unknown is tokenise's
+% flag operand -- when true a token that misses the dictionary leaves its
+% parse entry untouched, so the caller's prior contents survive, rather
+% than being overwritten with a zero address.
+/z-fill-parse-buf {|text parse-buf dict-base skip-unknown|#+11
+    /key-len h-version 4 lt { 4 } { 6 } if-else local-def
+    /tokens text z-tokenize local-def
+    /max-tokens parse-buf z-rb local-def
+    /num-tokens tokens length local-def
+    num-tokens max-tokens gt { /num-tokens max-tokens store } if
+    parse-buf 1 add  num-tokens  z-wb
+
+    /tok-text-base h-version 5 ge { 2 } { 1 } if-else local-def
+    0 1 num-tokens 1 sub {
+        /i exch local-def
+        /tok tokens i get 0 get local-def
+        /tok-off tokens i get 1 get local-def
+        /key tok key-len z-encode-text local-def
+        /addr key dict-base z-dict-find-at local-def
+        addr 0 eq skip-unknown and not {
+            /pe-off parse-buf 2 add  i 4 mul add local-def
+            pe-off       addr                      z-ww
+            pe-off 2 add tok length                z-wb
+            pe-off 3 add tok-off tok-text-base add z-wb
+        } if
+    } for
+} def
 
 % ----- §10 self-test
 %
@@ -6286,25 +6361,8 @@ dispatch-var 4 {|instr|#+16
     } if-else
 
     parse-buf 0 ne {
-        /key-len h-version 4 lt { 4 } { 6 } if-else local-def
-        /tokens input 0 n get-interval z-tokenize local-def
-        /max-tokens parse-buf z-rb local-def
-        /num-tokens tokens length local-def
-        num-tokens max-tokens gt { /num-tokens max-tokens store } if
-        parse-buf 1 add  num-tokens  z-wb
-
-        /tok-text-base h-version 5 ge { 2 } { 1 } if-else local-def
-        0 1 num-tokens 1 sub {
-            /i exch local-def
-            /tok tokens i get 0 get local-def
-            /tok-off tokens i get 1 get local-def
-            /key tok key-len z-encode-text local-def
-            /addr key z-dict-find local-def
-            /pe-off parse-buf 2 add  i 4 mul add local-def
-            pe-off      addr   z-ww
-            pe-off 2 add tok length z-wb
-            pe-off 3 add tok-off tok-text-base add z-wb
-        } for
+        input 0 n get-interval  parse-buf  h-dict-addr  false
+            z-fill-parse-buf
     } if
 
     h-version 5 ge {
@@ -6509,9 +6567,27 @@ dispatch-ext 16#0B {|instr|#+3
 } put
 
 % VAR:0x1B tokenise text parse [dict] [flag]  -- V5+
-% Re-tokenise text-buf (skipping dict-search if flag is non-zero).
-% Stub: do nothing, parser-buf retains caller-supplied state.
-dispatch-var 16#1B {|instr| } put
+% Re-tokenise an existing text buffer into a parse buffer (§15).  `dict`
+% selects an alternate dictionary (0 or absent = the story's own); a
+% non-zero `flag` leaves parse entries for words that miss the dictionary
+% untouched instead of zeroing them.
+%
+% This was a no-op stub, which HUNG every Inform-compiled game: Inform's
+% parser drives AGAIN ("g") and OOPS by re-tokenising a rebuilt text
+% buffer and re-reading the parse results, so a parse buffer that never
+% changed left it looping forever on the same input.
+dispatch-var 16#1B {|instr|#+6
+    /ops instr /operands get local-def
+    /text-buf  ops 0 get local-def
+    /parse-buf ops 1 get local-def
+    /dict-base ops length 2 gt { ops 2 get } { 0 } if-else local-def
+    /flag      ops length 3 gt { ops 3 get } { 0 } if-else local-def
+    dict-base 0 eq { /dict-base h-dict-addr store } if
+    parse-buf 0 ne {
+        text-buf z-text-buf-string  parse-buf  dict-base  flag 0 ne
+            z-fill-parse-buf
+    } if
+} put
 
 % VAR:0x1C encode_text text-buf len from coded -- V5+
 % Encode `len` bytes from text-buf+from into a 6-byte (V4+) coded
@@ -7242,7 +7318,12 @@ showcase-cmds (where) {|tail|#+3
     % Inform games; some store the player object itself in global 0
     % and the location in its parent.  We walk the parent chain from
     % global 0 up to the root.
-    /cur 0 z-var-read local-def
+    %
+    % Global 0 is variable 16 -- variable 0 is the eval stack, and
+    % reading it here would POP the running game's stack, corrupting it
+    % on every /where and breaking the do-not-consume-a-turn contract
+    % above.  (Same `n 16 add` convention as /globals.)
+    /cur 16 z-var-read local-def
     cur 0 eq {
         (Global 0 is 0; can't determine location.\n) z-output-text
     } {
@@ -7436,6 +7517,7 @@ known-games (3:241006)   (The Impossible Stairs -- by Brian Rushton, ParserComp 
 known-games (17:240821)  (Forsaken Denizen -- by C.E.J. Pacian, IFComp 2024 3rd) put
 known-games (3:241016)   (Miss Gosling's Last Case -- by Daniel M. Stelzer, IFComp 2024 6th) put
 known-games (103:250928) (The Wise-Woman's Dog -- by Daniel M. Stelzer, IFComp 2025 2nd) put
+known-games (1:200928)   (The Impossible Bottle -- by Linus Akesson, IFComp 2020 1st) put
 known-games (13:040826)  (Dungeon -- 1981 PDP-10 mainframe Zork, Inform port) put
 known-games (5:140603)   (I-0 -- by Adam Cadre)                   put
 known-games (6:960613)   (A Change in the Weather -- by Andrew Plotkin) put

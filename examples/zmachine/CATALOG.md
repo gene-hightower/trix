@@ -216,6 +216,7 @@ stays raw ZSCII per spec.
 | `forsaken-denizen.z8` | V8 | 17 : 240821 | Forsaken Denizen (Dialog; from `ForsakenDenizen.zblorb`) | C.E.J. Pacian | IFComp 2024 3rd | PLAY (`--vm-size=2M`) |
 | `miss-gosling.z8` | V8 | 3 : 241016 | Miss Gosling's Last Case (Dialog; from `gosling.zblorb`) | Daniel M. Stelzer | IFComp 2024 6th | PLAY (`--vm-size=2M`) |
 | `wise-womans-dog.z8` | V8 | 103 : 250928 | The Wise-Woman's Dog (Dialog; from `hasawa.zblorb`) | Daniel M. Stelzer | IFComp 2025 2nd | PLAY (`--vm-size=2M`; 505 KB story) |
+| `impossible-bottle.z8` | V8 | 1 : 200928 | The Impossible Bottle (Dialog; from `the-impossible-bottle.zblorb`) | Linus Akesson | IFComp 2020 1st; XYZZY 2020 Best Puzzles + Best Implementation | PLAY (`--vm-size=2M`) |
 
 Sources: `ImpossibleStairs.z8` direct from
 [the IF Archive](https://ifarchive.org/if-archive/games/zcode/ImpossibleStairs.z8);
@@ -280,7 +281,16 @@ outgrows the Z-machine's 512 KB limit); it has its own instruction set and
 delegates all I/O to the Glk library, so a Z-machine interpreter cannot run it.
 These are listed here so the next person does not go looking for a Z-code build
 that does not exist -- they would need a Glulx interpreter (see
-`blorb-extract.py`, which reports `GLUL` exec chunks):
+`blorb-extract.py`, which reports `GLUL` exec chunks).
+
+Check the exec chunk rather than trusting a listing: *The Impossible Bottle*
+sat in this table until 2026-08-16 on the assumption that an IFComp-winning
+modern parser game must be Inform 7 / Glulx.  It is Dialog, and its release
+zblorb's exec chunk is `ZCOD` (V8) -- it plays, and has moved to the Dialog
+table above.  Linus Akesson wrote Dialog, which is exactly the tell that should
+have prompted a check.
+
+
 
 | Title | Author | Why |
 | --- | --- | --- |
@@ -288,7 +298,6 @@ that does not exist -- they would need a Glulx interpreter (see
 | Coloratura | Lynnea Glasser | Glulx (Inform 7) |
 | Sub Rosa | Joey Jones & Melvin Rangasamy | Glulx (Inform 7) |
 | Superluminal Vagrant Twin | C.E.J. Pacian | Glulx (Inform 7) |
-| The Impossible Bottle | Linus Akesson | Glulx (Inform 7) |
 | Violet | Jeremy Freese | Glulx (Inform 7) |
 | The Wizard Sniffer | Buster Hudson | Glulx (Inform 7) |
 | The Mary Jane of Tomorrow | Emily Short | Glulx (Inform 7) |

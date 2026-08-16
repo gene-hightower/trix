@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/zmachine.trx`: `tokenise` implemented — AGAIN and OOPS no longer hang.**
+  VAR:0x1B was a no-op stub, and Inform's parser drives both `again`/`g` and `oops` by
+  rebuilding a text buffer, re-tokenising it, and re-reading the parse results. A parse
+  buffer that never changed left it looping on the same input forever, so `g` hung *every*
+  Inform-compiled game in the catalog and `oops` answered "That's not a verb I recognise".
+  The handler reuses the existing tokenize/encode/dict-find path through a new shared
+  `z-fill-parse-buf` (the V5 `aread` handler now shares it instead of keeping its own copy);
+  `z-dict-find-at` generalizes the search to the alternate dictionary `tokenise` may name,
+  and the flag operand is honoured -- a non-zero flag leaves parse entries for unknown words
+  untouched rather than zeroing them.
+- **`examples/zmachine.trx`: `/where` no longer corrupts the running game.** It read variable
+  0 -- which *pops* the game's evaluation stack -- where its own comment said global 0, which
+  is variable 16. Four consecutive `/where` in Zork I returned four different answers, the
+  last walking garbage, and every call silently mutated VM state, breaking the showcase
+  contract that these intercepted commands are invisible to the game.
+- **`examples/zmachine.trx`: Z-characters 2 and 3 are abbreviation prefixes from V3, not V2**
+  (in V2 they are shifts) -- the decode gate contradicted the alphabet table documented a few
+  lines above it. Since no V1/V2 story is freely distributable, nothing exercises those paths,
+  so the scope claim is now stated honestly as V3-V5/V7/V8, with V1/V2 accepted but untested
+  and V1's shift-once semantics unimplemented, rather than the previous "targets V1-V5".
+- **`examples/zmachine`: *The Impossible Bottle* is playable, not out of scope.** The catalog
+  listed it as Glulx/Inform 7; it is Dialog, and `blorb-extract.py` reports its release
+  zblorb's exec chunk as `ZCOD` (V8). It boots in ~2s under `--vm-size=2M`. Moved to the
+  Dialog table, added to the fetch manifest and the in-interpreter recognition table, and the
+  Glulx section now says to check the exec chunk rather than infer from the era -- the author
+  wrote Dialog, which was the tell that should have prompted a check.
+
 ## [0.12.0] - 2026-08-16
 
 - **Release tarballs now come in a `-debugger` variant.** The default

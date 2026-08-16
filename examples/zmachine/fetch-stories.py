@@ -90,6 +90,14 @@ MANIFEST = [
     ("wise-womans-dog.z8",
      "https://ifarchive.org/if-archive/games/competition2025/Games/The_Wise_Woman_s_Dog.zip",
      "zip", "hasawa.zblorb"),
+    # IFComp 2020 1st.  Dialog -> Z-code, despite being frequently listed as
+    # Glulx/Inform 7 (this catalog said so too until 2026-08-16); the release
+    # zblorb's exec chunk is ZCOD/V8.  Fetched from the author's own site --
+    # the IF Archive copy sits behind a directory listing this script can't
+    # walk.
+    ("impossible-bottle.z8",
+     "https://hd0.linusakesson.net/files/the-impossible-bottle-rel1.zip",
+     "zip", "the-impossible-bottle.zblorb"),
     # --- Z-code classics + IFComp/award winners (added 2026-06-27) ---
     # All Z-code (verified version bytes / Blorb ZCOD exec chunk); Glulx-only
     # titles from the same request are deliberately excluded -- see CATALOG.md.
