@@ -62,5 +62,5 @@
     <text x="1174" y="820" fill="#171b26">\</text>
   </g>
   <line x1="444" y1="896" x2="824" y2="896" stroke="#7c3aed" stroke-opacity="0.55" stroke-width="1"/>
-  <text x="634" y="941" text-anchor="middle" dominant-baseline="central" font-family="'TrixMonoReg','DejaVu Sans Mono',monospace" font-size="30" fill="#6b7280">S T A C K - B A S E D   S C R I P T I N G   L A N G U A G E</text>
+  <text x="634" y="941" xml:space="preserve" text-anchor="middle" dominant-baseline="central" font-family="'TrixMonoReg','DejaVu Sans Mono',monospace" font-size="30" fill="#6b7280">S T A C K - B A S E D   S C R I P T I N G   L A N G U A G E</text>
 </svg>
