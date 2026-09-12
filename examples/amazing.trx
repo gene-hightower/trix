@@ -3336,6 +3336,200 @@
 } def
 
 % ============================================================================
+%  Section 7F: Wall components (square grid)
+% ============================================================================
+%
+%  Everything else in this program colours the FLOOR -- by BFS distance,
+%  by solver membership, by flow field.  This section colours the WALLS,
+%  and not by borrowing the floor's numbers: walls have a structure of
+%  their own that the floor cannot express.
+%
+%  A perfect maze here has exactly ONE wall component.  Every wall hangs
+%  off the border, which this program never cuts an opening in, so a hand
+%  placed anywhere on the wall reaches all of it -- which is why
+%  wall-following works.  (Cut an entrance and an exit into the border and
+%  it splits into the familiar two pieces, one per hand; we do not.)
+%
+%  Braiding is what makes the picture worth drawing.  A loop can enclose a
+%  region whose walls touch nothing outside it, and those walls are an
+%  ISLAND: no hand on any outer wall ever reaches them, which is exactly
+%  what strands a wall-follower.
+%
+%  The tempting guess is that each loop adds an island, so components =
+%  1 + loops.  It does not, and the self-test records the measurement that
+%  killed it -- on a 12x12 backtracker maze:
+%
+%      loops    0    8   12   16
+%      comps    1    5   10   15
+%
+%  A loop only makes an island if it encloses wall material, and several
+%  loops can enclose the same island, so islands run BEHIND loops.  What
+%  does hold is components - 1 <= loops: every island needs at least one
+%  independent cycle around it.  That gap is the interesting part -- the
+%  island count is what predicts a stranded wall-follower, and `--metrics`
+%  reports loops, which does not.
+%
+%  WALL SLOTS.  Walls are stored per cell as bit flags, so the same wall
+%  is reachable two ways (cell A's east wall is cell B's west wall).  To
+%  union them we need one name per wall, so index the gaps instead of the
+%  cells.  On a w x h grid:
+%
+%      V(i,j)  i in 0..w,  j in 0..h-1   vertical gap left of column i
+%      H(i,j)  i in 0..w-1, j in 0..h    horizontal gap above row j
+%
+%      slot = j*(w+1) + i                for V
+%      slot = nv + j*w + i               for H
+%
+%  and the border cases read the outward-facing bit of the edge cell.
+%
+%  VERTICES.  Wall pieces meet at grid vertices, (w+1) x (h+1) of them.
+%  Vertex (i,j) touches at most four slots: V(i,j-1), V(i,j), H(i-1,j),
+%  H(i,j).  Union every present slot at each vertex and the components
+%  fall out.
+%
+%  Two walls sharing only a vertex ARE joined here, which is the right
+%  call and not merely a convenient one: the renderer fills the
+%  wall-px square at each vertex, so walls that meet at a corner are
+%  physically joined in the picture.  The topology and the drawing agree.
+
+% (uf a b) -wc-join --
+/-wc-join {|uf a b|#+2
+    /ra uf a -uf-find local-def
+    /rb uf b -uf-find local-def
+    ra rb ne { uf ra rb chunked-put } if
+} def
+
+% (g) -wc-present -- pres nv nh nw
+%   pres[slot] = 1 when that wall stands, 0 when it has been carved away.
+/-wc-present {|g|#+12
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /nv w 1 add h mul local-def
+    /nh w h 1 add mul local-def
+    /nw nv nh add local-def
+    /pres nw chunked-array local-def
+
+    0 1 h 1 sub {|j|#+3
+        0 1 w {|i|#+2
+            /b
+                i 0 eq { g 0 j cell-at WALL-W and 0b ne } {
+                i w eq { g w 1 sub j cell-at WALL-E and 0b ne } {
+                         g i 1 sub j cell-at WALL-E and 0b ne } if-else } if-else
+                local-def
+            pres  j w 1 add mul i add  b { 1 } { 0 } if-else  chunked-put
+        } for
+    } for
+
+    0 1 h {|j|#+3
+        0 1 w 1 sub {|i|#+2
+            /b
+                j 0 eq { g i 0 cell-at WALL-N and 0b ne } {
+                j h eq { g i h 1 sub cell-at WALL-S and 0b ne } {
+                         g i j 1 sub cell-at WALL-S and 0b ne } if-else } if-else
+                local-def
+            pres  nv j w mul add i add  b { 1 } { 0 } if-else  chunked-put
+        } for
+    } for
+
+    pres nv nh nw
+} def
+
+% (g) -wall-components -- comp ncomp pres nv nw
+%   comp[slot] = component rank for a standing wall (0 = largest piece,
+%   counting down by size), or -1 where no wall stands.  Ranking by size
+%   rather than by discovery order puts the two big pieces of a perfect
+%   maze at opposite ends of the colormap, which is what makes the
+%   picture readable.
+/-wall-components {|g|#+30
+    /w g grid-w local-def
+    /h g grid-h local-def
+    g -wc-present
+    [ /pres /nv /nh /nw ] bind-locals
+
+    /uf nw chunked-array local-def
+    0 1 nw 1 sub {|i| uf i i chunked-put } for
+
+    % Union at every vertex.
+    0 1 h {|j|#+10
+        0 1 w {|i|#+10
+            /first -1 local-def
+            % V(i,j-1), V(i,j), H(i-1,j), H(i,j) -- in range and standing
+            0 1 3 {|k|#+4
+                /slot w h nv i j k -wc-vertex-slot local-def
+                slot 0 ge {
+                    pres slot chunked-get 1 eq {
+                        first 0 lt
+                            { /first slot store }
+                            { uf first slot -wc-join } if-else
+                    } if
+                } if
+            } for
+        } for
+    } for
+
+    % Size per root, then rank the roots by size.
+    /sizes nw chunked-array local-def
+    0 1 nw 1 sub {|i| sizes i 0 chunked-put } for
+    /nstanding 0 local-def
+    0 1 nw 1 sub {|s|#+2
+        pres s chunked-get 1 eq {
+            /r uf s -uf-find local-def
+            sizes r  sizes r chunked-get 1 add  chunked-put
+            /nstanding nstanding 1 add store
+        } if
+    } for
+
+    /roots 256 array local-def
+    /rsize 256 array local-def
+    /ncomp 0 local-def
+    0 1 nw 1 sub {|s|#+1
+        ncomp 256 lt {
+            sizes s chunked-get 0 gt { uf s -uf-find s eq } and? {
+                roots ncomp s put
+                rsize ncomp sizes s chunked-get put
+                /ncomp ncomp 1 add store
+            } if
+        } if
+    } for
+
+    % Insertion sort, descending by size.  ncomp is small -- two for a
+    % perfect maze, one more per loop -- so the quadratic cost is noise.
+    /a 1 local-def
+    /kr 0 local-def
+    /ks 0 local-def
+    /b 0 local-def
+    { a ncomp lt } {
+        /kr roots a get store
+        /ks rsize a get store
+        /b a 1 sub store
+        % `and` is eager and rsize[-1] is not a thing, so the bounds
+        % test gates the comparison with `and?` rather than sitting
+        % beside it.
+        { b 0 ge { rsize b get ks lt } and? } {
+            roots b 1 add  roots b get  put
+            rsize b 1 add  rsize b get  put
+            /b b 1 sub store
+        } while
+        roots b 1 add kr put
+        rsize b 1 add ks put
+        /a a 1 add store
+    } while
+
+    % root -> rank, then slot -> rank.
+    /rank-of nw chunked-array local-def
+    0 1 ncomp 1 sub {|c| rank-of roots c get  c  chunked-put } for
+    /comp nw chunked-array local-def
+    0 1 nw 1 sub {|s|#+1
+        pres s chunked-get 1 eq
+            { comp s  rank-of uf s -uf-find chunked-get  chunked-put }
+            { comp s -1 chunked-put }
+        if-else
+    } for
+
+    comp ncomp pres nv nw
+} def
+
+% ============================================================================
 %  Section 7D: BFS distance field
 % ============================================================================
 %
@@ -4345,6 +4539,133 @@
                       cr cg cb fill-rect
             } if
             rows x0 y0 cell-px wall-px cell-byte cr cg cb -draw-bridge-weave
+        } for
+    } for
+
+    [ img-w img-h rows ]
+} def
+
+% ============================================================================
+%  Section 10A-bis: Wall-component renderer (square)
+% ============================================================================
+%
+%  The square renderer paints floors over a wall-coloured background, so
+%  walls are whatever never got painted.  That will not do here: each
+%  wall needs its own colour, so each one has to be painted explicitly.
+%
+%  The image tiles exactly into three kinds of rectangle, which is what
+%  makes this tractable:
+%
+%      floor (i,j)   cell-px  x cell-px   at (i*step + wall-px, j*step + wall-px)
+%      V(i,j)        wall-px  x cell-px   at (i*step,           j*step + wall-px)
+%      H(i,j)        cell-px  x wall-px   at (i*step + wall-px, j*step)
+%      vertex (i,j)  wall-px  x wall-px   at (i*step,           j*step)
+%
+%  Vertices are the reason the earlier worry about colour fringing at
+%  junctions came to nothing.  Walls meeting at a vertex are unioned BY
+%  that vertex, so they are always the same component -- whichever
+%  standing wall we ask, the answer is the same colour.  A vertex with no
+%  standing wall is open floor and keeps the background.
+
+% (w h nv i j k) -wc-vertex-slot -- slot   (-1 when out of range)
+%   The four slots that can meet at vertex (i,j): V(i,j-1), V(i,j),
+%   H(i-1,j), H(i,j).  Shared by the component finder and the renderer so
+%   the two cannot disagree about what touches what.
+/-wc-vertex-slot {|w h nv i j k|
+    k 0 eq { j 1 ge { j 1 sub w 1 add mul i add } { -1 } if-else } {
+    k 1 eq { j h lt { j w 1 add mul i add } { -1 } if-else } {
+    k 2 eq { i 1 ge { nv j w mul add i add 1 sub } { -1 } if-else } {
+              i w ne { nv j w mul add i add } { -1 } if-else } if-else } if-else } if-else
+} def
+
+% (wcmap wstops maxc rank) -wc-color -- r g b
+%   Rank 0 is the piece still joined to the border.  It keeps --wall-color:
+%   it is the wall, not an anomaly, and a perfect maze -- which is nothing
+%   BUT rank 0 -- then renders exactly as it does without --wall-cmap.  The
+%   ramp is spent entirely on the islands, so the full range of contrast
+%   lands on the thing worth seeing, and a colormap whose first stop sits
+%   near-white (twilight is cyclic) no longer hides the backbone against
+%   the background.
+/-wc-color {|wcmap wstops maxc rank|
+    rank 0 eq
+        { opt-wall-r opt-wall-g opt-wall-b }
+        { wcmap wstops  rank 1 sub /uinteger-type cast  maxc  cmap-color }
+    if-else
+} def
+
+% (g cell-px wall-px wcmap wstops) wall-color-render -- [img-w img-h rows]
+/wall-color-render {|g cell-px wall-px wcmap wstops|#+30
+    /w g grid-w local-def
+    /h g grid-h local-def
+    /step cell-px wall-px add local-def
+    /img-w w step mul wall-px add local-def
+    /img-h h step mul wall-px add local-def
+    /rows img-w img-h opt-bg-r opt-bg-g opt-bg-b make-pixel-rows-filled local-def
+
+    g -wall-components
+    [ /comp /ncomp /pres /nv /nw ] bind-locals
+
+    % Islands are ranks 1..ncomp-1, largest first, so the ramp is sized to
+    % ncomp-2.  One or two components leaves maxc = 0, which cmap-color
+    % reads as t = 0 -- the single island takes the first stop.
+    /maxc ncomp 2 sub 0 max /uinteger-type cast local-def
+
+    % Vertical walls.
+    0 1 h 1 sub {|j|#+10
+        0 1 w {|i|#+10
+            /slot j w 1 add mul i add local-def
+            pres slot chunked-get 1 eq {
+                wcmap wstops maxc  comp slot chunked-get  -wc-color
+                [ /vr /vg /vb ] bind-locals
+                rows
+                    i step mul
+                    j step mul wall-px add
+                    i step mul wall-px add 1 sub
+                    j step mul wall-px add cell-px add 1 sub
+                    vr vg vb fill-rect
+            } if
+        } for
+    } for
+
+    % Horizontal walls.
+    0 1 h {|j|#+10
+        0 1 w 1 sub {|i|#+10
+            /slot nv j w mul add i add local-def
+            pres slot chunked-get 1 eq {
+                wcmap wstops maxc  comp slot chunked-get  -wc-color
+                [ /hr /hg /hb ] bind-locals
+                rows
+                    i step mul wall-px add
+                    j step mul
+                    i step mul wall-px add cell-px add 1 sub
+                    j step mul wall-px add 1 sub
+                    hr hg hb fill-rect
+            } if
+        } for
+    } for
+
+    % Vertices.
+    0 1 h {|j|#+12
+        0 1 w {|i|#+12
+            /vslot -1 local-def
+            0 1 3 {|k|#+2
+                vslot 0 lt {
+                    /cand w h nv i j k -wc-vertex-slot local-def
+                    cand 0 ge { pres cand chunked-get 1 eq } and? {
+                        /vslot cand store
+                    } if
+                } if
+            } for
+            vslot 0 ge {
+                wcmap wstops maxc  comp vslot chunked-get  -wc-color
+                [ /jr /jg /jb ] bind-locals
+                rows
+                    i step mul
+                    j step mul
+                    i step mul wall-px add 1 sub
+                    j step mul wall-px add 1 sub
+                    jr jg jb fill-rect
+            } if
         } for
     } for
 
@@ -6889,6 +7210,64 @@
     tc
 } def
 
+% ----- Wall components (Section 7F) ---------------------------------------
+
+% (g) -count-passages -- n   open interior passages (E + S per cell)
+/-count-passages {|g|#+5
+    /pw g grid-w local-def
+    /ph g grid-h local-def
+    /pc 0 local-def
+    0 1 ph 1 sub {|cy|#+4
+        0 1 pw 1 sub {|cx|#+2
+            /pv g cx cy cell-at local-def
+            cx pw 1 sub lt { pv WALL-E and 0b eq { /pc pc 1 add store } if } if
+            cy ph 1 sub lt { pv WALL-S and 0b eq { /pc pc 1 add store } if } if
+        } for
+    } for
+    pc
+} def
+
+/test-wall-render {||#+16
+    1ul rand-seed
+    /rg 8 8 make-grid local-def
+    rg 0 0 recursive-backtracker
+    (viridis) get-cmap
+    /rstops exch local-def
+    /rbuf   exch local-def
+    /rpic rg 10 4 rbuf rstops wall-color-render local-def
+    % step = cell + wall = 14, so 8*14 + 4 on each axis.
+    (wall-render: image width matches the tiling)   rpic 0 get 8 14 mul 4 add eq  expect
+    (wall-render: image height matches the tiling)  rpic 1 get 8 14 mul 4 add eq  expect
+    (wall-render: row count matches the height)     rpic 2 get length 8 14 mul 4 add eq  expect
+} def
+
+/test-wall-components {||#+14
+    1ul rand-seed
+
+    % A perfect maze is one piece: every wall hangs off the uncut border.
+    /wg 12 12 make-grid local-def
+    wg 0 0 recursive-backtracker
+    wg -wall-components
+    [ /wcomp /wn /wpres /wnv /wnw ] bind-locals
+    (wall-components: a perfect maze is one piece)  wn 1 eq  expect
+    (wall-components: every standing wall is ranked)
+        wcomp wnv chunked-get -1 ge  expect
+
+    % Braiding strands islands, but fewer of them than it adds loops --
+    % a loop only makes an island when it encloses wall material, and
+    % several loops can share one.  Measured at 12x12: 8 loops -> 5
+    % components, 12 -> 10, 16 -> 15.  What must hold is the bound.
+    /wg2 12 12 make-grid local-def
+    wg2 0 0 recursive-backtracker
+    wg2 1.0r braid
+    /wpass wg2 -count-passages local-def
+    /wloops wpass 12 12 mul sub 1 add local-def
+    wg2 -wall-components
+    [ /wcomp2 /wn2 /wpres2 /wnv2 /wnw2 ] bind-locals
+    (wall-components: braiding strands islands)      wn2 1 gt          expect
+    (wall-components: islands never outrun loops)    wn2 1 sub wloops le  expect
+} def
+
 /test-braid {||#+5
     1ul rand-seed
     /bg 10 10 make-grid local-def
@@ -7515,6 +7894,7 @@
 /opt-algo     (backtrack) def         % backtrack | kruskal | wilson
 /opt-flow     ()          def         % "" = off; radial | linear | spiral | sine (weighted Kruskal)
 /opt-flow-jitter 3        def         % --flow tie-break randomness in buckets: 0 = strict art, high = twistier
+/opt-wall-cmap (none)     def         % colour walls by connected component using this colormap (square only); none = flat --wall-color
 /opt-color    (mono)      def         % mono | viridis | magma | inferno | plasma | cividis | turbo | rainbow | cubehelix | grayscale | two-tone | fire-ice | spectral | coolwarm | twilight
 /opt-color-curve  1.0r    def         % gamma applied to the distance ramp (>1 spreads near cells, <1 spreads far); 1.0 = linear
 /opt-color-cycles 0       def         % sine-wave (raised-cosine) palette repeats across the range; 0 = off, N = N seamless bands
@@ -7564,6 +7944,9 @@ OPTIONS
     --cell-px N         Pixels per cell (default 16)
     --wall-px N         Wall thickness in pixels (default 2)
     --wall-color HEX    Maze line color as RRGGBB (default 000000 = black)
+    --wall-cmap NAME    Color the wall islands braiding strands, square grid
+                        only.  The piece still joined to the border keeps
+                        --wall-color, so a perfect maze looks unchanged.
     --bg-color HEX      Passage/background color as RRGGBB (default FFFFFF)
 
   Topology + algorithm:
@@ -7709,6 +8092,7 @@ EXAMPLES
                     /i i 2 add store }
     (--flow-image-dir){ /opt-flow-dir args i 1 add get store  /i i 2 add store }
     (--color)     { /opt-color args i 1 add get store  /i i 2 add store }
+    (--wall-cmap) { /opt-wall-cmap args i 1 add get store  /i i 2 add store }
     (--color-curve){ /opt-color-curve args i 1 add get to-number /real-type cast store  /i i 2 add store }
     (--color-cycles){ /opt-color-cycles args i 1 add get to-number store  /i i 2 add store }
     (--start)     { ||#+1 /sparts args i 1 add get (,) split local-def
@@ -8720,6 +9104,8 @@ opt-self-test {
     test-theta-bfs-solve
     test-triangle-bfs-solve
     test-braid
+    test-wall-components
+    test-wall-render
     test-hex-braid
     test-theta-braid
     test-triangle-braid
@@ -8848,6 +9234,16 @@ opt-self-test {
         /opt-hardest false store
     } if
 
+    % --wall-cmap decorates rather than deciding what maze you get, so by
+    % the same rule it yields to --grid instead of forcing square.  The
+    % other topologies store walls per cell too, but their wall pieces
+    % meet at vertices this section has no geometry for yet.
+    opt-wall-cmap (none) ne  opt-grid (square) ne  and {
+        stderr (amazing: --wall-cmap is square-only; ignoring it on --grid ) write-string
+        stderr opt-grid write-string  stderr (\n) write-string  stderr flush-stream
+        /opt-wall-cmap (none) store
+    } if
+
     % Generate the maze.  Each non-square topology builds its grid then
     % runs the requested --algo through its descriptor + dispatch-algo-td,
     % so the seven portable generators (backtrack/kruskal/wilson/aldous-
@@ -8911,6 +9307,12 @@ opt-self-test {
 
         % Render.  Mono is its own fast path; every other colormap goes
         % through BFS + cmap-color.
+        opt-wall-cmap (none) ne {
+            opt-wall-cmap get-cmap
+            /wcmap-stops exch def
+            /wcmap-buf   exch def
+            /pic grid opt-cell-px opt-wall-px wcmap-buf wcmap-stops wall-color-render def
+        } {
         opt-color (mono) eq {
             /pic grid opt-cell-px opt-wall-px mono-render def
         } {
@@ -8924,7 +9326,7 @@ opt-self-test {
             /cmap-stops exch def
             /cmap-buf   exch def
             /pic grid opt-cell-px opt-wall-px dist max-d cmap-buf cmap-stops color-render def
-        } if-else
+        } if-else } if-else
     } if-else
     } if-else
     } if-else

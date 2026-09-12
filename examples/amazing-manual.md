@@ -562,6 +562,58 @@ the unique path length; the field also records `max-d`, the eccentricity used to
 normalize colors. Every topology has its own BFS variant with the same shape but
 the right neighbor set.
 
+### Coloring the walls instead of the floor
+
+`--color` colors the **floor** by BFS distance. `--wall-cmap NAME` colors the
+**walls**, and not with the floor's numbers: walls have a structure of their own
+that distance cannot express.
+
+Walls are stored per cell as bit flags, so the same wall is reachable two ways.
+Section 7F indexes the *gaps* instead -- `V(i,j)` for the vertical gap left of
+column `i`, `H(i,j)` for the horizontal gap above row `j` -- unions every wall
+that meets at each grid vertex, and ranks the resulting components by size.
+
+**Rank 0 keeps `--wall-color`.** It is the piece still joined to the border --
+the wall, not an anomaly -- so the colormap is spent entirely on the islands.
+Two things follow. A perfect maze renders *exactly* as it does without the flag,
+because a perfect maze is nothing but rank 0: this program never cuts an opening
+in the border, so every wall hangs off it and a hand placed anywhere reaches all
+of it, which is precisely why `--solver wall-follower` works. (Cut an entrance
+and an exit and it would split into the familiar two pieces, one per hand.) And
+every colormap stays usable, including the cyclic `twilight`, whose near-white
+first stop would otherwise have hidden the backbone against the background.
+
+**Braiding is what makes the picture worth drawing.** A loop can enclose a
+region whose walls touch nothing outside it, and those walls are an *island* --
+no hand on any outer wall ever reaches them, which is what strands a
+wall-follower:
+
+    amazing --size 24x24 --seed 7 --wall-px 4 --braid 1.0 --wall-cmap turbo
+
+The black backbone is the piece still joined to the border; every coloured
+fragment is stranded. Give it room -- `--wall-px 1` is too thin to carry colour,
+and this is one of the few features that wants a heavy wall; 4 to 8 reads well.
+
+The tempting guess is that each loop adds an island, so components = 1 + loops.
+It does not. Measured on a 12x12 backtracker maze:
+
+| loops      | 0   | 8   | 12  | 16  |
+| ---------- | --- | --- | --- | --- |
+| components | 1   | 5   | 10  | 15  |
+
+A loop only makes an island if it encloses wall material, and several loops can
+enclose the same one, so islands run behind loops. What does hold is
+`components - 1 <= loops`: every island needs at least one independent cycle
+around it. The gap is the interesting part -- the island count predicts a
+stranded wall-follower and `--metrics` reports loops, which per this table does
+not.
+
+`--wall-cmap` decorates rather than deciding what maze you get, so per the
+precedence rule in section 4.8 it **yields to `--grid`**: on a non-square
+topology it warns and is dropped rather than forcing the square grid. The other
+grids store walls per cell too, but their pieces meet at vertices this section
+has no geometry for yet.
+
 **The colormaps** (`--color NAME`, Section 9B). Fourteen are
 available; the default is `mono` (plain black/white, no distance field computed):
 
@@ -985,6 +1037,7 @@ Flags are parsed in `/parse-args` against a string-keyed `arg-dispatch` table. A
 | `--cell-px` | int | Pixels per cell | `16` |
 | `--wall-px` | int | Wall thickness in pixels | `2` |
 | `--wall-color` | `RRGGBB` | Maze line color (hex; `#` optional) | `000000` |
+| `--wall-cmap` | name | Color walls by connected component (square only) | `none` |
 | `--bg-color` | `RRGGBB` | Passage / background color (hex) | `FFFFFF` |
 | `--seed` | uint | RNG seed; `0` seeds from the clock and echoes the seed it picked, so the maze can be reproduced ([§9.1](#91-reproducing-a-clock-seeded-maze)) | `0` |
 | `--out` | file | Output PNG path (or pass it positionally) | `maze.png` |
