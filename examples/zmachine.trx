@@ -3449,12 +3449,17 @@ dispatch-0op 8 {|instr|
 
 % 0OP:0x0A quit
 dispatch-0op 16#0A {|instr|
+    z-wrap-flush
     /z-quit-flag true store
 } put
 
 % 0OP:0x0B new_line
+% 0OP:0xB new_line -- must go through the router, not Trix's `nl`.
+% Printing the newline straight to stdout worked while nothing was
+% buffered; with §9's word wrap holding a word it puts the break in
+% front of text that was written before it.
 dispatch-0op 16#0B {|instr|
-    nl
+    (\n) z-output-text
 } put
 
 % ----- save / restore / restart (V1-3 forms)
@@ -4629,7 +4634,13 @@ dispatch-var 3 {|instr|
 %                 then resets the counter
 % Both gate on z-status-tty? so non-tty stdouts skip them entirely
 % (transcripts and automated runs stay full-speed).
+/z-wrap-capture    () def
+/z-wrap-capturing  false def
+
 /z-stdout-emit {|s|#+8
+    z-wrap-capturing {
+        /z-wrap-capture z-wrap-capture s concat store
+    } {
     mode-typewriter not mode-pager not and z-status-tty? not or {
         s print flush
     } {
@@ -4666,6 +4677,145 @@ dispatch-var 3 {|instr|
             } if
         } for
         flush
+    } if-else } if-else
+} def
+
+% ----- word wrap (spec §8.4)
+%
+% "It is the interpreter's responsibility to word-wrap the lower window."
+% Until now this interpreter did not: it handed whole strings to the
+% terminal and let the terminal break them wherever the right margin
+% fell, which splits words down the middle.  Every game in the catalog
+% showed it, and it is the loudest "this is not a real terp" tell there
+% is -- Frotz, Bocfel and Fizmo all wrap.
+%
+% The unit of the algorithm is the word, so a word cannot be emitted the
+% moment it is seen: whether it starts a new line depends on how long it
+% turns out to be.  Text therefore accumulates in z-wrap-buf until
+% something ends the word -- a space, a newline, or a flush -- and only
+% then is it placed:
+%
+%   col + gap + word > cols  ->  break the line, drop the gap, emit word
+%   otherwise                ->  emit gap, emit word
+%
+% Dropping the gap at a break is what keeps wrapped lines from starting
+% with a stray space -- and the whole gap goes, which is why a space
+% counts the run rather than committing it: flushing on every space
+% would pin each one to the current line, and a run straddling the
+% margin would leave one space stranded at the end of a line and
+% another at the start of the next.  Runs are preserved rather than
+% collapsed, because games indent and centre with them.
+%
+% ESCAPE SEQUENCES ride along with the word they decorate but occupy no
+% columns -- set_colour and set_text_style emit SGR through this path,
+% and counting those bytes would wrap a styled line dozens of columns
+% early.  A malformed sequence (a game printing a bare ESC) leaves the
+% state machine hunting for a terminator, which costs column accounting
+% until the next one arrives; no text is lost, the tail just stops
+% wrapping.
+%
+% FLUSHING is not optional.  A word sits in the buffer, invisible, until
+% something ends it, so every path that hands the terminal to someone
+% else has to flush first: reading input (the ">" prompt is a pending
+% word), switching windows, opening a memory stream, quitting.
+%
+% WIDTH is z-screen-cols, fixed at 80 and settable with --columns, NOT
+% the live terminal width.  Two reasons: it is the width the header
+% advertises to the game, so the game's own centring and box-drawing
+% agree with our wrapping; and it keeps --script transcripts identical
+% regardless of the terminal they were recorded on, which a live width
+% would not.
+
+/z-screen-cols 80 def
+
+/z-wrap-on     true def    % buffer_mode; V4+ games may switch it off
+/z-wrap-col    0    def    % columns already committed on this line
+/z-wrap-buf    256  string def
+/z-wrap-n      0    def    % bytes held
+/z-wrap-cols   0    def    % how many of those bytes occupy a column
+/z-wrap-spaces 0    def    % pending gap between the last word and the next
+/z-wrap-esc    0    def    % 0 = text, 1 = saw ESC, 2 = inside a CSI
+
+/z-wrap-sp 256 string def
+/z-wrap-sp-init {||#+1
+    0 1 255 {
+        /i exch local-def
+        z-wrap-sp i 32 /byte-type cast put
+    } for
+} def
+z-wrap-sp-init
+
+% z-wrap-flush --
+% Place the pending gap and word.  Safe to call at any time, including
+% when nothing is pending.
+/z-wrap-flush {||#+1
+    z-wrap-spaces 0 gt z-wrap-n 0 gt or {
+        /need z-wrap-spaces z-wrap-cols add local-def
+        z-wrap-col 0 gt  z-wrap-col need add z-screen-cols gt  and {
+            (\n) z-stdout-emit
+            /z-wrap-col 0 store
+            /z-wrap-spaces 0 store
+        } if
+        z-wrap-spaces 0 gt {
+            z-wrap-sp 0 z-wrap-spaces get-interval z-stdout-emit
+            /z-wrap-col z-wrap-col z-wrap-spaces add store
+            /z-wrap-spaces 0 store
+        } if
+        z-wrap-n 0 gt {
+            z-wrap-buf 0 z-wrap-n get-interval z-stdout-emit
+            /z-wrap-col z-wrap-col z-wrap-cols add store
+            /z-wrap-n 0 store
+            /z-wrap-cols 0 store
+        } if
+    } if
+} def
+
+% z-wrap-put c --
+% Hold one byte as part of the current word.  A word too long for the
+% buffer is emitted in pieces rather than lost; at 256 characters it is
+% past anything the wrap rules can help with anyway.
+/z-wrap-put {|c|
+    z-wrap-n 256 ge { z-wrap-flush } if
+    z-wrap-buf z-wrap-n c /byte-type cast put
+    /z-wrap-n z-wrap-n 1 add store
+} def
+
+% z-wrap-emit s --
+% The lower-window sink.  Feeds z-stdout-emit, which still owns the
+% --typewriter and --pager behaviours and the actual write.
+/z-wrap-emit {|s|#+3
+    z-wrap-on not {
+        s z-stdout-emit
+    } {
+        0 1 s length 1 sub {
+            /i exch local-def
+            /c s i get /integer-type cast local-def
+            z-wrap-esc 0 gt {
+                c z-wrap-put
+                z-wrap-esc 1 eq {
+                    c 16#5B eq { /z-wrap-esc 2 store } { /z-wrap-esc 0 store } if-else
+                } {
+                    c 16#40 ge c 16#7E le and { /z-wrap-esc 0 store } if
+                } if-else
+            } {
+            c 16#1B eq {
+                /z-wrap-esc 1 store
+                c z-wrap-put
+            } {
+            c 16#0A eq {
+                z-wrap-flush
+                (\n) z-stdout-emit
+                /z-wrap-col 0 store
+            } {
+            c 32 eq {
+                z-wrap-n 0 gt { z-wrap-flush } if
+                z-wrap-spaces 256 ge { z-wrap-flush } if
+                /z-wrap-spaces z-wrap-spaces 1 add store
+            } {
+                c z-wrap-put
+                /z-wrap-cols z-wrap-cols 1 add store
+            } if-else } if-else } if-else } if-else
+        } for
     } if-else
 } def
 
@@ -4689,7 +4839,7 @@ dispatch-var 3 {|instr|
     z-window-active 1 eq z-status-tty? and z-upper-height 0 gt and {
         s z-upper-write
     } {
-        s z-stdout-emit
+        s z-wrap-emit
     } if-else } if-else } if-else
 } def
 
@@ -4851,9 +5001,14 @@ dispatch-var 16#0A {|instr| } put
 dispatch-var 16#0B {|instr| } put
 
 % VAR:0x12 buffer_mode -- spec §15: V4+ word-wrap buffer toggle.
-% We never word-wrap-buffer (terminal handles wrapping), so the toggle
-% has no observable effect.  Spec-conformant as a no-op.
-dispatch-var 16#12 {|instr| } put
+% Operand 0 turns buffering off, so text reaches the terminal unwrapped
+% and the game takes responsibility for its own line breaks; anything
+% else turns it back on.  Flush on the way through either way -- the
+% held word belongs to the mode that was in force when it was written.
+dispatch-var 16#12 {|instr|#+1
+    z-wrap-flush
+    /z-wrap-on instr /operands get 0 get 0 ne store
+} put
 
 % VAR:0x13 output_stream num [table]
 %   Spec §7.1.2: streams are 1=screen (default on), 2=transcript file
@@ -4864,6 +5019,7 @@ dispatch-var 16#12 {|instr| } put
 %   to scrape what was rendered.  Stack of up to 16 nested tables per
 %   spec §7.1.2.3.
 dispatch-var 16#13 {|instr|#+5
+    z-wrap-flush
     /num instr /operands get 0 get z-as-signed local-def
     num 3 eq {
         z-stream3-top 16 lt {
@@ -4903,7 +5059,7 @@ dispatch-var 16#15 {|instr| } put
 % Simpler: capture by overriding z-output-text with a buffer-append
 % during the test.
 
-/run-phase9-tests { ||#+10
+/run-phase9-tests { ||#+16
     /z-eval-top 0 store
     /z-frame-top 0 store
 
@@ -4972,6 +5128,76 @@ dispatch-var 16#15 {|instr| } put
     z-test-capture (ab) eq                       (§9 print_paddr V3 *2 decodes) rt-ok
 
     /z-test-capturing false store
+
+    % ----- word wrap (§9 wrap engine)
+    %
+    % z-test-capturing is consumed by the router one branch above the
+    % lower window, so these drive z-wrap-emit directly and read back
+    % through the z-wrap-capturing seam in z-stdout-emit.
+    /saved-cols z-screen-cols local-def
+    /saved-on   z-wrap-on local-def
+
+    /wrap-run {|text|
+        /z-wrap-capture () store
+        /z-wrap-col 0 store
+        /z-wrap-n 0 store
+        /z-wrap-cols 0 store
+        /z-wrap-spaces 0 store
+        /z-wrap-esc 0 store
+        /z-wrap-capturing true store
+        text z-wrap-emit
+        z-wrap-flush
+        /z-wrap-capturing false store
+        z-wrap-capture
+    } local-def
+
+    /z-screen-cols 20 store
+    /z-wrap-on true store
+
+    (the quick brown fox jumps over the lazy dog) wrap-run
+        (the quick brown fox\njumps over the lazy\ndog) eq
+                                                   (§9 wrap breaks at 20 columns) rt-ok
+
+    % A break drops the gap it broke at; an explicit newline keeps its own.
+    (aaaa bbbb cccc dddd eeee) wrap-run
+        (aaaa bbbb cccc dddd\neeee) eq             (§9 wrap drops the broken gap) rt-ok
+    (abc\ndef) wrap-run (abc\ndef) eq              (§9 newline resets the column) rt-ok
+
+    % Games indent and centre with runs of spaces, so runs survive.
+    (  indented text) wrap-run (  indented text) eq (§9 wrap keeps a space run)   rt-ok
+
+    % ...but a run that straddles the margin goes entirely into the break,
+    % rather than leaving one space behind and carrying another across.
+    (aaaaaaaaaaaaaaaaaaa   bbb) wrap-run
+        (aaaaaaaaaaaaaaaaaaa\nbbb) eq              (§9 wrap eats the broken run)  rt-ok
+
+    % A pending word is invisible until something ends it -- this is the
+    % ">" prompt case that made flushing before input mandatory.
+    (>) wrap-run (>) eq                            (§9 flush emits a held word)   rt-ok
+
+    % SGR bytes ride with the word and occupy no columns: with the escape
+    % counted, this would break a line early.
+    (aaaa \x1B[31mbbbb\x1B[39m cccc dddd) wrap-run
+        (aaaa \x1B[31mbbbb\x1B[39m cccc dddd) eq   (§9 escapes cost no columns)   rt-ok
+
+    % A word wider than the screen goes out whole; the next gap breaks.
+    /z-screen-cols 10 store
+    (aa supercalifragilistic bb) wrap-run
+        (aa\nsupercalifragilistic\nbb) eq           (§9 overlong word is not split) rt-ok
+
+    % buffer_mode 0: straight through, breaks are the game's problem.
+    /z-screen-cols 20 store
+    /z-wrap-on false store
+    (the quick brown fox jumps over the lazy dog) wrap-run
+        (the quick brown fox jumps over the lazy dog) eq
+                                                   (§9 buffer_mode off disables wrap) rt-ok
+
+    /z-screen-cols saved-cols store
+    /z-wrap-on saved-on store
+    /z-wrap-col 0 store
+    /z-wrap-n 0 store
+    /z-wrap-cols 0 store
+    /z-wrap-spaces 0 store
 } def
 
 % ============================================================================
@@ -5043,6 +5269,9 @@ dispatch-var 16#15 {|instr| } put
 %                   so the dispatcher exits cleanly.  Echoes commands
 %                   to z-output-text so the transcript shows them.
 /z-read-line-raw { ||#+2
+    % The prompt is a pending word until something ends it, and nothing
+    % will: the game stops printing and waits for us.
+    z-wrap-flush
     z-input-source /test-buf eq {
         z-test-input
     } {
@@ -5678,7 +5907,15 @@ dispatch-var 4 {|instr|#+16
 % Used when stdout isn't a tty, or when a test capture is active.  Kept
 % so the §11 self-test assertions (which inspect z-test-capture) still see
 % the location name + Score:/Time: text in the captured output.
-/z-show-status-inline {||#+4
+/z-show-status-inline {||#+5
+    % The status line is a fixed-width bar, not prose: word-wrapping it
+    % splits "Score: 0 Moves: 4" across two lines whenever the game left
+    % the cursor far enough along.  Flush what the game was writing, put
+    % the bar out unwrapped, and resync the column -- the bar ends in a
+    % newline, so the lower window restarts at 0.
+    z-wrap-flush
+    /saved-wrap z-wrap-on local-def
+    /z-wrap-on false store
     /loc-obj 16 z-global-read local-def
     /val1    17 z-global-read local-def
     /val2    18 z-global-read local-def
@@ -5698,6 +5935,8 @@ dispatch-var 4 {|instr|#+16
         } if-else
         (\x1B[0m\n) z-output-text
     } if
+    /z-wrap-on saved-wrap store
+    /z-wrap-col 0 store
 } def
 
 % z-show-status-topline --
@@ -5850,7 +6089,7 @@ dispatch-var 4 {|instr|#+16
         16#1E 6  /byte-type cast    sb-byte-put          % interpreter # = IBM PC
         16#1F 16#41 /byte-type cast sb-byte-put          % interpreter version = 'A'
         16#20 25 /byte-type cast    sb-byte-put          % screen height (lines)
-        16#21 80 /byte-type cast    sb-byte-put          % screen width (chars)
+        16#21 z-screen-cols /byte-type cast sb-byte-put  % screen width (chars)
 
         % Flags1 (byte 0x01) capability bits, V4+ spec §11.1:
         %   bit 2 = boldface, bit 3 = italic, bit 4 = fixed-space
@@ -5863,7 +6102,7 @@ dispatch-var 4 {|instr|#+16
     } if
     h-version 5 ge {
         16#22 0  /byte-type cast    sb-byte-put
-        16#23 80 /byte-type cast    sb-byte-put          % screen W units
+        16#23 z-screen-cols /byte-type cast sb-byte-put  % screen W units
         16#24 0  /byte-type cast    sb-byte-put
         16#25 25 /byte-type cast    sb-byte-put          % screen H units
         16#26 1  /byte-type cast    sb-byte-put
@@ -6136,6 +6375,7 @@ dispatch-var 16#0A {|instr|#+3
 %          cursor is reset to (1,1) when entering it.
 % Re-registered here over the §9 stub.
 dispatch-var 16#0B {|instr|#+1
+    z-wrap-flush
     /n instr /operands get 0 get local-def
     h-version 4 ge {
         /z-window-active n store
@@ -8632,6 +8872,7 @@ z-auto-map-dirs (exit)      (out)   put
     (  --typewriter         per-char delay on game output \(tty only\)\n) print
     (  --typewriter-delay=<ms>  per-char delay \(default 12, ~80 cps\)\n) print
     (  --save-file=<path>   Quetzal save file \(default: story path, .qzl\)\n) print
+    (  --columns=<n>       lower-window wrap width, 20..255 \(default 80\)\n) print
 } def
 
 /mode-header        false def
@@ -8691,6 +8932,14 @@ z-auto-map-dirs (exit)      (out)   put
             arg 0 14 get-interval (--pager-pause=) eq {
                 /ppval arg 14 arg length 14 sub get-interval z-parse-int local-def
                 ppval 0 ge { /pager-pause-ms ppval store } if
+            } if
+        } if
+        % --columns=<n> sets the lower window's wrap width (§9) and the
+        % screen width the V4+ header advertises; they must agree.
+        arg length 10 gt {
+            arg 0 10 get-interval (--columns=) eq {
+                /cval arg 10 arg length 10 sub get-interval z-parse-int local-def
+                cval 20 ge cval 255 le and { /z-screen-cols cval store } if
             } if
         } if
         % --save-file=<path> puts the game's save/restore file somewhere

@@ -67,6 +67,7 @@ spec into ~7900 lines of Trix.  No prior background assumed.
   - [9.1 V3 Status Line](#91-v3-status-line)
   - [9.2 V4+ Split Window](#92-v4-split-window)
   - [9.3 Output Stream Routing](#93-output-stream-routing)
+  - [9.4 Word Wrap](#94-word-wrap)
 - [10. Save, Restore, and Undo](#10-save-restore-and-undo)
   - [10.1 On-Disk Save / Restore -- Quetzal](#101-on-disk-save--restore----quetzal)
   - [10.2 The Manual Snapshot System (save_undo)](#102-the-manual-snapshot-system-save_undo)
@@ -726,7 +727,54 @@ Per spec §7.1.2, the Z-Machine has four output streams:
    Trix string buffer for self-test assertions.
 3. **Upper window** -- when window 1 is active and stdout is a tty,
    routes to `z-upper-write` for cursor-positioned output.
-4. **Stdout** -- the default lower-window scrolling stream.
+4. **Stdout** -- the default lower-window scrolling stream, through the
+   word wrapper below.
+
+### 9.4 Word Wrap
+
+Spec §8.4 makes the interpreter responsible for word-wrapping the lower
+window, and until recently this one did not: it handed whole strings to
+the terminal and let the terminal break them wherever the right margin
+fell, mid-word.  `z-wrap-emit` now sits between the router and stdout.
+
+The unit is the word, so a word cannot go out when it is seen -- whether
+it starts a new line depends on how long it turns out to be.  Text
+accumulates until something ends the word, and only then is it placed:
+
+    col + gap + word > cols   ->  break, drop the gap, emit the word
+    otherwise                 ->  emit the gap, emit the word
+
+Dropping the gap is what keeps a wrapped line from starting with a stray
+space, and the *whole* gap goes, which is why a space counts its run
+rather than committing it: flushing on every space would pin each one to
+the current line, stranding one at the end and carrying another across.
+Runs are preserved otherwise -- games indent and centre with them.
+
+Escape sequences ride along with the word they decorate but occupy no
+columns; `set_colour` and `set_text_style` emit SGR through this path,
+and counting those bytes would wrap a styled line dozens of columns early.
+
+**Flushing is not optional.**  A held word is invisible until something
+ends it, so every path that hands the terminal to someone else flushes
+first: reading input (the `>` prompt is itself a held word), `set_window`,
+`output_stream`, `quit`, `buffer_mode`.  `new_line` (0OP:0xB) had to stop
+calling Trix's `nl` and route through `z-output-text` for the same reason
+-- printing its newline straight to stdout put the break in front of text
+written before it.  The V3 status line is exempt and emitted unwrapped: it
+is a fixed-width bar, and wrapping split `Score: 0   Moves: 4` across two
+lines whenever the game had left the cursor far enough along.
+
+`buffer_mode` (VAR:0x12) was a documented no-op and is now real: operand 0
+turns wrapping off and hands line breaks back to the game.
+
+Width is `z-screen-cols` -- 80, settable with `--columns=<n>` -- and
+deliberately not the live terminal width.  It is the width the header
+advertises to the game, so the game's own centring agrees with our
+breaking, and it keeps `--script` transcripts identical regardless of the
+terminal that recorded them.
+
+With this in, our prose output is line-for-line identical to Frotz's for
+the same story and commands.
 
 ---
 

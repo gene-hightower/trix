@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/zmachine.trx`: the lower window is word-wrapped.** Spec §8.4 makes
+  word-wrapping the interpreter's job, and this one did not do it: whole strings went
+  to the terminal, which broke them wherever the right margin fell, mid-word. Every
+  game in the catalog showed it. New §9 `z-wrap-emit` holds a word until something
+  ends it, then breaks the line when `col + gap + word` exceeds the width and drops
+  the gap into the break. Prose output is now line-for-line identical to Frotz's for
+  the same story and commands.
+  - The whole gap goes into a break, which is why a space counts its run rather than
+    committing it -- flushing on every space pinned each one to the current line and
+    left one stranded at the end of a line with another carried to the start of the
+    next. Runs survive otherwise, since games indent and centre with them. Escape
+    sequences ride with the word they decorate but cost no columns, or a `set_colour`
+    line would wrap dozens of columns early.
+  - A held word is invisible until something ends it, so reading input (the `>`
+    prompt is itself a held word), `set_window`, `output_stream`, `quit` and
+    `buffer_mode` all flush first. **`new_line` (0OP:0xB) had to stop calling Trix's
+    `nl`** and route through `z-output-text`: printing its newline straight to stdout
+    put the break in front of text written before it, which mangled every game's
+    opening screen. The V3 status line is exempt and emitted unwrapped -- it is a
+    fixed-width bar, and wrapping split `Score: 0   Moves: 4` in two whenever the game
+    had left the cursor far enough along.
+  - **`buffer_mode` (VAR:0x12) is no longer a no-op**; operand 0 turns wrapping off
+    and hands line breaks back to the game.
+  - New **`--columns=<n>`** sets the wrap width and the screen width the V4+ header
+    advertises, which have to be the same number. Default stays 80 rather than the
+    live terminal width: the game centres against what the header claims, and
+    `--script` transcripts should not depend on the terminal that recorded them.
+  - Self-test 321 -> 330 checks; czech still 406 pass / 0 fail.
+
 - **`examples/zmachine.trx`: `save` and `restore` are Quetzal files now -- games
   survive quitting.** The old implementation handed `save` a Trix snap-shot token,
   which is a live heap snapshot in one process: quitting and coming back found the
