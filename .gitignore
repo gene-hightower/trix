@@ -126,3 +126,4 @@ build-ci-dbg/
 
 # Python bytecode cache (tools/)
 __pycache__/
+examples/zmachine/*.qzl

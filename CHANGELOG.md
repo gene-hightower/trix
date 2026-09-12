@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **`examples/zmachine.trx`: `save` and `restore` are Quetzal files now -- games
+  survive quitting.** The old implementation handed `save` a Trix snap-shot token,
+  which is a live heap snapshot in one process: quitting and coming back found the
+  token null and `restore` branching false, so no story in the catalog was playable
+  across two sittings. New §13 writes [Quetzal 1.4](https://inform-fiction.org/zmachine/standards/quetzal/index.html)
+  instead -- the `FORM ... IFZS` interchange format Frotz, Bocfel and Fizmo read.
+  Interop is verified against **Frotz 2.55** in both directions and both
+  instruction forms (Zork I V3 branch, ZTUU V5 store); for the same game state the
+  `IFhd` and `Stks` chunks come out byte-identical to Frotz's, and `CMem` differs
+  only where the two interpreters stamp their own numbers into the header. The file
+  carries `IFhd` identifying the story, `CMem` carrying dynamic memory XOR-RLE'd
+  against the story file as it came off disk (Zork I: 11,859 bytes down to 259), and
+  `Stks` carrying the call frames with their slices of the evaluation stack; `UMem`
+  is read but never written. It lands at the story path with a `.qzl` extension, or
+  wherever the new `--save-file=<path>` says. There is deliberately no filename
+  prompt: it would read from the same input stream the game reads and would eat the
+  next line of every `--script` transcript.
+  - The saved PC is the address of the byte *inside* the save instruction that
+    carries its result -- the first branch byte in V1-3, the store-variable byte in
+    V4+ -- so a restore lands mid-instruction and finishes it on the restored game's
+    behalf, taking the branch as though the condition were true or storing 2 rather
+    than 1. §5's decoder therefore records `/branch-addr` and `/store-addr`, which
+    are not recoverable afterwards: a two-byte branch's second byte can have bit 6
+    set and is then indistinguishable from a one-byte branch.
+  - A failed restore leaves the game running. `CMem` decode writes straight into
+    story memory, so `z-quetzal-restore` takes a snapshot first and blits it back if
+    anything throws -- a truncated or wrong-story file is a no-op, not a corrupted
+    session.
+  - Going to a file also retired two documented limitations of the token design: a
+    Trix `restore` rolled the whole heap back, `--script`'s file offset included, so
+    a scripted restore replayed every command since the matching save; and the `save`
+    instruction's own frame was part of the captured state, so its handler ran twice.
+    `/z-save-token` now survives only for `0OP:7 restart`.
+  - New `examples/zmachine/quetzal-check.py` validates a save file against the spec
+    independently of the interpreter -- IFF structure, `IFhd` against the story
+    header, `CMem` decompression, the frame walk, and Quetzal 4.8's rule that every
+    field of the dummy frame is zero. That last one is there because the first draft
+    got it wrong: it encoded the main frame faithfully, flags `0x10` for "discards
+    its result", and Frotz rejected the file outright with "Error reading save file".
+    Self-test 288 -> 321 checks; czech still 406 pass / 0 fail.
+  - New `examples/zmachine/frotz-roundtrip.py` re-runs the Frotz cross-check on
+    demand: it plays the same commands in both interpreters, has each restore the
+    other's file, and compares `IFhd` and frame shapes (not frame contents -- a
+    local can hold interpreter-specific state). It cannot be a CI gate, because it
+    needs a story file and the catalog is fetched rather than shipped, so it skips
+    cleanly when `dfrotz` or the story is missing.
+
 - **`examples/zmachine.trx`: `tokenise` implemented — AGAIN and OOPS no longer hang.**
   VAR:0x1B was a no-op stub, and Inform's parser drives both `again`/`g` and `oops` by
   rebuilding a text buffer, re-tokenising it, and re-reading the parse results. A parse

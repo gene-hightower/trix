@@ -102,6 +102,7 @@ clear
 %   §10 Input opcodes (V3 sread, V5 aread, read_char) + dictionary
 %   §11 V3 ship: status line via DECSTBM, --script mode, run loop
 %   §12 V4 / V5 / EXT extensions (windows, save_undo, color, EXT ops)
+%   §13 Quetzal save files (IFF IFZS: IFhd / CMem / UMem / Stks)
 %   §14 Showcase commands (/help /inspect /dict /globals /where /stats
 %       /map /theme /hint /save /restore /saves /delete) + game
 %       fingerprint splash + CRT themes + auto-map + InvisiClues hints
@@ -678,6 +679,10 @@ clear
     nl
     (--- §13.1 (V4+ window/cursor) ---\n) print
     run-window-tests
+
+    nl
+    (--- §13 (Quetzal save files) ---\n) print
+    run-phase13-tests
 
     nl
     (Self-test summary: {0} pass / {1} fail\n) mark rt-passes rt-fails print-fmt pop pop
@@ -2689,7 +2694,14 @@ clear
 %   /operand-types array of /large /small /var (length = num-operands)
 %   /operands      array of resolved operand values
 %   /store-target  variable number (0..255), or -1 if none
+%   /store-addr    address of the store-variable byte (valid iff stores)
 %   /branch        << /on-true bool /offset N /target-pc addr | /rfalse | /rtrue >> | null
+%   /branch-addr   address of the first branch byte (valid iff branches)
+%
+% /store-addr and /branch-addr exist for §13: Quetzal records the PC of
+% the byte inside the save instruction that carries its result, and a
+% two-byte branch's second byte is indistinguishable from a one-byte
+% branch after the fact.
 % ----- pre-allocated instruction singleton (VM-pressure fix)
 %
 % Each z-decode-instr call previously allocated a fresh dict, an
@@ -2699,7 +2711,7 @@ clear
 % per-instruction allocation count drops to zero (modulo z-decode-string
 % buffers for inline/pa text strings).
 
-/z-instr 12 dict def
+/z-instr 16 dict def
 /z-instr-operand-types 8 array def
 /z-instr-operands       8 array def
 /z-instr-branch         4 dict def
@@ -2714,7 +2726,9 @@ z-instr /operand-types z-instr-operand-types put
 z-instr /operands       z-instr-operands       put
 z-instr /num-operands 0 put
 z-instr /store-target -1 put
+z-instr /store-addr 0 put
 z-instr /branch null put
+z-instr /branch-addr 0 put
 
 z-instr-branch /on-true false put
 z-instr-branch /target /none put         % /none, /rfalse, /rtrue, /pc
@@ -2804,11 +2818,13 @@ z-instr-branch /offset 0 put
     /branches op-kind opcode op-branches? local-def
 
     stores {
+        z-instr /store-addr z-pc put
         z-instr /store-target z-pc z-rb put
         /z-pc z-pc 1 add store
     } if
 
     branches {
+        z-instr /branch-addr z-pc put
         /b1 z-pc z-rb local-def
         /z-pc z-pc 1 add store
         z-instr-branch /on-true
@@ -3443,28 +3459,25 @@ dispatch-0op 16#0B {|instr|
 
 % ----- save / restore / restart (V1-3 forms)
 %
-% V1-3 spec semantics (§15.{save,restore,restart}):
-%   * save: branch on success.
-%   * restore: on success, control returns to the SAVE INSTRUCTION's
-%     branch target.  On failure (no saved game), branch on false.
-%   * restart: re-enter the initial post-init state.
+% `save` and `restore` are §13's -- they write and read Quetzal files.
+% What stays here is 0OP:7 restart, which wants the opposite thing: an
+% in-process rollback to the pristine post-init state, for which Trix's
+% own transactional save/restore is exactly right.
 %
-% Trix's save/restore alone is NOT enough.  Per docs/save-restore.md
-% §6 the journal covers heap allocations + array/dict element writes
-% + name bindings, but it explicitly DOES NOT journal raw string-byte
-% mutations (the design trade-off documented there).  Our /story-bytes
-% is a string (or array of strings), and z-wb / sb-byte-put go through
-% string put -- those changes survive a Trix restore.
+% Trix's restore alone is NOT enough even for that.  Per
+% docs/save-restore.md §6 the journal covers heap allocations +
+% array/dict element writes + name bindings, but it explicitly DOES NOT
+% journal raw string-byte mutations (the design trade-off documented
+% there).  Our /story-bytes is a string (or array of strings), and
+% z-wb / sb-byte-put go through string put -- those changes survive a
+% Trix restore.
 %
-% Solution: pre-allocate /z-save-dynmem at z-run-story entry as a
-% scratch buffer for the dynamic-memory snapshot.  Save copies bytes
-% 0..h-static-mem-1 into it (manual journaling); restore copies them
-% back manually then calls Trix restore for everything else (eval
-% stack contents, frame stack, /z-pc, name bindings).
+% So /z-init-dynmem is pre-allocated at z-run-story entry and seeded
+% with bytes 0..h-static-mem-1 (manual journaling).  restart copies them
+% back by hand, then calls Trix restore for everything else (eval stack
+% contents, frame stack, /z-pc, name bindings).
 
-/z-save-dynmem      null def     % save buffer (player save)
 /z-init-dynmem      null def     % initial post-z-init-runtime-header bytes (for restart)
-/z-save-token       null def
 /z-initial-save-tok null def
 
 % Helper: copy h-static-mem bytes between story-bytes[0..) and a buffer.
@@ -3605,34 +3618,6 @@ dispatch-0op 16#0B {|instr|
 
     /z-pc snap 5 get store
 } def
-
-dispatch-0op 5 {|instr|
-    z-save-dynmem null eq {
-        instr false z-do-branch
-    } {
-        % Take the success branch FIRST so the captured /z-pc lands at
-        % the branch target -- after a future restore, /z-pc reverts
-        % to that target and the save looks like it succeeded.
-        instr true z-do-branch
-        z-save-dynmem /to-buf z-copy-dynmem
-        /z-save-token save store
-    } if-else
-} put
-
-dispatch-0op 6 {|instr|
-    z-save-token null eq {
-        instr false z-do-branch
-    } {
-        % Manual byte copy BEFORE Trix restore -- string writes aren't
-        % journaled, so they survive Trix's rollback.
-        z-save-dynmem /from-buf z-copy-dynmem
-        z-save-token restore
-        % Trix restore unwinds remaining state.  /z-pc reverts to the
-        % save instruction's branch target (where save took the success
-        % branch); the dispatcher's next fetch lands there, exactly as
-        % the spec routes control on restore success.
-    } if-else
-} put
 
 dispatch-0op 7 {|instr|
     z-initial-save-tok null eq { } {
@@ -5910,6 +5895,11 @@ dispatch-var 4 {|instr|#+16
 % and raise -- that's acceptable since well-behaved games never return
 % from main.
 /z-run-story { ||#+2
+    % §13 compresses saves against the story file as it came off disk,
+    % so this copy has to be taken before the header stamp below.
+    /z-pristine-dynmem h-static-mem string store
+    z-pristine-dynmem /to-buf z-copy-dynmem
+
     z-init-runtime-header
 
     /z-eval-top 0 store
@@ -5948,7 +5938,6 @@ dispatch-var 4 {|instr|#+16
     % post-init dyn-mem bytes.  Sized to h-static-mem; assumes that
     % fits in a single Trix string (cap 65535 bytes).  V3 games
     % comfortably fit; V8 outliers will need a banked variant later.
-    /z-save-dynmem h-static-mem string store
     /z-init-dynmem h-static-mem string store
     z-init-dynmem /to-buf z-copy-dynmem
 
@@ -6372,74 +6361,9 @@ dispatch-var 4 {|instr|#+16
 
 % ----- save / restore (V4 store form + V5+ EXT)
 %
-% V4: 0OP:5 save STORES 0/1/2 instead of branching.
-% V4: 0OP:6 restore STORES same.
-% V5+: EXT:0 / EXT:1 take over with the same store semantics.
-%
-% Re-register the V4-and-up handlers; the V1-3 branch handlers from
-% Phase 11.7 stay registered but are version-gated inside.
-
-% V4+ save: returns 1 on save success, 2 after a restore-success
-% transfers control here, 0 on failure.  V1-3 retains the branch form.
-dispatch-0op 5 {|instr|
-    h-version 4 ge {
-        z-save-dynmem null eq {
-            instr 0 z-store-result
-        } {
-            % Store-target captures /z-pc that comes BEFORE we Trix-save
-            % so a future restore lands here with the value still 1
-            % (the routing dispatches the post-restore "= 2" via the
-            % /z-pc returning to the post-store target).
-            instr 1 z-store-result
-            z-save-dynmem /to-buf z-copy-dynmem
-            /z-save-token save store
-        } if-else
-    } {
-        z-save-dynmem null eq {
-            instr false z-do-branch
-        } {
-            instr true z-do-branch
-            z-save-dynmem /to-buf z-copy-dynmem
-            /z-save-token save store
-        } if-else
-    } if-else
-} put
-
-dispatch-0op 6 {|instr|
-    h-version 4 ge {
-        z-save-token null eq {
-            instr 0 z-store-result
-        } {
-            % V4+: arrange for the saved-game's `save` instruction to
-            % see "2" instead of "1" after restore.  We do that by
-            % writing 2 into the saved instruction's store-target
-            % BEFORE Trix restore brings back its old value.  Easier:
-            % the saved state already had the value-1 written; we
-            % overwrite it with 2 in the saved store-target's variable.
-            % For the simple in-memory case here we just store-result 2
-            % into the *current* restore instruction's store-target,
-            % then restore.  After Trix restore, /z-pc jumps to save's
-            % continuation -- the saved state shows store-target=1.
-            % That's not perfectly spec-compliant but adequate for the
-            % common "did save work" check pattern.
-            z-save-dynmem /from-buf z-copy-dynmem
-            instr 2 z-store-result
-            z-save-token restore
-        } if-else
-    } {
-        z-save-token null eq {
-            instr false z-do-branch
-        } {
-            z-save-dynmem /from-buf z-copy-dynmem
-            z-save-token restore
-        } if-else
-    } if-else
-} put
-
-% EXT:0 save -- V5+ store form, identical to V4 0OP:5 in our model.
-dispatch-ext 0 dispatch-0op 5 get put
-% EXT:1 restore -- V5+
-dispatch-ext 1 dispatch-0op 6 get put
+% §13 registers all four -- 0OP:5/6 and EXT:0/1 -- against Quetzal
+% files, version-gating the branch form against the store form inside
+% the handler.  Nothing version-specific is left to do here.
 
 % EXT:9 save_undo -- spec §15: store form, V5+.
 %
@@ -7003,6 +6927,862 @@ dispatch-ext 16#0C {|instr|#+2
     /z-status-rows saved-rows store
     /z-status-cols saved-cols store
     /z-test-capturing saved-cap store
+} def
+
+% ============================================================================
+% §13  QUETZAL SAVE FILES  (IFF "FORM ... IFZS")
+% ============================================================================
+%
+% §6 made `save` and `restore` work.  It did not make them PERSIST: the
+% token it handed to Trix's `save` is a live heap snapshot in this
+% process, so quitting and coming back found nothing to restore and
+% `restore` branched false.  Every story in the catalog was therefore
+% unplayable across two sittings -- the single largest gap between this
+% interpreter and a real one.
+%
+% This section writes the standard interchange format instead: Quetzal
+% 1.4 (Martin Frost), the save format Frotz, Bocfel, Fizmo and every
+% other modern terp reads and writes.
+%
+%   https://inform-fiction.org/zmachine/standards/quetzal/index.html
+%
+% Verified against Frotz 2.55 in both directions, in both instruction
+% forms: Zork I (V3, branch) and Zork: The Undiscovered Underground (V5,
+% store).  For the same game state our IFhd and Stks chunks come out
+% byte-identical to Frotz's; CMem differs only where the two
+% interpreters stamp their own numbers into the header.
+%
+% ----- File layout
+%
+% Quetzal is IFF.  Every chunk is a 4-byte type, a 4-byte big-endian
+% length, `length` bytes of data, then a pad byte if `length` is odd
+% (the pad is NOT counted in the length).  The whole file is one FORM
+% chunk whose data begins with the 4-byte form type "IFZS":
+%
+%   +--------------------------------------------------+
+%   | "FORM" <len>                                     |
+%   |   "IFZS"                                         |
+%   |   "IFhd" 13    release serial[6] checksum pc[3]  |  which story,
+%   |                                        (+1 pad)  |  and where
+%   |   "CMem" <len> XOR-RLE of dynamic memory         |  what changed
+%   |   "Stks" <len> call frames, oldest first         |  how we got here
+%   +--------------------------------------------------+
+%
+% ANNO / AUTH / "(c) " / IntD are optional and we write none of them.
+%
+% ----- Two passes, no big buffer
+%
+% A chunk's length is written BEFORE its data, and Trix strings cap at
+% 65535 bytes (length_t is uint16_t) -- while an UMem chunk alone is
+% exactly h-static-mem bytes, which the spec allows to reach 0xFFFF.
+% So there is no buffer large enough to build a chunk in and then
+% back-patch its length into.
+%
+% Instead every emitter runs twice: `false qz-cmem-run` counts the bytes
+% it WOULD write, `true qz-cmem-run` writes them.  One traversal, one
+% set of rules, no duplicated encoder.  Output goes through a 4096-byte
+% flush buffer (qz-w8 / qz-flush) so the per-byte path never allocates.
+%
+% ----- Which memory image CMem compresses against
+%
+% CMem is the dynamic memory XORed against THE STORY FILE AS IT CAME OFF
+% DISK, then run-length-encoded over the zero bytes.  Not against
+% /z-init-dynmem: that buffer is captured after z-init-runtime-header
+% has stamped the interpreter number, screen dimensions and flag bits
+% into the header, so compressing against it would make every other
+% terp reconstruct our flags instead of its own.  /z-pristine-dynmem is
+% captured in z-run-story BEFORE that stamping, purely for this chunk.
+%
+% ----- The PC that goes in IFhd, and the resume dance
+%
+% The saved PC is not the next instruction.  Quetzal §5 stores the
+% address of the byte WITHIN the save instruction that carries its
+% result: the first branch byte in V1-3, the store-variable byte in V4+.
+% Restoring therefore lands in the middle of an instruction, and the
+% interpreter has to finish it -- from the restored game's point of
+% view, its own `save` is returning for a second time:
+%
+%   V1-3  take save's branch as though the condition were TRUE
+%   V4+   write 2 (not 1) into save's store variable, then continue
+%
+% That is what qz-resume-save does, and it is why §5's decoder now
+% records /branch-addr and /store-addr: neither is recoverable after the
+% fact, because a two-byte branch's second byte can have bit 6 set and
+% is then indistinguishable from a one-byte branch.
+%
+% ----- Failure must not damage the game
+%
+% Spec §15: a failed restore leaves the game running.  But CMem decode
+% writes straight into story memory, so a truncated or corrupt file is
+% discovered halfway through clobbering it.  z-quetzal-restore therefore
+% takes a z-snapshot first (§6's manual snapshot, already used for
+% save_undo) and blits it back if anything throws -- the rollback costs
+% one dynamic-memory copy and makes a bad save file a no-op.
+
+% Dynamic memory exactly as load-story read it, before the runtime
+% header stamp.  Allocated in z-run-story; null until then.
+/z-pristine-dynmem null def
+
+% Target path for the game's own save/restore.  Empty = derive it from
+% the story path; --save-file overrides.
+/z-save-path () def
+
+% ----- byte sink
+
+/qz-out    null def
+/qz-buf    4096 string def
+/qz-buf-n  0 def
+
+/qz-flush {||#+1
+    qz-buf-n 0 gt {
+        qz-out  qz-buf 0 qz-buf-n get-interval  write-string
+        /qz-buf-n 0 store
+    } if
+} def
+
+/qz-w8 {|b|
+    qz-buf-n 4096 ge { qz-flush } if
+    qz-buf qz-buf-n b /byte-type cast put
+    /qz-buf-n qz-buf-n 1 add store
+} def
+
+/qz-w16 {|w|
+    w 256 div 256 mod qz-w8
+    w 256 mod qz-w8
+} def
+
+/qz-w24 {|v|
+    v 65536 div 256 mod qz-w8
+    v 256 div 256 mod qz-w8
+    v 256 mod qz-w8
+} def
+
+/qz-w32 {|v|
+    v 16#1000000 div 256 mod qz-w8
+    v 65536 div 256 mod qz-w8
+    v 256 div 256 mod qz-w8
+    v 256 mod qz-w8
+} def
+
+% qz-w-id str --   -- write a 4-byte IFF chunk identifier
+/qz-w-id {|s|#+1
+    0 1 3 {
+        /i exch local-def
+        s i get /integer-type cast qz-w8
+    } for
+} def
+
+% ----- CMem (Quetzal §3.3)
+%
+% XOR current dynamic memory against the pristine image; emit non-zero
+% bytes literally and a zero run of n bytes as the pair 00 <n-1>.  A run
+% longer than 256 splits into several pairs.  The trailing run is
+% dropped entirely -- the reader fills the tail from its own pristine
+% image, which is what those bytes decode to anyway.
+%
+% emit? false -- count the bytes; true -- write them.  Returns the count
+% either way, so the caller can size the chunk before writing it.
+/qz-cmem-run {|emit?|#+5
+    /n 0 local-def
+    /zrun 0 local-def
+    /i 0 local-def
+    { i h-static-mem lt } {
+        % Both operands stay Byte: xor rejects signed Integer.  The
+        % result casts back so the `0 eq` test below is type-exact.
+        /d  i sb-byte-get  z-pristine-dynmem i get  xor /integer-type cast local-def
+        d 0 eq {
+            /zrun zrun 1 add store
+        } {
+            { zrun 0 gt } {
+                /span zrun 256 gt { 256 } { zrun } if-else local-def
+                emit? { 0 qz-w8  span 1 sub qz-w8 } if
+                /n n 2 add store
+                /zrun zrun span sub store
+            } while
+            emit? { d qz-w8 } if
+            /n n 1 add store
+        } if-else
+        /i i 1 add store
+    } while
+    n
+} def
+
+% ----- Stks (Quetzal §3.5)
+%
+% Frames oldest first.  Quetzal's first frame is a dummy standing for
+% the main routine's own evaluation stack -- which is exactly what
+% z-run-story pushes as frame 0 (ret-pc sentinel 1, no locals, no store
+% target), so the mapping is one-to-one with no special case beyond
+% writing its ret-pc as 0.
+%
+%   ret-pc         3 bytes
+%   flags          1 byte   -- bits 0-3 locals count, bit 4 set = discard
+%   result-var     1 byte   -- 0 when discarding
+%   args-supplied  1 byte   -- bitmap, 2^n - 1 for n arguments
+%   eval-words     2 bytes  -- words of eval stack belonging to THIS frame
+%   locals         2 bytes each
+%   eval stack     2 bytes each
+%
+% A frame's slice of the shared eval stack runs from its own eval-base
+% up to the next frame's eval-base (or z-eval-top for the topmost).
+
+% qz-frame-eval-words f -- n
+/qz-frame-eval-words {|f|#+1
+    /top  f 1 add z-frame-top lt
+        { z-frame-stack f 1 add get frame-eval-base }
+        { z-eval-top } if-else local-def
+    top  z-frame-stack f get frame-eval-base  sub
+} def
+
+/qz-stks-run {|emit?|#+8
+    /n 0 local-def
+    0 1 z-frame-top 1 sub {
+        /f exch local-def
+        /fr z-frame-stack f get local-def
+        /nlocals fr frame-num-locals local-def
+        /ev f qz-frame-eval-words local-def
+        emit? {
+            /st fr frame-store local-def
+            f 0 eq {
+                % The dummy frame: ret-pc, flags, result variable and
+                % args are all zero (Quetzal §4.8).  Encoding our main
+                % frame faithfully instead -- flags 0x10 for "discards
+                % its result" -- is what Frotz rejects outright.
+                0 qz-w24  0 qz-w8  0 qz-w8  0 qz-w8
+            } {
+                fr frame-ret-pc qz-w24
+                st -1 eq { nlocals 16 add } { nlocals } if-else qz-w8
+                st -1 eq { 0 } { st } if-else qz-w8
+                fr frame-num-args qz-args-bits qz-w8
+            } if-else
+            ev qz-w16
+            0 1 nlocals 1 sub {
+                /li exch local-def
+                fr frame-locals li get qz-w16
+            } for
+            0 1 ev 1 sub {
+                /ei exch local-def
+                z-eval-stack  fr frame-eval-base ei add  get qz-w16
+            } for
+        } if
+        /n n 8 add  nlocals 2 mul add  ev 2 mul add store
+    } for
+    n
+} def
+
+% ----- writer
+
+% z-quetzal-save path pc -- bool
+% `pc` is the address of the save instruction's branch/store byte.
+/z-quetzal-save {|path pc|#+7
+    z-pristine-dynmem null eq { false } {
+        /cmem-len false qz-cmem-run local-def
+        /stks-len false qz-stks-run local-def
+        /form-len 4
+            22 add
+            8 cmem-len add cmem-len 2 mod add add
+            8 stks-len add stks-len 2 mod add add local-def
+        /err {
+            /qz-out path (w)#b stream store
+            /qz-buf-n 0 store
+
+            (FORM) qz-w-id  form-len qz-w32  (IFZS) qz-w-id
+
+            (IFhd) qz-w-id  13 qz-w32
+            z-pristine-dynmem 16#02 get /integer-type cast 256 mul
+                z-pristine-dynmem 16#03 get /integer-type cast add qz-w16
+            0 1 5 {
+                /si exch local-def
+                z-pristine-dynmem 16#12 si add get /integer-type cast qz-w8
+            } for
+            z-pristine-dynmem 16#1C get /integer-type cast 256 mul
+                z-pristine-dynmem 16#1D get /integer-type cast add qz-w16
+            pc qz-w24
+            0 qz-w8                                  % pad 13 -> 14
+
+            (CMem) qz-w-id  cmem-len qz-w32
+            true qz-cmem-run pop
+            cmem-len 2 mod 1 eq { 0 qz-w8 } if
+
+            (Stks) qz-w-id  stks-len qz-w32
+            true qz-stks-run pop
+            stks-len 2 mod 1 eq { 0 qz-w8 } if
+
+            qz-flush
+            qz-out close-stream
+            /qz-out null store
+        } try local-def
+        err /no-error eq not {
+            qz-out null eq not { qz-out close-stream  /qz-out null store } if
+        } if
+        err /no-error eq
+    } if-else
+} def
+
+% ----- byte source
+%
+% Everything below reads through qz-r8, which refills a 4096-byte block
+% behind the scenes.  Going byte-at-a-time makes the RLE decoder fall
+% out in a dozen lines -- a zero-run pair that straddles a block
+% boundary is simply two calls -- and costs one comparison per byte.
+
+/qz-in     null def
+/qz-in-buf 4096 string def
+/qz-in-n   0 def                 % valid bytes in qz-in-buf
+/qz-in-i   0 def                 % read cursor within them
+
+/qz-r8 {||#+2
+    qz-in-i qz-in-n ge {
+        qz-in qz-in-buf read-string pop
+        /got exch local-def
+        /qz-in-n got length store
+        /qz-in-i 0 store
+        qz-in-n 0 eq {
+            /io-read-error (quetzal: unexpected end of save file) throw-with
+        } if
+    } if
+    /b qz-in-buf qz-in-i get /integer-type cast local-def
+    /qz-in-i qz-in-i 1 add store
+    b
+} def
+
+/qz-r16 {||#+1 qz-r8 256 mul qz-r8 add } def
+/qz-r24 {||#+1 qz-r8 65536 mul qz-r8 256 mul add qz-r8 add } def
+/qz-r32 {||#+1 qz-r8 16#1000000 mul qz-r8 65536 mul add qz-r8 256 mul add qz-r8 add } def
+
+% qz-r-id -- str
+% Reads a 4-byte chunk identifier into a reused scratch string.  The
+% caller must compare it before the next qz-r-id call overwrites it.
+/qz-id-buf 4 string def
+/qz-r-id {||#+1
+    0 1 3 {
+        /i exch local-def
+        qz-id-buf i qz-r8 /byte-type cast put
+    } for
+    qz-id-buf
+} def
+
+% qz-skip n --
+/qz-skip {|n|#+1
+    /left n local-def
+    { left 0 gt } {
+        qz-r8 pop
+        /left left 1 sub store
+    } while
+} def
+
+% ----- chunk readers
+
+% qz-read-ifhd clen -- pc
+% Validates that this save belongs to the story now in memory, and
+% returns the PC it recorded.  Release, serial and checksum all come
+% from the pristine image rather than live memory: a game is free to
+% scribble over 0x02 or 0x1C once it is running, and a save written
+% after it did so must still match.
+/qz-read-ifhd {|clen|#+6
+    clen 13 lt { /limit-check (quetzal: IFhd chunk is too short) throw-with } if
+    /rel qz-r16 local-def
+    /ser-ok true local-def
+    0 1 5 {
+        /i exch local-def
+        qz-r8  z-pristine-dynmem 16#12 i add get /integer-type cast  ne
+            { /ser-ok false store } if
+    } for
+    /chk qz-r16 local-def
+    /pc qz-r24 local-def
+    clen 13 sub qz-skip
+    rel  z-pristine-dynmem 16#02 get /integer-type cast 256 mul
+         z-pristine-dynmem 16#03 get /integer-type cast add  ne
+        ser-ok not or
+        chk  z-pristine-dynmem 16#1C get /integer-type cast 256 mul
+             z-pristine-dynmem 16#1D get /integer-type cast add  ne  or {
+        /limit-check (quetzal: this save belongs to a different story) throw-with
+    } if
+    pc
+} def
+
+% qz-fill-pristine from --
+% Copy pristine bytes into dynamic memory from `from` up to static
+% memory.  Both the CMem tail the encoder dropped and every zero run
+% decode to exactly this.
+/qz-fill-pristine {|from|#+1
+    /i from local-def
+    { i h-static-mem lt } {
+        i  z-pristine-dynmem i get  sb-byte-put
+        /i i 1 add store
+    } while
+} def
+
+% qz-read-cmem clen --
+/qz-read-cmem {|clen|#+4
+    /i 0 local-def
+    /left clen local-def
+    { left 0 gt } {
+        /b qz-r8 local-def
+        /left left 1 sub store
+        b 0 eq {
+            /zrun qz-r8 1 add local-def
+            /left left 1 sub store
+            { zrun 0 gt  i h-static-mem lt  and } {
+                i  z-pristine-dynmem i get  sb-byte-put
+                /i i 1 add store
+                /zrun zrun 1 sub store
+            } while
+        } {
+            i h-static-mem lt {
+                i  b /byte-type cast  z-pristine-dynmem i get  xor  sb-byte-put
+                /i i 1 add store
+            } if
+        } if-else
+    } while
+    i qz-fill-pristine
+} def
+
+% qz-read-umem clen --
+/qz-read-umem {|clen|#+3
+    /i 0 local-def
+    /left clen local-def
+    { left 0 gt } {
+        /b qz-r8 local-def
+        i h-static-mem lt { i b /byte-type cast sb-byte-put } if
+        /i i 1 add store
+        /left left 1 sub store
+    } while
+    i qz-fill-pristine
+} def
+
+% qz-args-bits n -- bitmap
+% The args-supplied byte is 2^n - 1 for n arguments.  Doubling rather
+% than shift-left: shift-left takes an unsigned, and everything on this
+% path is a signed Integer.
+/qz-args-bits {|n|#+2
+    /v 1 local-def
+    /k n local-def
+    { k 0 gt } {
+        /v v 2 mul store
+        /k k 1 sub store
+    } while
+    v 1 sub
+} def
+
+% qz-args-count bitmap -- n
+% The args-supplied byte is 2^n - 1 for n arguments; count the low ones.
+/qz-args-count {|bits|#+2
+    /n 0 local-def
+    /b bits local-def
+    { b 2 mod 1 eq } {
+        /n n 1 add store
+        /b b 2 div store
+    } while
+    n
+} def
+
+% qz-read-stks clen --
+% Rebuilds the frame stack and the shared evaluation stack together.
+% Frame 0 gets z-run-story's ret-pc sentinel rather than the 0 the file
+% carries -- nothing may ever `ret` past it.
+/qz-read-stks {|clen|#+16
+    /left clen local-def
+    /ftop 0 local-def
+    /etop 0 local-def
+    { left 8 ge } {
+        /ret-pc qz-r24 local-def
+        /flags  qz-r8  local-def
+        /res    qz-r8  local-def
+        /args   qz-r8  local-def
+        /ev     qz-r16 local-def
+        /left left 8 sub store
+        /nlocals flags 16 mod local-def
+        /discard flags 16 div 2 mod 1 eq local-def
+
+        ftop 256 ge {
+            /limit-check (quetzal: save file has too many frames) throw-with
+        } if
+        etop ev add 1024 gt {
+            /limit-check (quetzal: save file overflows the evaluation stack) throw-with
+        } if
+
+        /frame 6 array local-def
+        frame 0  ftop 0 eq { 1 } { ret-pc } if-else  put
+        frame 1 nlocals put
+        /locals 16 array local-def
+        0 1 15 { /li exch local-def  locals li 0 put } for
+        nlocals 0 gt {
+            0 1 nlocals 1 sub {
+                /lj exch local-def
+                locals lj qz-r16 put
+            } for
+        } if
+        frame 2 locals put
+        frame 3 ftop 0 eq { 0 } { args qz-args-count } if-else put
+        frame 4 ftop 0 eq { -1 } { discard { -1 } { res } if-else } if-else put
+        frame 5 etop put
+        /left left nlocals 2 mul sub store
+
+        ev 0 gt {
+            0 1 ev 1 sub {
+                /ei exch local-def
+                z-eval-stack etop ei add qz-r16 put
+            } for
+        } if
+        /etop etop ev add store
+        /left left ev 2 mul sub store
+
+        z-frame-stack ftop frame put
+        /ftop ftop 1 add store
+    } while
+    left 0 ne {
+        /limit-check (quetzal: Stks chunk length disagrees with its frames) throw-with
+    } if
+    ftop 0 eq { /limit-check (quetzal: Stks chunk has no frames) throw-with } if
+    /z-frame-top ftop store
+    /z-eval-top etop store
+} def
+
+% ----- reader
+
+% z-quetzal-restore path -- pc   (-1 on any failure, game left untouched)
+/z-quetzal-restore {|path|#+14
+    z-pristine-dynmem null eq { -1 } {
+        /snap z-snapshot local-def
+        /saved-pc -1 local-def
+        /got-mem false local-def
+        /got-stks false local-def
+        /strm null local-def
+        /err {
+            /strm path (r)#b stream store
+            /qz-in strm store
+            /qz-in-n 0 store
+            /qz-in-i 0 store
+
+            qz-r-id (FORM) eq not {
+                /limit-check (quetzal: not an IFF file) throw-with
+            } if
+            /remaining qz-r32 4 sub local-def
+            qz-r-id (IFZS) eq not {
+                /limit-check (quetzal: not a Quetzal save file) throw-with
+            } if
+
+            { remaining 8 ge } {
+                /id qz-r-id local-def
+                /clen qz-r32 local-def
+                /pad clen 2 mod local-def
+                id (IFhd) eq {
+                    clen qz-read-ifhd  /saved-pc exch store
+                } {
+                id (CMem) eq {
+                    saved-pc 0 lt {
+                        /limit-check (quetzal: CMem before IFhd) throw-with
+                    } if
+                    clen qz-read-cmem  /got-mem true store
+                } {
+                id (UMem) eq {
+                    saved-pc 0 lt {
+                        /limit-check (quetzal: UMem before IFhd) throw-with
+                    } if
+                    clen qz-read-umem  /got-mem true store
+                } {
+                id (Stks) eq {
+                    clen qz-read-stks  /got-stks true store
+                } {
+                    clen qz-skip
+                } if-else } if-else } if-else } if-else
+                pad qz-skip
+                /remaining remaining 8 sub clen sub pad sub store
+            } while
+
+            saved-pc 0 lt  got-mem not or  got-stks not or {
+                /limit-check (quetzal: save file is missing a required chunk) throw-with
+            } if
+        } try local-def
+        strm null eq not { strm close-stream } if
+        /qz-in null store
+        err /no-error eq {
+            saved-pc
+        } {
+            snap z-restore-snapshot
+            -1
+        } if-else
+    } if-else
+} def
+
+% ----- finishing the save instruction after a restore
+%
+% z-pc is left pointing INTO the save instruction (see the section
+% header).  Completing it is what makes the restored game believe its
+% own `save` just returned a second time.
+
+% qz-resume-save pc --
+/qz-resume-save {|pc|#+6
+    h-version 4 ge {
+        pc z-rb /integer-type cast  2  z-var-write
+        /z-pc pc 1 add store
+    } {
+        % Branch data, decoded exactly as §5 decodes it, with the
+        % condition forced true.
+        /b1 pc z-rb /integer-type cast local-def
+        /on-true b1 128 ge local-def
+        /one-byte b1 64 div 2 mod 1 eq local-def
+        /offset one-byte { b1 64 mod } { 0 } if-else local-def
+        /after pc  one-byte { 1 } { 2 } if-else  add local-def
+        one-byte not {
+            /raw b1 64 mod 256 mul  pc 1 add z-rb /integer-type cast  add local-def
+            raw 16#2000 ge { /raw raw 16#4000 sub store } if
+            /offset raw store
+        } if
+        on-true {
+            offset 0 eq { 0 z-frame-pop } {
+            offset 1 eq { 1 z-frame-pop } {
+                /z-pc after offset add 2 sub store
+            } if-else } if-else
+        } {
+            /z-pc after store
+        } if-else
+    } if-else
+} def
+
+% ----- where the save file goes
+%
+% A real terp prompts for a filename.  This one does not, deliberately:
+% the prompt would have to read from the same input stream the game is
+% reading, and under --script that silently eats the next command line,
+% breaking every scripted transcript and the czech/praxix regression
+% runs.  Instead the path is derived from the story path with the
+% extension replaced, and --save-file overrides it outright.
+
+% z-save-file-path -- str
+/z-save-file-path {||#+5
+    z-save-path () eq not { z-save-path } {
+        /p story-path local-def
+        /dot -1 local-def
+        0 1 p length 1 sub {
+            /i exch local-def
+            /c p i get /integer-type cast local-def
+            c 46 eq { /dot i store } if
+            c 47 eq { /dot -1 store } if
+        } for
+        dot 0 lt { p } { p 0 dot get-interval } if-else  (.qzl) concat
+    } if-else
+} def
+
+% ----- opcode wiring
+%
+% These replace §6's and §12's handlers outright.  The Trix save/restore
+% token path is gone from the game-visible opcodes.  §6 keeps
+% /z-initial-save-tok for 0OP:7 restart, which genuinely wants an
+% in-process rollback to the pristine post-init state, but `save` and
+% `restore` now go to and come from a file.
+%
+% Losing the token path also loses its --script hazard.  Trix's restore
+% rolls the whole heap back, /z-script-stream's read offset included, so
+% a scripted restore used to replay every command since the matching
+% save -- the /restore line among them.  A Quetzal restore touches
+% nothing but Z-machine state, so a script can save and restore freely.
+%
+% V5+ EXT:0/EXT:1 accept optional (table, bytes, name) operands for
+% saving an arbitrary byte range rather than the game state.  We ignore
+% them, exactly as the V4 handlers did before -- no story in the catalog
+% uses that form, and guessing at it is worse than not implementing it.
+
+dispatch-0op 5 {|instr|#+2
+    /pc h-version 4 ge
+        { instr /store-addr get } { instr /branch-addr get } if-else local-def
+    /ok z-save-file-path  pc  z-quetzal-save local-def
+    h-version 4 ge {
+        instr  ok { 1 } { 0 } if-else  z-store-result
+    } {
+        instr ok z-do-branch
+    } if-else
+} put
+
+dispatch-0op 6 {|instr|#+1
+    /pc z-save-file-path z-quetzal-restore local-def
+    pc 0 lt {
+        h-version 4 ge {
+            instr 0 z-store-result
+        } {
+            instr false z-do-branch
+        } if-else
+    } {
+        % Success: control does NOT return to this instruction.  It
+        % lands inside the save instruction that wrote the file, which
+        % qz-resume-save finishes on the restored game's behalf.
+        pc qz-resume-save
+    } if-else
+} put
+
+dispatch-ext 0 dispatch-0op 5 get put
+dispatch-ext 1 dispatch-0op 6 get put
+
+% ----- §13 self-test
+
+/run-phase13-tests { ||#+40
+    /saved-path z-save-path local-def
+    /z-eval-top 0 store
+    /z-frame-top 0 store
+
+    % Synthetic V3 story: 2 KB, static memory at 0x0400, release 0x0102,
+    % serial "ABCDEF", checksum 0xABCD.
+    /buf 2048 string local-def
+    0 1 2047 { /zi exch local-def  buf zi 0 /byte-type cast put } for
+    buf 16#00 3     /byte-type cast put
+    buf 16#02 16#01 /byte-type cast put
+    buf 16#03 16#02 /byte-type cast put
+    buf 16#0C 0     /byte-type cast put
+    buf 16#0D 16#80 /byte-type cast put
+    buf 16#0E 4     /byte-type cast put
+    buf 16#0F 0     /byte-type cast put
+    buf 16#1C 16#AB /byte-type cast put
+    buf 16#1D 16#CD /byte-type cast put
+    0 1 5 {
+        /si exch local-def
+        buf 16#12 si add  65 si add /byte-type cast  put
+    } for
+    buf install-story-buffer
+
+    /z-pristine-dynmem h-static-mem string store
+    z-pristine-dynmem /to-buf z-copy-dynmem
+    /z-save-path (zmachine-selftest.qzl) store
+
+    % --- a game state worth saving: three dynamic-memory edits, a call
+    %     frame with locals, and values on the shared eval stack.
+    16#90 16#5A z-wb
+    16#91 16#A5 z-wb
+    16#3FF 16#77 z-wb
+    % Frame 0 is the synthetic main frame z-run-story pushes -- Quetzal's
+    % dummy frame maps onto it, so the fixture has to have one too, with
+    % its own slice of the shared eval stack below the routine's.
+    /frame0 6 array local-def
+    frame0 0 1 put
+    frame0 1 0 put
+    frame0 2 16 array put
+    frame0 3 0 put
+    frame0 4 -1 put
+    frame0 5 0 put
+    z-frame-stack 0 frame0 put
+    /z-frame-top 1 store
+    16#0011 z-stack-push
+
+    /args0 0 array local-def
+    buf 16#100 2 /byte-type cast put                  % routine header: 2 locals
+    16#100 args0 7 16#A000 z-frame-push pop
+    1 16#1234 z-local-write
+    2 16#00FF z-local-write
+    16#DEAD z-stack-push
+    16#BEEF z-stack-push
+
+    /ok z-save-file-path 16#0123 z-quetzal-save local-def
+    ok                                             (§13 save writes a file)       rt-ok
+
+    % --- it is an IFF FORM of type IFZS
+    /fs z-save-file-path (r)#b stream local-def
+    /hdr 12 string local-def
+    fs hdr read-string pop  /hdr-got exch local-def
+    fs close-stream
+    hdr-got 0 4 get-interval (FORM) eq             (§13 file starts with FORM)    rt-ok
+    hdr-got 8 4 get-interval (IFZS) eq             (§13 form type is IFZS)        rt-ok
+
+    % --- CMem earned its name: three changed bytes, not 1024
+    z-save-file-path file-size /integer-type cast 400 lt
+                                                   (§13 CMem compresses the diff) rt-ok
+
+    % --- wreck the live state, then restore it
+    16#90 16#11 z-wb
+    16#91 16#22 z-wb
+    16#3FF 16#33 z-wb
+    z-stack-pop pop
+    z-stack-pop pop
+    1 16#0000 z-local-write
+    16#CAFE z-stack-push
+
+    /rpc z-save-file-path z-quetzal-restore local-def
+    rpc 16#0123 eq                                 (§13 restore returns saved PC) rt-ok
+    16#90 z-rb /integer-type cast 16#5A eq         (§13 restore rebuilds dyn mem) rt-ok
+    16#91 z-rb /integer-type cast 16#A5 eq         (§13 restore: second byte)     rt-ok
+    16#3FF z-rb /integer-type cast 16#77 eq        (§13 restore: last dyn byte)   rt-ok
+    z-frame-top 2 eq                               (§13 restore rebuilds frames)  rt-ok
+    1 z-var-read 16#1234 eq                        (§13 restore rebuilds locals)  rt-ok
+    2 z-var-read 16#00FF eq                        (§13 restore: second local)    rt-ok
+    current-frame frame-store 7 eq                 (§13 restore keeps store tgt)  rt-ok
+    current-frame frame-ret-pc 16#A000 eq          (§13 restore keeps ret-pc)     rt-ok
+    current-frame frame-num-args 0 eq              (§13 restore keeps arg count)  rt-ok
+    z-frame-stack 0 get frame-ret-pc 1 eq          (§13 main frame keeps sentinel) rt-ok
+    z-frame-stack 0 get frame-store -1 eq          (§13 main frame discards)      rt-ok
+    z-frame-stack 0 get frame-eval-base 0 eq       (§13 main frame eval-base)     rt-ok
+    current-frame frame-eval-base 1 eq             (§13 routine frame eval-base)  rt-ok
+    z-eval-top 3 eq                                (§13 restore rebuilds eval)    rt-ok
+    z-stack-pop 16#BEEF eq                         (§13 restore: eval top)        rt-ok
+    z-stack-pop 16#DEAD eq                         (§13 restore: eval next)       rt-ok
+    z-stack-pop 16#0011 eq                         (§13 restore: main frame slice) rt-ok
+    16#0011 z-stack-push
+    16#DEAD z-stack-push
+    16#BEEF z-stack-push
+
+    % --- a save from another story is refused, and refusal is a no-op
+    z-pristine-dynmem 16#02 16#09 /byte-type cast put
+    /rbad z-save-file-path z-quetzal-restore local-def
+    rbad 0 lt                                      (§13 wrong-story save refused) rt-ok
+    z-eval-top 3 eq                                (§13 refusal leaves stack)     rt-ok
+    z-pristine-dynmem 16#02 16#01 /byte-type cast put
+
+    % --- a truncated file is refused, and rolls the game back
+    /full z-save-file-path file-size /integer-type cast local-def
+    /half full 2 div local-def
+    /src z-save-file-path (r)#b stream local-def
+    /cbuf half string local-def
+    src cbuf read-string pop  /cgot exch local-def
+    src close-stream
+    /dst (zmachine-selftest-cut.qzl) (w)#b stream local-def
+    dst cgot write-string
+    dst close-stream
+    16#90 16#EE z-wb
+    /rcut (zmachine-selftest-cut.qzl) z-quetzal-restore local-def
+    rcut 0 lt                                      (§13 truncated save refused)   rt-ok
+    16#90 z-rb /integer-type cast 16#EE eq         (§13 refusal rolls back)       rt-ok
+
+    % --- the args-supplied bitmap round-trips
+    0 qz-args-count 0 eq                           (§13 args bitmap 0 -> 0)       rt-ok
+    7 qz-args-count 3 eq                           (§13 args bitmap 0x07 -> 3)    rt-ok
+    16#7F qz-args-count 7 eq                       (§13 args bitmap 0x7F -> 7)    rt-ok
+
+    % --- UMem: hand-assemble one, since nothing we write produces it
+    /upath (zmachine-selftest-umem.qzl) local-def
+    /ulen h-static-mem local-def
+    /qz-out upath (w)#b stream store
+    /qz-buf-n 0 store
+    (FORM) qz-w-id
+    4  22 add  8 ulen add ulen 2 mod add add  8 add 8 add qz-w32
+    (IFZS) qz-w-id
+    (IFhd) qz-w-id  13 qz-w32
+    16#0102 qz-w16
+    0 1 5 { /ui exch local-def  65 ui add qz-w8 } for
+    16#ABCD qz-w16
+    16#0456 qz-w24
+    0 qz-w8
+    (UMem) qz-w-id  ulen qz-w32
+    0 1 ulen 1 sub {
+        /mi exch local-def
+        mi 16#90 eq { 16#C3 } { z-pristine-dynmem mi get /integer-type cast } if-else qz-w8
+    } for
+    ulen 2 mod 1 eq { 0 qz-w8 } if
+    (Stks) qz-w-id  8 qz-w32
+    0 qz-w24  0 qz-w8  0 qz-w8  0 qz-w8  0 qz-w16
+    qz-flush
+    qz-out close-stream
+    /qz-out null store
+
+    /rumem upath z-quetzal-restore local-def
+    rumem 16#0456 eq                               (§13 UMem save is readable)    rt-ok
+    16#90 z-rb /integer-type cast 16#C3 eq         (§13 UMem byte applied)        rt-ok
+    z-frame-top 1 eq                               (§13 UMem dummy frame only)    rt-ok
+    z-eval-top 0 eq                                (§13 UMem empty eval stack)    rt-ok
+
+    z-save-file-path delete-file
+    (zmachine-selftest-cut.qzl) delete-file
+    upath delete-file
+    /z-save-path saved-path store
+    /z-eval-top 0 store
+    /z-frame-top 0 store
 } def
 
 % ============================================================================
@@ -7851,6 +8631,7 @@ z-auto-map-dirs (exit)      (out)   put
     (  --pager-pause=<ms>   pager pause length \(default 500\)\n) print
     (  --typewriter         per-char delay on game output \(tty only\)\n) print
     (  --typewriter-delay=<ms>  per-char delay \(default 12, ~80 cps\)\n) print
+    (  --save-file=<path>   Quetzal save file \(default: story path, .qzl\)\n) print
 } def
 
 /mode-header        false def
@@ -7910,6 +8691,13 @@ z-auto-map-dirs (exit)      (out)   put
             arg 0 14 get-interval (--pager-pause=) eq {
                 /ppval arg 14 arg length 14 sub get-interval z-parse-int local-def
                 ppval 0 ge { /pager-pause-ms ppval store } if
+            } if
+        } if
+        % --save-file=<path> puts the game's save/restore file somewhere
+        % other than the story path with a .qzl extension (§13).
+        arg length 12 gt {
+            arg 0 12 get-interval (--save-file=) eq {
+                /z-save-path arg 12 arg length 12 sub get-interval store
             } if
         } if
         % Anything not starting with '-' is the story-file path.

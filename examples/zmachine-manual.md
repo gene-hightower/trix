@@ -68,7 +68,7 @@ spec into ~7900 lines of Trix.  No prior background assumed.
   - [9.2 V4+ Split Window](#92-v4-split-window)
   - [9.3 Output Stream Routing](#93-output-stream-routing)
 - [10. Save, Restore, and Undo](#10-save-restore-and-undo)
-  - [10.1 On-Disk Save / Restore](#101-on-disk-save--restore)
+  - [10.1 On-Disk Save / Restore -- Quetzal](#101-on-disk-save--restore----quetzal)
   - [10.2 The Manual Snapshot System (save_undo)](#102-the-manual-snapshot-system-save_undo)
   - [10.3 Named Save Slots](#103-named-save-slots)
 - [11. Compliance Suites](#11-compliance-suites)
@@ -630,7 +630,7 @@ default value.
 
 | Mnemonic | Form | Effect |
 | --- | --- | --- |
-| `save` | 0OP:05 (V3, branch) / EXT:00 (V5+, store) | Save state to "an unspecified location" (we use Trix snap-shot + a manual dyn-mem byte buffer). |
+| `save` | 0OP:05 (V3, branch) / EXT:00 (V5+, store) | Write a Quetzal save file (§10.1); `--save-file=<path>` or the story path with a `.qzl` extension. |
 | `restore` | 0OP:06 (V3, branch) / EXT:01 (V5+, store) | Restore previously saved state. |
 | `restart` | 0OP:07 | Re-enter the initial post-init state. |
 | `save_undo` | EXT:09 (V5+) | Snapshot to in-memory undo slot.  Stores 1 on the way through, 2 on restore. |
@@ -737,25 +737,103 @@ The Z-Machine has two save mechanisms: an **on-disk** save (`save` /
 (`save_undo` / `restore_undo`) for one-step "take that back" semantics.
 This implementation provides both, but with different mechanisms.
 
-### 10.1 On-Disk Save / Restore
+### 10.1 On-Disk Save / Restore -- Quetzal
 
 Spec opcodes: `0OP:5 save` and `0OP:6 restore` (V3, branch form);
 `EXT:0 save` and `EXT:1 restore` (V5+, store form).
 
-These use Trix's transactional **snap-shot/thaw** mechanism, which
-captures the entire Trix heap (eval-stack contents, frame stack,
-local arrays, name bindings).  A complementary manual byte-buffer
-captures dynamic memory (Trix string-byte writes aren't journaled, so
-we copy them explicitly into `/z-save-dynmem` before snap-shot, and
-restore them before thaw).
+These write [Quetzal 1.4](https://inform-fiction.org/zmachine/standards/quetzal/index.html),
+the interchange save format Frotz, Bocfel and Fizmo all read and write.
+§13 implements it; this section is the overview.
 
-This is fast and convenient but has two known limitations:
-- `restore` rolls back the file-stream read offset of `--script`
-  input, which can cause replay loops if a script triggers a restore.
-- The `save` instruction's frame is part of the captured state, so
-  after restore the handler runs to completion a second time.
+Interoperability is verified against **Frotz 2.55**, in both directions
+and both instruction forms -- Zork I (V3, branch) and Zork: The
+Undiscovered Underground (V5, store).  A save written here restores in
+Frotz with the right state, and one written by Frotz restores here.
+`examples/zmachine/frotz-roundtrip.py` is that check, to re-run when
+touching the save path:
 
-These edge cases are explicitly documented as out-of-scope for v1.
+```console
+$ ./examples/zmachine/frotz-roundtrip.py
+zork1.z5
+  PASS  ours -> frotz
+  PASS  frotz -> ours
+  PASS  IFhd byte-identical to frotz's
+  PASS  4 frame(s), shape-identical to frotz's
+OK: 2 story/stories, 0 problem(s)
+```
+
+It cannot be a CI gate: it needs a story file to round-trip, and the
+catalog is fetched rather than shipped (see `CATALOG.md`), so it skips
+cleanly when either `dfrotz` or the story is missing.
+
+It compares `IFhd` byte-for-byte and frame *shapes* -- return address,
+flags, result variable, argument count, stack depth -- but not frame
+contents.  A local can legitimately hold something interpreter-specific:
+saving ZTUU leaves one holding 73 here against Frotz's 11, an output
+column rather than a disagreement about the format.  `CMem` likewise
+differs where the two interpreters stamp their own numbers into the
+header.
+
+Quetzal is IFF: a `FORM` whose type is `IFZS`, holding chunks of a
+4-byte type, a 4-byte big-endian length, the data, and a pad byte when
+the length is odd.
+
+| Chunk | Contents |
+| --- | --- |
+| `IFhd` | 13 bytes: release, 6-byte serial, checksum, and a 3-byte PC. Identifies the story this save belongs to; a mismatch is refused. |
+| `CMem` | Dynamic memory XORed against the story file as it came off disk, then run-length-encoded over the zero bytes (`00 <n-1>` for a run). Zork I's 11,859 dynamic bytes compress to about 260. |
+| `UMem` | Dynamic memory uncompressed. We read it, we never write it. |
+| `Stks` | Call frames, oldest first, each with its slice of the shared evaluation stack. |
+
+**Why the PC is not the next instruction.**  Quetzal stores the address
+of the byte *inside* the save instruction that carries its result: the
+first branch byte in V1-3, the store-variable byte in V4+.  A restore
+lands mid-instruction and the interpreter finishes it on the restored
+game's behalf -- take the branch as though the condition were true
+(V1-3), or store 2 rather than 1 (V4+).  This is what makes a restored
+game believe its own `save` has returned for a second time.  §5's
+decoder records `/branch-addr` and `/store-addr` for exactly this: a
+two-byte branch's second byte can have bit 6 set, so which bytes were
+the branch data is not recoverable after the fact.
+
+**Failure leaves the game alone.**  `CMem` decode writes straight into
+story memory, so a truncated file would otherwise be discovered halfway
+through wrecking it.  `z-quetzal-restore` takes a §10.2 snapshot first
+and blits it back if anything throws, which makes a bad save file a
+no-op rather than a corrupted session.
+
+**Where the file goes.**  The story path with its extension replaced by
+`.qzl`, or wherever `--save-file=<path>` says.  A real interpreter
+prompts for a filename; this one deliberately does not, because the
+prompt would read from the same input stream the game is reading and
+would silently eat the next line of every `--script` transcript.
+
+`examples/zmachine/quetzal-check.py` validates a save file against the
+spec independently of this implementation -- structure, IFhd against the
+story header, CMem decompression, the frame walk, and the rule that
+sank the first draft: Quetzal 4.8 fixes every field of the dummy frame
+at zero, and encoding our main frame faithfully instead (flags `0x10`,
+"discards its result") is a file Frotz refuses to load.
+
+```console
+$ ./examples/zmachine/quetzal-check.py zork1.qzl zork1.z5
+  IFhd    release 88, serial 840726, checksum 0xA129, pc 0x006E6A
+  CMem    259 bytes compressed -> 11859, 103 of 11859 dynamic bytes differ
+  Stks    78 bytes
+    frame 0: ret 0x000000, 0 locals, 6 stack words, discards result
+    ...
+OK: 0 problem(s)
+```
+
+Going to a file also retired the two limitations the Trix-token design
+carried.  Trix's `restore` rolled back the whole heap, `--script`'s file
+offset included, so a scripted restore replayed every command since the
+matching save; and the `save` instruction's own frame was part of the
+captured state, so its handler ran a second time after a restore.  A
+Quetzal restore touches nothing but Z-machine state, so neither happens.
+`/z-save-token` survives only for `0OP:7 restart`, which genuinely wants
+an in-process rollback to the pristine post-init state.
 
 ### 10.2 The Manual Snapshot System (save_undo)
 
@@ -820,6 +898,10 @@ This is a feature spec-compliant interpreters can't easily provide
 (the spec gives only a single undo slot).  Trix-snapshotting is what
 makes it almost free.
 
+Named slots live in the process and die with it -- they are a scratchpad
+for exploring a puzzle, not a save file.  The game's own `save` is what
+persists across sittings (§10.1).
+
 ---
 
 ## 11. Compliance Suites
@@ -883,7 +965,7 @@ this even though the spec doesn't mandate it).
 | --- | --- |
 | `--header <story>` | Dump the 64-byte header in human-readable form, exit. |
 | `--script <cmds-file>` | Feed sread input from a text file instead of stdin. |
-| `--self-test` | Run the in-source assertion suite (272 checks). |
+| `--self-test` | Run the in-source assertion suite (320 checks). |
 | `--auto-map` | Record V3 room transitions; query via `/map`. |
 | `--theme <name>` | CRT theme: `classic` (default), `phosphor`, `amber`, `paper`. Sets terminal default fg/bg via OSC 10/11. |
 | `--hints <file>` | Load an InvisiClues-style `.hints` file; query via `/hint`. |
@@ -891,6 +973,7 @@ this even though the spec doesn't mandate it).
 | `--pager-pause=<ms>` | Pager pause length in ms.  Default 500. |
 | `--typewriter` | Per-char delay on game output (tty only).  ANSI escape sequences emit atomically (no inter-char delay). |
 | `--typewriter-delay=<ms>` | Per-char delay in ms.  Default 12 (~80 cps). |
+| `--save-file=<path>` | Where `save` / `restore` put the Quetzal file.  Default: the story path with a `.qzl` extension. |
 | `--vm-size <bytes>` | Set the Trix VM heap size.  Default 1M; classic stories fit it, opcode-hungry Dialog-era V8 titles want 2M+ (live working set + story banks must fit between the interpreter's periodic gc sweeps). |
 | `--help`, `-h` | Print usage and exit. |
 
@@ -950,8 +1033,7 @@ into 14 sections (see the file header for the live ToC):
   §11  V3 ship: status line via DECSTBM, --script CLI, run loop;
        upper-window infrastructure (z-upper-write, z-update-decstbm)
   §12  V4 / V5 / EXT extensions (windows, save_undo, color, EXT ops)
-  §13  Self-test fixtures (catch/throw, set_colour, set_true_colour,
-       window/cursor)
+  §13  Quetzal save files (IFF IFZS: IFhd / CMem / UMem / Stks)
   §14  Showcase commands; auto-map; CRT themes; InvisiClues hints;
        game-fingerprint splash; named saves; main entry
 ```
@@ -967,8 +1049,10 @@ into 14 sections (see the file header for the live ToC):
 | `/z-frame-stack` | 256-array | Routine frame stack. |
 | `/z-frame-top` | integer | Used count. |
 | `/z-instr` | dict | Singleton; mutated in place by decoder. |
-| `/z-save-dynmem` | string | On-disk save: dynamic-memory snapshot. |
-| `/z-save-token` | save-token | On-disk save: Trix snap-shot token. |
+| `/z-init-dynmem` | string | Restart: pristine post-init dynamic memory. |
+| `/z-initial-save-tok` | save-token | Restart: Trix snap-shot token. |
+| `/z-pristine-dynmem` | string | Dynamic memory as loaded; the CMem reference image. |
+| `/z-save-path` | string | `--save-file=` override; empty means derive from the story path. |
 | `/z-undo-snapshot` | array \| null | save_undo single slot. |
 | `/z-named-saves` | dict | Named save slots (showcase). |
 | `/z-stream3-stack` | 16-array | Memory output stream nesting. |
